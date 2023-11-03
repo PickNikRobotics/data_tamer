@@ -1,32 +1,19 @@
 #pragma once
 
 #include "data_tamer/values.hpp"
+#include "data_tamer/dictionary.hpp"
+#include "data_tamer/contrib/ringbuffer.hpp"
+
+#include <atomic>
+#include <condition_variable>
 #include <memory>
 #include <mutex>
+#include <thread>
 #include <unordered_set>
-#include <atomic>
 
 namespace DataTamer {
 
 class DataSinkBase;
-
-struct Dictionary {
-  struct Entry {
-    std::string name;
-    BasicType type;
-  };
-  std::vector<Entry> entries;
-
-  friend std::ostream& operator<<(std::ostream& os, const Dictionary& dict)
-  {
-    for(const auto& entry: dict.entries)
-    {
-      os << ToStr(entry.type) << ' ' << entry.name << '\n';
-    }
-    return os;
-  }
-};
-
 class LogChannel;
 
 /**
@@ -78,7 +65,9 @@ RegistrationID RegisterVariable(LogChannel& channel, const std::string& name, T*
 class LogChannel : public std::enable_shared_from_this<LogChannel> {
 public:
 
-  LogChannel(std::string name) : channel_name_(name) {}
+  LogChannel(std::string name);
+
+  ~LogChannel();
 
   template <typename T>
   RegistrationID registerValue(const std::string& name, T* value);
@@ -95,7 +84,7 @@ public:
 
   void addDataSink(std::shared_ptr<DataSinkBase> sink);
 
-  bool takeSnapshot(std::chrono::microseconds timestamp);
+  bool takeSnapshot(std::chrono::nanoseconds timestamp);
 
   void serializeVariables(std::vector<uint8_t>& buffer);
 
@@ -129,7 +118,9 @@ private:
   std::string channel_name_;
 
   mutable std::mutex mutex_;
-  size_t max_buffer_size_ = 0;
+  std::condition_variable queue_cv_;
+
+  size_t payload_buffer_size_ = 0;
 
   std::vector<ValueHolder> series_;
   std::unordered_map<std::string, size_t> registered_values_;
@@ -137,14 +128,22 @@ private:
   std::atomic_bool active_flags_dirty_ = true;
   std::vector<uint8_t> active_flags_;
 
+  Dictionary dictionary_;
+
+  std::thread writer_thread_;
+  jnk0le::Ringbuffer<std::vector<uint8_t>> snapshot_queue_;
+  std::atomic_bool alive_;
+
   std::unordered_set<std::shared_ptr<DataSinkBase>> sinks_;
 
   void updateDictionary();
 
-  void updateFlags();
+  void update();
 
   RegistrationID registerValueImpl(const std::string& name,
                                    ValuePtr&& value_ptr);
+
+  void writerThreadLoop();
 };
 
 
@@ -224,6 +223,5 @@ T LoggedValue<T>::get()
   }
   return value_;
 }
-
 
 }  // namespace DataTamer

@@ -1,4 +1,6 @@
 #include "data_tamer/channel.hpp"
+#include "data_tamer/contrib/SerializeMe.hpp"
+#include "data_tamer/data_sink.hpp"
 
 namespace DataTamer
 {
@@ -23,10 +25,22 @@ RegistrationID LogChannel::registerValueImpl(
     instance.name = name;
     instance.holder = std::move(value_ptr);
     series_.emplace_back(std::move(instance));
+    const auto type = value_ptr.type();
 
     const size_t index = series_.size() -1;
     registered_values_.insert( {name, index} );
-    max_buffer_size_ += SizeOf(value_ptr.type());
+    payload_buffer_size_ += SizeOf(type);
+
+    // update dictionary and its hash (append only)
+    // https://stackoverflow.com/questions/2590677/how-do-i-combine-hash-values-in-c0x
+    std::hash<std::string> str_hasher;
+    std::hash<BasicType> type_hasher;
+
+    dictionary_.entries.emplace_back( Dictionary::Entry{name, type} );
+
+    auto& hash = dictionary_.hash;
+    hash ^= str_hasher(name) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
+    hash ^= type_hasher(type) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
 
     return {index, 1};
   }
@@ -49,16 +63,37 @@ RegistrationID LogChannel::registerValueImpl(
   // mark as registered again
   instance.registered = true;
   instance.enabled = true;
+  payload_buffer_size_ += SizeOf(new_type);
   return {index, 1};
 }
 
+LogChannel::LogChannel(std::string name) : channel_name_(name)
+{
+  std::hash<std::string> str_hasher;
+  dictionary_.hash = str_hasher(channel_name_);
+  writer_thread_ = std::thread(&LogChannel::writerThreadLoop, this);
+}
+
+LogChannel::~LogChannel()
+{
+  alive_ = false;
+  queue_cv_.notify_one();
+  writer_thread_.join();
+}
 
 void LogChannel::setEnabled(const RegistrationID& id, bool enable)
 {
   std::lock_guard const lock(mutex_);
   for(size_t i=0; i<id.fields_count; i++)
   {
-    series_[id.first_index + i].enabled = enable;
+    auto& instance = series_[id.first_index + i];
+    if(instance.enabled != enable)
+    {
+      instance.enabled = enable;
+      // if changed, adjust the size of the payload
+      const auto size = SizeOf(instance.holder.type());
+      payload_buffer_size_ += enable ? size : -size;
+    }
   }
 }
 
@@ -70,6 +105,7 @@ void LogChannel::unregister(const RegistrationID& id)
     auto& instance = series_[id.first_index + i];
     instance.registered = false;
     instance.enabled = false;
+    payload_buffer_size_ -= SizeOf(instance.holder.type());
   }
 }
 
@@ -78,10 +114,11 @@ void LogChannel::addDataSink(std::shared_ptr<DataSinkBase> sink)
   sinks_.insert(sink);
 }
 
-void LogChannel::updateFlags()
+void LogChannel::update()
 {
   if (active_flags_dirty_)
   {
+    active_flags_dirty_ = false;
     active_flags_.clear();
     active_flags_.resize((series_.size() + 7) / 8, 0xFF);  // ceiling
     for (size_t i = 0; i < series_.size(); i++)
@@ -92,20 +129,72 @@ void LogChannel::updateFlags()
         active_flags_[i >> 3] &= uint8_t(~(1 << (i % 8)));
       }
     }
-    active_flags_dirty_ = false;
   }
 }
 
 Dictionary LogChannel::getDictionary() const
 {
   std::lock_guard const lock(mutex_);
-  Dictionary dict;
-  dict.entries.reserve(series_.size());
-  for(const auto& instance: series_)
+  return dictionary_;
+}
+
+bool LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
+{
+  std::unique_lock const lock(mutex_);
+  if(sinks_.empty())
   {
-    dict.entries.emplace_back( Dictionary::Entry{instance.name, instance.holder.type()} );
+    return false;
   }
-  return dict;
+  update();
+  // serialize
+  size_t total_size = sizeof(uint64_t) + // timestamp
+                      sizeof(uint64_t) + // dictionary hash
+                      SerializeMe::BufferSize(active_flags_) +
+                      payload_buffer_size_;
+
+  std::vector<uint8_t> buffer(total_size);
+  SerializeMe::SpanBytes write_view(buffer);
+  SerializeIntoBuffer( write_view, dictionary_.hash );
+  SerializeIntoBuffer( write_view, timestamp.count() );
+  SerializeIntoBuffer( write_view, active_flags_ );
+  auto* ptr = write_view.data();
+  for(auto const& entry: series_)
+  {
+    if(entry.enabled)
+    {
+      auto size = entry.holder.serialize(write_view.data());
+      write_view.trimFront(size);
+    }
+  }
+  snapshot_queue_.insert(std::move(buffer));
+  queue_cv_.notify_one();
+  return true;
+}
+
+
+void LogChannel::writerThreadLoop()
+{
+  alive_ = true;
+  std::vector<uint8_t> snapshot;
+  while(alive_)
+  {
+    {
+      std::unique_lock lk(mutex_);
+      queue_cv_.wait(lk, [this]{
+        return !snapshot_queue_.isEmpty() || !alive_;
+      });
+      if(!alive_)
+      {
+        break;
+      }
+      snapshot_queue_.remove(snapshot);
+    }
+
+    for(auto& sink: sinks_)
+    {
+      sink->storeSnapshot(snapshot);
+    }
+  }
 }
 
 

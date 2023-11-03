@@ -17,7 +17,9 @@ add_library(data_tamer STATIC
     src/values.cpp
     include/data_tamer/channel.hpp
     src/channel.cpp
-    examples/example.cpp)
+    examples/example.cpp
+    include/data_tamer/dictionary.hpp
+    include/data_tamer/sinks/dummy_sink.hpp)
 
 # detect if compiling in ROS2
 find_package(ament_cmake QUIET)
