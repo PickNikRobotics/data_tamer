@@ -152,8 +152,9 @@ bool LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
                       SerializeMe::BufferSize(active_flags_) +
                       payload_buffer_size_;
 
-  std::vector<uint8_t> buffer(total_size);
-  SerializeMe::SpanBytes write_view(buffer);
+  snapshot_buffer_.resize(total_size);
+
+  SerializeMe::SpanBytes write_view(snapshot_buffer_);
   SerializeIntoBuffer( write_view, dictionary_.hash );
   SerializeIntoBuffer( write_view, timestamp.count() );
   SerializeIntoBuffer( write_view, active_flags_ );
@@ -166,7 +167,7 @@ bool LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
       write_view.trimFront(size);
     }
   }
-  snapshot_queue_.insert(std::move(buffer));
+  snapshot_queue_.insert(&snapshot_buffer_);
   queue_cv_.notify_one();
   return true;
 }

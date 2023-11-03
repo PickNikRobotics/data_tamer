@@ -128,6 +128,8 @@ private:
   std::atomic_bool active_flags_dirty_ = true;
   std::vector<uint8_t> active_flags_;
 
+  std::vector<uint8_t> snapshot_buffer_;
+
   Dictionary dictionary_;
 
   std::thread writer_thread_;
