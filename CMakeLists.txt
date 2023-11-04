@@ -10,16 +10,17 @@ option(DATA_TAMER_BUILD_EXAMPLES "Build examples" ON)
 
 add_library(data_tamer STATIC
     include/data_tamer/types.hpp
+    include/data_tamer/values.hpp
     include/data_tamer/data_tamer.hpp
+    include/data_tamer/channel.hpp
+    include/data_tamer/dictionary.hpp
+    include/data_tamer/sinks/dummy_sink.hpp
+
     src/data_tamer.cpp
     src/types.cpp
-    include/data_tamer/values.hpp
     src/values.cpp
-    include/data_tamer/channel.hpp
     src/channel.cpp
-    examples/example.cpp
-    include/data_tamer/dictionary.hpp
-    include/data_tamer/sinks/dummy_sink.hpp)
+)
 
 # detect if compiling in ROS2
 find_package(ament_cmake QUIET)
@@ -40,4 +41,3 @@ endif()
 if(DATA_TAMER_BUILD_EXAMPLES)
     add_subdirectory(examples)
 endif()
-

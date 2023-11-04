@@ -5,6 +5,7 @@
 #include "data_tamer/contrib/ringbuffer.hpp"
 
 #include <atomic>
+#include <deque>
 #include <condition_variable>
 #include <memory>
 #include <mutex>
@@ -66,8 +67,13 @@ class LogChannel : public std::enable_shared_from_this<LogChannel> {
 public:
 
   LogChannel(std::string name);
-
   ~LogChannel();
+
+  LogChannel(const LogChannel&) = delete;
+  LogChannel& operator=(const LogChannel&) = delete;
+
+  LogChannel(LogChannel&&) = delete;
+  LogChannel& operator=(LogChannel&&) = delete;
 
   template <typename T>
   RegistrationID registerValue(const std::string& name, T* value);
@@ -86,7 +92,7 @@ public:
 
   bool takeSnapshot(std::chrono::nanoseconds timestamp);
 
-  void serializeVariables(std::vector<uint8_t>& buffer);
+  bool flush(std::chrono::microseconds timeout);
 
   /**
    * @brief getActiveFlags returns a serialized buffer, where
@@ -129,11 +135,12 @@ private:
   std::vector<uint8_t> active_flags_;
 
   std::vector<uint8_t> snapshot_buffer_;
+  uint64_t prev_dictionary_hash_ = 0;
 
   Dictionary dictionary_;
 
   std::thread writer_thread_;
-  jnk0le::Ringbuffer<std::vector<uint8_t>> snapshot_queue_;
+  jnk0le::Ringbuffer<std::vector<uint8_t>, 64, false, 16>  snapshot_queue_;
   std::atomic_bool alive_;
 
   std::unordered_set<std::shared_ptr<DataSinkBase>> sinks_;

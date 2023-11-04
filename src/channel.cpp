@@ -2,6 +2,8 @@
 #include "data_tamer/contrib/SerializeMe.hpp"
 #include "data_tamer/data_sink.hpp"
 
+#include <iostream>
+
 namespace DataTamer
 {
 
@@ -71,7 +73,12 @@ LogChannel::LogChannel(std::string name) : channel_name_(name)
 {
   std::hash<std::string> str_hasher;
   dictionary_.hash = str_hasher(channel_name_);
+  alive_ = false;
   writer_thread_ = std::thread(&LogChannel::writerThreadLoop, this);
+  while(!alive_)
+  {
+    std::this_thread::sleep_for(std::chrono::microseconds(50));
+  }
 }
 
 LogChannel::~LogChannel()
@@ -130,6 +137,14 @@ void LogChannel::update()
       }
     }
   }
+  if( dictionary_.hash != prev_dictionary_hash_)
+  {
+    prev_dictionary_hash_ = dictionary_.hash;
+    for(auto const& sink: sinks_)
+    {
+      sink->addChannel(channel_name_, dictionary_);
+    }
+  }
 }
 
 Dictionary LogChannel::getDictionary() const
@@ -140,38 +155,53 @@ Dictionary LogChannel::getDictionary() const
 
 bool LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
 {
-  std::unique_lock const lock(mutex_);
-  if(sinks_.empty())
   {
-    return false;
-  }
-  update();
-  // serialize
-  size_t total_size = sizeof(uint64_t) + // timestamp
-                      sizeof(uint64_t) + // dictionary hash
-                      SerializeMe::BufferSize(active_flags_) +
-                      payload_buffer_size_;
-
-  snapshot_buffer_.resize(total_size);
-
-  SerializeMe::SpanBytes write_view(snapshot_buffer_);
-  SerializeIntoBuffer( write_view, dictionary_.hash );
-  SerializeIntoBuffer( write_view, timestamp.count() );
-  SerializeIntoBuffer( write_view, active_flags_ );
-  auto* ptr = write_view.data();
-  for(auto const& entry: series_)
-  {
-    if(entry.enabled)
+    std::lock_guard const lock(mutex_);
+    if(sinks_.empty())
     {
-      auto size = entry.holder.serialize(write_view.data());
-      write_view.trimFront(size);
+      return false;
     }
+    update();
+    // serialize
+    size_t total_size = sizeof(uint64_t) + // timestamp
+                        sizeof(uint64_t) + // dictionary hash
+                        SerializeMe::BufferSize(active_flags_) +
+                        payload_buffer_size_;
+
+    snapshot_buffer_.resize(total_size);
+
+    SerializeMe::SpanBytes write_view(snapshot_buffer_);
+    SerializeIntoBuffer( write_view, dictionary_.hash );
+    SerializeIntoBuffer( write_view, timestamp.count() );
+    SerializeIntoBuffer( write_view, active_flags_ );
+    auto* ptr = write_view.data();
+    for(auto const& entry: series_)
+    {
+      if(entry.enabled)
+      {
+        auto size = entry.holder.serialize(write_view.data());
+        write_view.trimFront(size);
+      }
+    }
+    snapshot_queue_.insert(&snapshot_buffer_);
   }
-  snapshot_queue_.insert(&snapshot_buffer_);
   queue_cv_.notify_one();
   return true;
 }
 
+
+bool LogChannel::flush(std::chrono::microseconds timeout)
+{
+  auto t1 = std::chrono::system_clock::now();
+  while(std::chrono::system_clock::now() - t1 < timeout)
+  {
+    std::lock_guard const lock(mutex_);
+    if(snapshot_queue_.isEmpty()) {
+      return false;
+    }
+  }
+  return false;
+}
 
 void LogChannel::writerThreadLoop()
 {
@@ -179,21 +209,20 @@ void LogChannel::writerThreadLoop()
   std::vector<uint8_t> snapshot;
   while(alive_)
   {
+    std::unique_lock lk(mutex_);
+    queue_cv_.wait(lk, [this]{
+      return !snapshot_queue_.isEmpty() || !alive_;
+    });
+    if(!alive_)
     {
-      std::unique_lock lk(mutex_);
-      queue_cv_.wait(lk, [this]{
-        return !snapshot_queue_.isEmpty() || !alive_;
-      });
-      if(!alive_)
-      {
-        break;
-      }
-      snapshot_queue_.remove(snapshot);
+      break;
     }
-
-    for(auto& sink: sinks_)
+    while(snapshot_queue_.remove(&snapshot))
     {
-      sink->storeSnapshot(snapshot);
+      for(auto& sink: sinks_)
+      {
+        sink->storeSnapshot(snapshot);
+      }
     }
   }
 }

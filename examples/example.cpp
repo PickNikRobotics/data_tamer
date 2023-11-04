@@ -1,12 +1,14 @@
 #include "data_tamer/data_tamer.hpp"
+#include "data_tamer/sinks/dummy_sink.hpp"
 #include <iostream>
 
 int main()
 {
   using namespace DataTamer;
 
-  auto channel = std::make_shared<LogChannel>("chan");
-
+  auto dummy_sink = std::make_shared<DummySync>();
+  auto channel = ChannelsRegistry::Global().getChannel("chan");
+dddd
   double var = 3.14;
   int count = 42;
 
