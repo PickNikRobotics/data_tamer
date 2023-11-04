@@ -133,7 +133,7 @@ void LogChannel::update()
       auto const& instance = series_[i];
       if (!instance.enabled)
       {
-        active_flags_[i >> 3] &= uint8_t(~(1 << (i % 8)));
+        SetBit(active_flags_, i, false);
       }
     }
   }

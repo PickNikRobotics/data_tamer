@@ -30,6 +30,9 @@ class DataTamerConan(ConanFile):
         if self.options.tests:
             self.requires("gtest/1.14.0")
 
+    def build_requirements(self):
+        self.tool_requires("cmake/3.26.4")
+
     def configure(self):
         if self.options.shared:
             self.options.rm_safe("fPIC")

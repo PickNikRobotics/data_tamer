@@ -11,6 +11,11 @@
 
 namespace DataTamer {
 
+
+using ActiveMask = std::vector<uint8_t>;
+bool GetBit(const ActiveMask& mask, size_t index);
+void SetBit(ActiveMask& mask, size_t index, bool val);
+
 struct SnapshotHeader {
   /// Unique identifier of the dictionary
   std::size_t dictionary_hash;
@@ -21,7 +26,7 @@ struct SnapshotHeader {
   /// Vector that tell us if an entry of the dictionary is
   /// active or not. It is basically an optimized vector
   /// of bools, where each byte contains 8 boolean flags.
-  std::vector<uint8_t> active_flags;
+  ActiveMask active_mask;
 };
 
 /**
@@ -63,6 +68,25 @@ class DataSinkBase {
   virtual bool storeSnapshot(const std::vector<uint8_t>& snapshot) = 0;
 };
 
+//--------------------------------------------------
+
+inline bool GetBit(const ActiveMask &mask, size_t index)
+{
+  const uint8_t& byte = mask[index >> 3];
+  return 0 != (byte & uint8_t(1 << (index % 8)));
+}
+
+inline void SetBit(ActiveMask &mask, size_t index, bool value)
+{
+  if(!value)
+  {
+    mask[index >> 3] &= uint8_t(~(1 << (index % 8)));
+  }
+  else {
+    mask[index >> 3] |= uint8_t(1 << (index % 8));
+  }
+}
+
 }  // namespace DataTamer
 
 namespace SerializeMe
@@ -74,7 +98,9 @@ template <> struct Serializer<DataTamer::SnapshotHeader>
   {
     op(obj.dictionary_hash);
     op(obj.timestamp);
-    op(obj.active_flags);
+    op(obj.active_mask);
   }
 };
+
+
 }  // namespace SerializeMe

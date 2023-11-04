@@ -2,6 +2,7 @@
 
 #include "data_tamer/values.hpp"
 #include "data_tamer/dictionary.hpp"
+#include "data_tamer/data_sink.hpp"
 #include "data_tamer/contrib/ringbuffer.hpp"
 
 #include <atomic>
@@ -62,7 +63,6 @@ private:
 template <typename T>
 RegistrationID RegisterVariable(LogChannel& channel, const std::string& name, T* value);
 
-
 class LogChannel : public std::enable_shared_from_this<LogChannel> {
 public:
 
@@ -102,7 +102,7 @@ public:
    * Even if technically we may use vector<bool>, this data structure
    * is already serialized.
    */
-  [[nodiscard]] const std::vector<uint8_t>& getActiveFlags();
+  [[nodiscard]] const ActiveMask& getActiveFlags();
 
   /**
    * @brief getDictionary. See description of class Dictionary
@@ -132,7 +132,7 @@ private:
   std::unordered_map<std::string, size_t> registered_values_;
 
   std::atomic_bool active_flags_dirty_ = true;
-  std::vector<uint8_t> active_flags_;
+  ActiveMask active_flags_;
 
   std::vector<uint8_t> snapshot_buffer_;
   uint64_t prev_dictionary_hash_ = 0;

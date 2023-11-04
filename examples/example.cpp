@@ -8,7 +8,7 @@ int main()
 
   auto dummy_sink = std::make_shared<DummySync>();
   auto channel = ChannelsRegistry::Global().getChannel("chan");
-dddd
+
   double var = 3.14;
   int count = 42;
 

@@ -20,6 +20,7 @@ add_library(data_tamer STATIC
     src/types.cpp
     src/values.cpp
     src/channel.cpp
+    src/sinks/mcap_sink.cpp
 )
 
 # detect if compiling in ROS2
@@ -27,7 +28,11 @@ find_package(ament_cmake QUIET)
 if ( ament_cmake_FOUND )
     target_compile_definitions(data_tamer PUBLIC USING_ROS2=1 )
     set(COMPILING_FOR_ROS2 true)
+else()
+    find_package(mcap REQUIRED)
+    target_link_libraries(data_tamer PRIVATE mcap::mcap)
 endif()
+
 
 target_include_directories(data_tamer
  PUBLIC
