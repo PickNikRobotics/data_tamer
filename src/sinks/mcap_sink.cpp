@@ -1,5 +1,4 @@
 #include "data_tamer/sinks/mcap_sink.hpp"
-#include "data_tamer/channel.hpp"
 
 #define MCAP_IMPLEMENTATION
 #include <mcap/writer.hpp>
