@@ -39,8 +39,14 @@ public:
     }
     return true;
   }
-
 };
+
+// Utility
+inline std::chrono::microseconds UsecSinceEpoch()
+{
+  auto since_epoch = std::chrono::system_clock::now().time_since_epoch();
+  return std::chrono::duration_cast<std::chrono::microseconds>(since_epoch);
+}
 
 
 }  // namespace DataTamer

@@ -65,6 +65,10 @@ struct RegistrationID
 {
   size_t first_index = 0;
   size_t fields_count = 0;
+
+  void operator+=(const RegistrationID& other) {
+    fields_count += other.fields_count;
+  }
 };
 
 }  // namespace DataTamer
