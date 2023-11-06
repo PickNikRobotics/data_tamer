@@ -16,7 +16,7 @@ suited to record data in a periodic loop (very frequent in robotics applications
 - Serialization has almost no overhead; the schema is saved/published separatly.
 - The user can enable/disable logged variables at run-time.
 - Direct [MCAP](https://mcap.dev/) recording.
-- ROS2 publisher (comping soon). 
+- ROS2 publisher (coming soon). 
 
 
 # Example
