@@ -15,6 +15,13 @@
 
 namespace DataTamer {
 
+// Utility
+inline std::chrono::nanoseconds NsecSinceEpoch()
+{
+  auto since_epoch = std::chrono::system_clock::now().time_since_epoch();
+  return std::chrono::duration_cast<std::chrono::nanoseconds>(since_epoch);
+}
+
 class DataSinkBase;
 class LogChannel;
 
@@ -90,7 +97,7 @@ public:
 
   void addDataSink(std::shared_ptr<DataSinkBase> sink);
 
-  bool takeSnapshot(std::chrono::nanoseconds timestamp);
+  bool takeSnapshot(std::chrono::nanoseconds timestamp = NsecSinceEpoch());
 
   bool flush(std::chrono::microseconds timeout);
 

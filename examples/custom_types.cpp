@@ -37,5 +37,5 @@ int main()
   Point3D pointB;
   channel->registerValue("pointB", &pointB);
 
-  channel->takeSnapshot( UsecSinceEpoch() );
+  channel->takeSnapshot();
 }

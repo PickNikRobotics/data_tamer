@@ -28,7 +28,7 @@ int main()
   auto logged_float = channel->createLoggedValue<float>("real");
 
   // this is the way you store the current snapshot of the values
-  channel->takeSnapshot( UsecSinceEpoch() );
+  channel->takeSnapshot();
 
   // You can disable a value like this
   channel->setEnabled(id1, false);
@@ -37,5 +37,5 @@ int main()
 
   // The serialized data of the next snapshot will contain
   // only [value_int], i.e. [id2], since the other two are disabled
-  channel->takeSnapshot( UsecSinceEpoch() );
+  channel->takeSnapshot();
 }
