@@ -14,12 +14,6 @@ Preliminary example:
 #include "data_tamer/sinks/dummy_sink.hpp"
 #include <iostream>
 
-std::chrono::microseconds UsecSinceEpoch()
-{
-  auto since_epoch = std::chrono::system_clock::now().time_since_epoch();
-  return std::chrono::duration_cast<std::chrono::microseconds>(since_epoch);
-}
-
 int main()
 {
   using namespace DataTamer;
