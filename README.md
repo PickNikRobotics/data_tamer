@@ -3,7 +3,7 @@
 **DataTamer** is a spiritual successor of [pal_statistics](https://github.com/pal-robotics/pal_statistics).
 
 Its purpose is to log **numerical** values in your application and export them into a
-format that allow the user to visualize them as timeseries, 
+format that allows the user to visualize them as timeseries, 
 for instance in [PlotJuggler](https://github.com/facontidavide/PlotJuggler).
 
 All the values are aggregated in a single "snapshot", for this reason, it is particularly 
@@ -13,10 +13,11 @@ suited to record data in a periodic loop (very frequent in robotics applications
 
 - Schemaless serialization or, to be more precise, schema created at run-time.
 - Very low-latency on the callee side: actual recording is done in a separate thread.
-- Serialization has almost no overhead; the schema is saved/published separatly.
+- Serialization has almost no overhead; the schema is saved/published separately.
+- Multi-sink architecture.
 - The user can enable/disable logged variables at run-time.
 - Direct [MCAP](https://mcap.dev/) recording.
-- ROS2 publisher (comping soon). 
+- ROS2 publisher (coming soon). 
 
 
 # Example
@@ -31,7 +32,7 @@ int main()
 {
   using namespace DataTamer;
 
-  // start defining one or more Sinks that must be added by default.
+  // Start defining one or more Sinks that must be added by default.
   // Do this BEFORE creating a channel.
   auto dummy_sink = std::make_shared<DummySync>();
   ChannelsRegistry::Global().addDefaultSink(dummy_sink);
@@ -53,7 +54,7 @@ int main()
   // logged_real will disable itself when it goes out of scope.
   auto logged_float = channel->createLoggedValue<float>("my_real");
 
-  // this is the way you store the current snapshot of the values
+  // This is the way you store the current snapshot of the values
   channel->takeSnapshot( UsecSinceEpoch() );
 
   // You can disable (i.e., stop recording) a value like this
