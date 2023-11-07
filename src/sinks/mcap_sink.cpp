@@ -1,4 +1,5 @@
 #include "data_tamer/sinks/mcap_sink.hpp"
+#include "data_tamer/contrib/SerializeMe.hpp"
 
 #define MCAP_IMPLEMENTATION
 #include <mcap/writer.hpp>

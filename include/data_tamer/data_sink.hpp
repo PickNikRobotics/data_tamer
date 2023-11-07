@@ -1,8 +1,6 @@
 #pragma once
 
 #include "data_tamer/types.hpp"
-#include "data_tamer/contrib/SerializeMe.hpp"
-
 
 #include <atomic>
 #include <chrono>
@@ -118,18 +116,3 @@ inline void SetBit(ActiveMask &mask, size_t index, bool value)
 
 }  // namespace DataTamer
 
-namespace SerializeMe
-{
-
-template <> struct Serializer<DataTamer::SnapshotHeader>
-{
-  template <class Operator> void operator()(DataTamer::SnapshotHeader& obj, Operator& op)
-  {
-    op(obj.schema_hash);
-    op(obj.timestamp);
-    op(obj.active_mask);
-  }
-};
-
-
-}  // namespace SerializeMe

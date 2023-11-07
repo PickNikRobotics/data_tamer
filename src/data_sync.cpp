@@ -1,5 +1,5 @@
 #include "data_tamer/data_sink.hpp"
-#include "data_tamer/contrib/concurrentqueue.h"
+#include "ConcurrentQueue/concurrentqueue.h"
 
 namespace DataTamer
 {

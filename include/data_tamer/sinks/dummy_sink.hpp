@@ -1,6 +1,7 @@
 #pragma once
 
 #include "data_tamer/data_sink.hpp"
+#include "data_tamer/contrib/SerializeMe.hpp"
 #include <unordered_map>
 
 namespace DataTamer

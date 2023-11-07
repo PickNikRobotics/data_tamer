@@ -48,7 +48,9 @@ target_compile_features(data_tamer PUBLIC cxx_std_17)
 target_include_directories(data_tamer
  PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>)
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/3rdparty>
+  $<INSTALL_INTERFACE:include>
+)
 
 if(DATA_TAMER_BUILD_TESTS)
     add_subdirectory(tests)
