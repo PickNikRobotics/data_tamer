@@ -55,7 +55,7 @@ int main()
   auto logged_float = channel->createLoggedValue<float>("my_real");
 
   // This is the way you store the current snapshot of the values
-  channel->takeSnapshot( UsecSinceEpoch() );
+  channel->takeSnapshot();
 
   // You can disable (i.e., stop recording) a value like this
   channel->setEnabled(id1, false);
