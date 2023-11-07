@@ -76,3 +76,31 @@ int main()
   channel->takeSnapshot();
 }
 ```
+
+# Compilation
+
+## Using Conan
+
+Assuming conan 2.x installed. From the source directory.
+
+**Release**:
+
+```
+conan install . -s compiler.cppstd=gnu17 --build=missing -of build/Release -s build_type=Release
+cmake -S . -B build/Release/ -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_TOOLCHAIN_FILE="build/Release/generators/conan_toolchain.cmake"
+cmake --build build/Release/ --parallel
+```
+
+**Debug**:
+
+```
+conan install . -s compiler.cppstd=gnu17 --build=missing -of build/Debug -s build_type=Debug
+cmake -S . -B build/Debug/ -DCMAKE_BUILD_TYPE=Debug \
+      -DCMAKE_TOOLCHAIN_FILE="build/Debug/generators/conan_toolchain.cmake"
+cmake --build build/Debug/ --parallel
+```
+
+## Using ROS2
+
+TODO

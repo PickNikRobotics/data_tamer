@@ -1,5 +1,5 @@
 #include "data_tamer/data_sink.hpp"
-#include "data_tamer/contrib/ringbuffer.hpp"
+#include "data_tamer/contrib/concurrentqueue.h"
 
 namespace DataTamer
 {
@@ -19,7 +19,7 @@ struct DataSinkBase::Pimpl
   DataSinkBase* self = nullptr;
   std::thread thread;
   std::atomic_bool run = true;
-  jnk0le::Ringbuffer<std::vector<uint8_t>, 128, false, 32> queue;
+  moodycamel::ConcurrentQueue<std::vector<uint8_t>> queue;
 
   void threadLoop();
 };
@@ -32,7 +32,7 @@ DataSinkBase::~DataSinkBase()
 
 bool DataSinkBase::pushSnapshot(const std::vector<uint8_t> &snapshot)
 {
-  return _p->queue.insert(&snapshot);
+  return _p->queue.enqueue(snapshot);
 }
 
 void DataSinkBase::Pimpl::threadLoop()
@@ -42,7 +42,7 @@ void DataSinkBase::Pimpl::threadLoop()
 
   while(run)
   {
-    if(queue.remove(&snapshot))
+    if(queue.try_dequeue(snapshot))
     {
       self->storeSnapshot(snapshot);
     }

@@ -167,12 +167,11 @@ bool LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
     SerializeIntoBuffer( write_view, timestamp.count() );
     SerializeIntoBuffer( write_view, active_flags_ );
 
-    auto* ptr = write_view.data();
     for(auto const& entry: series_)
     {
       if(entry.enabled)
       {
-        auto size = entry.holder.serialize(write_view.data());
+        const auto size = entry.holder.serialize(write_view.data());
         write_view.trimFront(size);
       }
     }

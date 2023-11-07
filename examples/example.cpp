@@ -20,8 +20,8 @@ int main()
   // You can register any arithmetic value. You are responsible for their lifetime
   double value_real = 3.14;
   int value_int = 42;
-  auto id1 = channel->registerValue("value_real", &value_real);
-  auto id2 = channel->registerValue("value_int", &value_int);
+  [[maybe_unused]] auto id1 = channel->registerValue("value_real", &value_real);
+  [[maybe_unused]] auto id2 = channel->registerValue("value_int", &value_int);
 
   // If you prefer to use RAII, use this method instead
   // logged_real will disable itself when it goes out of scope.

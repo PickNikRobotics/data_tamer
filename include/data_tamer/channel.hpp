@@ -75,6 +75,7 @@ private:
 template <typename T>
 RegistrationID RegisterVariable(LogChannel& channel, const std::string& name, T* value);
 
+
 class LogChannel : public std::enable_shared_from_this<LogChannel> {
 public:
 
@@ -246,6 +247,22 @@ T LoggedValue<T>::get()
     return value_;
   }
   return value_;
+}
+
+// Template specialization (kind-of) to register vectors
+template <typename T> RegistrationID
+RegisterVariable(LogChannel& channel, const std::string& prefix, std::vector<T> vect)
+{
+  if(vect.empty())
+  {
+    return {};
+  }
+  auto id = channel.registerValue(prefix + "[0]", &vect[0]);
+  for(size_t i=1; i<vect.size(); i++)
+  {
+    id += channel.registerValue(prefix + "[" + std::to_string(i) + "]", &vect[i]);
+  }
+  return id;
 }
 
 }  // namespace DataTamer

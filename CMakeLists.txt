@@ -2,11 +2,21 @@ cmake_minimum_required(VERSION 3.14)
 
 project(data_tamer LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-option(DATA_TAMER_BUILD_TESTS "Build tests" ON)
-option(DATA_TAMER_BUILD_EXAMPLES "Build examples" ON)
+if(${CMAKE_PROJECT_NAME} STREQUAL ${PROJECT_NAME})
+    option(DATA_TAMER_BUILD_TESTS "Build tests" ON)
+    option(DATA_TAMER_BUILD_EXAMPLES "Build examples" ON)
+else()
+    option(DATA_TAMER_BUILD_TESTS "Build tests" OFF)
+    option(DATA_TAMER_BUILD_EXAMPLES "Build examples" OFF)
+endif()
+
+if (MSVC)
+    add_compile_options(/W4 /WX)
+else()
+    add_compile_options(-Wall -Wextra -pedantic -Werror)
+endif()
 
 add_library(data_tamer STATIC
     include/data_tamer/types.hpp
@@ -34,7 +44,7 @@ else()
     target_link_libraries(data_tamer PRIVATE mcap::mcap)
 endif()
 
-
+target_compile_features(data_tamer PUBLIC cxx_std_17)
 target_include_directories(data_tamer
  PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

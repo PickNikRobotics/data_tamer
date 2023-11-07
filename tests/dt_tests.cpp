@@ -16,8 +16,8 @@ TEST(DataTamer, SinkAdd)
 
   double var = 3.14;
   int count = 49;
-  auto id1 = channel->registerValue("var", &var);
-  auto id2 = channel->registerValue("count", &count);
+  [[maybe_unused]] auto id1 = channel->registerValue("var", &var);
+  [[maybe_unused]] auto id2 = channel->registerValue("count", &count);
 
   const int shapshot_count = 10;
   for(int i=0; i<shapshot_count; i++)

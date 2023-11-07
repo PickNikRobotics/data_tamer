@@ -14,14 +14,15 @@ int main()
   // Create (or get) a channel using the global registry (singleton)
   auto channel = ChannelsRegistry::Global().getChannel("chan");
 
-  std::vector<double> vect64(250);
-  std::vector<float> vect32(250);
-  std::vector<float> int32(250);
-  std::vector<float> int16(250);
+  auto const vect_size = 250;
+  std::vector<double> vect64(vect_size);
+  std::vector<float> vect32(vect_size);
+  std::vector<float> int32(vect_size);
+  std::vector<float> int16(vect_size);
 
   long time_diff_nsec = 0;
 
-  for(size_t i=0; i<250; i++)
+  for(size_t i=0; i<vect_size; i++)
   {
     auto num = std::to_string(i);
     channel->registerValue( std::string("vect64_") + num, &vect64[i]);
@@ -39,7 +40,7 @@ int main()
   while(next_time < dealine)
   {
     auto S = std::sin(t);
-    for(size_t i=0; i<250; i++)
+    for(size_t i=0; i<vect_size; i++)
     {
       vect64[i] = i + S;
       vect32[i] = i + S;
