@@ -1,7 +1,10 @@
 #include "data_tamer/sinks/mcap_sink.hpp"
 #include "data_tamer/contrib/SerializeMe.hpp"
 
+#ifndef USING_ROS2
 #define MCAP_IMPLEMENTATION
+#endif
+
 #include <mcap/writer.hpp>
 
 namespace DataTamer {
