@@ -99,8 +99,6 @@ public:
 
   bool takeSnapshot(std::chrono::nanoseconds timestamp = NsecSinceEpoch());
 
-  bool flush(std::chrono::microseconds timeout);
-
   /**
    * @brief getActiveFlags returns a serialized buffer, where
    * each bit represents if a series is enabled or not.
@@ -131,7 +129,6 @@ private:
   std::string channel_name_;
 
   mutable std::mutex mutex_;
-  std::condition_variable queue_cv_;
 
   size_t payload_buffer_size_ = 0;
 
@@ -145,10 +142,6 @@ private:
   uint64_t prev_dictionary_hash_ = 0;
 
   Dictionary dictionary_;
-
-  std::thread writer_thread_;
-  jnk0le::Ringbuffer<std::vector<uint8_t>, 64, false, 16>  snapshot_queue_;
-  std::atomic_bool alive_;
 
   std::unordered_set<std::shared_ptr<DataSinkBase>> sinks_;
 

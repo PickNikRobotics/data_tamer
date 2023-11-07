@@ -21,6 +21,7 @@ add_library(data_tamer STATIC
     src/values.cpp
     src/channel.cpp
     src/sinks/mcap_sink.cpp
+    src/data_sync.cpp
 )
 
 # detect if compiling in ROS2

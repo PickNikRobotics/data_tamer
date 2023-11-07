@@ -22,10 +22,11 @@ TEST(DataTamer, SinkAdd)
   const int shapshot_count = 10;
   for(int i=0; i<shapshot_count; i++)
   {
-    channel->takeSnapshot(std::chrono::milliseconds(i));
-    std::this_thread::sleep_for(std::chrono::microseconds(100));
+    channel->takeSnapshot();
+    std::this_thread::sleep_for(std::chrono::microseconds(50));
   }
-  channel->flush(std::chrono::milliseconds(10));
+
+  std::this_thread::sleep_for(std::chrono::milliseconds(1));
 
   const auto hash = channel->getDictionary().hash;
 

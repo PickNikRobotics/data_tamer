@@ -2,12 +2,17 @@
 
 #include "data_tamer/contrib/SerializeMe.hpp"
 #include "data_tamer/dictionary.hpp"
+#include "data_tamer/contrib/ringbuffer.hpp"
 
+#include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
+#include <thread>
 
 namespace DataTamer {
 
@@ -47,7 +52,15 @@ using DataSnapshot = std::vector<uint8_t>;
  */
 class DataSinkBase {
  public:
-  virtual ~DataSinkBase() = default;
+  DataSinkBase();
+
+  DataSinkBase(const DataSinkBase& other) = delete;
+  DataSinkBase& operator = (const DataSinkBase& other) = delete;
+
+  DataSinkBase(DataSinkBase&& other) = delete;
+  DataSinkBase& operator = (DataSinkBase&& other) = delete;
+
+  virtual ~DataSinkBase();
 
   /**
    * @brief addChannel will register a dictionary into the sink.
@@ -56,9 +69,21 @@ class DataSinkBase {
    * @param name        name of the channel
    * @param dictionary  dictionary.
    */
-  virtual void addChannel(std::string const& name,
-                          Dictionary const& dictionary) = 0;
+  virtual void addChannel(const std::string& name,
+                          const Dictionary& dictionary) = 0;
 
+  /**
+   * @brief pushSnapshot will push the data into a protected queue,
+   * that a different thread will consume, using storeSnapshot()
+   *
+   * @param snapshot serialized data containing the SnapshotHeader
+   * and the payload
+   *
+   * @return false if the queue is full and snapshot was not pushed
+   */
+  bool pushSnapshot(const std::vector<uint8_t>& snapshot);
+
+protected:
   /**
    * @brief saveSnapshot is the method used by LogChannel to push new data.
    *
@@ -66,6 +91,10 @@ class DataSinkBase {
    * @return true if push was successful.
    */
   virtual bool storeSnapshot(const std::vector<uint8_t>& snapshot) = 0;
+
+private:
+  struct Pimpl;
+  std::unique_ptr<Pimpl> _p;
 };
 
 //--------------------------------------------------

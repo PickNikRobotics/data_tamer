@@ -73,19 +73,10 @@ LogChannel::LogChannel(std::string name) : channel_name_(name)
 {
   std::hash<std::string> str_hasher;
   dictionary_.hash = str_hasher(channel_name_);
-  alive_ = false;
-  writer_thread_ = std::thread(&LogChannel::writerThreadLoop, this);
-  while(!alive_)
-  {
-    std::this_thread::sleep_for(std::chrono::microseconds(50));
-  }
 }
 
 LogChannel::~LogChannel()
 {
-  alive_ = false;
-  queue_cv_.notify_one();
-  writer_thread_.join();
 }
 
 void LogChannel::setEnabled(const RegistrationID& id, bool enable)
@@ -183,48 +174,12 @@ bool LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
         write_view.trimFront(size);
       }
     }
-    snapshot_queue_.insert(&snapshot_buffer_);
+    for(auto& sink: sinks_)
+    {
+      sink->pushSnapshot(snapshot_buffer_);
+    }
   }
-  queue_cv_.notify_one();
   return true;
-}
-
-
-bool LogChannel::flush(std::chrono::microseconds timeout)
-{
-  auto t1 = std::chrono::system_clock::now();
-  while(std::chrono::system_clock::now() - t1 < timeout)
-  {
-    std::lock_guard const lock(mutex_);
-    if(snapshot_queue_.isEmpty()) {
-      return false;
-    }
-  }
-  return false;
-}
-
-void LogChannel::writerThreadLoop()
-{
-  alive_ = true;
-  std::vector<uint8_t> snapshot;
-  while(alive_)
-  {
-    std::unique_lock lk(mutex_);
-    queue_cv_.wait(lk, [this]{
-      return !snapshot_queue_.isEmpty() || !alive_;
-    });
-    if(!alive_)
-    {
-      break;
-    }
-    while(snapshot_queue_.remove(&snapshot))
-    {
-      for(auto& sink: sinks_)
-      {
-        sink->storeSnapshot(snapshot);
-      }
-    }
-  }
 }
 
 
