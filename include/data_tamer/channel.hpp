@@ -4,11 +4,8 @@
 #include "data_tamer/data_sink.hpp"
 
 #include <atomic>
-#include <deque>
-#include <condition_variable>
 #include <memory>
 #include <mutex>
-#include <thread>
 #include <unordered_set>
 
 namespace DataTamer {
@@ -33,13 +30,14 @@ template <typename T>
 class LoggedValue {
 
 protected:
-  LoggedValue(std::shared_ptr<LogChannel> channel, const std::string& name, T initial_value);
+  LoggedValue(const std::shared_ptr<LogChannel>& channel, const std::string& name, T initial_value);
 
   friend LogChannel;
 
 public:
 
-  LoggedValue() = default;
+  LoggedValue() {}
+
   ~LoggedValue();
 
   LoggedValue(LoggedValue const& other) = delete;
@@ -48,8 +46,17 @@ public:
   LoggedValue(LoggedValue&& other) = default;
   LoggedValue& operator=(LoggedValue&& other) = default;
 
-  void set(const T& value);
+  /**
+   * @brief set the value of the variable.
+   *
+   * @param value   new value
+   * @param auto_enable  if true and the current instance is disabled, call setEnabled(true)
+   */
+  void set(const T& value, bool auto_enable = false);
 
+  /**
+   * @brief get the stored value.
+   */
   T get();
 
   void setEnabled(bool enabled);
@@ -112,7 +119,12 @@ public:
    */
   [[nodiscard]] Schema getSchema() const;
 
-
+  /** You will need to use this if:
+  * - your variables were registered using LogChannel::registerValue AND
+  * - the variables are being modified in a thread different than the one calling takeSnapshot()
+  *
+  * No need to worry about LoggedValues (they use the mutex internally)
+  */
   std::mutex& writeMutex() { return mutex_; }
 
 private:
@@ -177,7 +189,7 @@ std::shared_ptr<LoggedValue<T>> LogChannel::createLoggedValue(
 }
 
 template <typename T> inline
-LoggedValue<T>::LoggedValue(std::shared_ptr<LogChannel> channel,
+LoggedValue<T>::LoggedValue(const std::shared_ptr<LogChannel> &channel,
                             const std::string& name,
                             T initial_value):
   channel_(channel),
@@ -206,15 +218,22 @@ void LoggedValue<T>::setEnabled(bool enabled)
 }
 
 template <typename T> inline
-void LoggedValue<T>::set(const T& val)
+void LoggedValue<T>::set(const T& val, bool auto_enable)
 {
   if(auto channel = channel_.lock())
   {
     std::lock_guard const lock(channel->writeMutex());
     value_ = val;
+    if(!enabled_ && auto_enable) {
+      channel->setEnabled(id_, true);
+      enabled_ = true;
+    }
   }
   else {
     value_ = val;
+    if(!enabled_ && auto_enable) {
+      enabled_ = true;
+    }
   }
 }
 

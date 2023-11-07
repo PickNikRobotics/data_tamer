@@ -2,8 +2,8 @@
 
 **DataTamer** is a spiritual successor of [pal_statistics](https://github.com/pal-robotics/pal_statistics).
 
-Its purpose is to log **numerical** values in your application and export them into a
-format that allows the user to visualize them as timeseries, 
+Its purpose is to trace **numerical** values in your application and export them into a
+format that allows users to visualize them as timeseries, 
 for instance in [PlotJuggler](https://github.com/facontidavide/PlotJuggler).
 
 All the values are aggregated in a single "snapshot", for this reason, it is particularly 
@@ -11,14 +11,17 @@ suited to record data in a periodic loop (very frequent in robotics applications
 
 ## Features
 
-- Schemaless serialization or, to be more precise, schema created at run-time.
-- Very low-latency on the callee side: actual recording is done in a separate thread.
-- Serialization has almost no overhead; the schema is saved/published separately.
-- Multi-sink architecture.
+- **Serialization schema is created at run-time**: no need to do any code geenration.
+- **Suitable for real-time applications**: very low-latency (on the side of the callee).
+- **Multi-sink architecture**: recorded data can be forwarded to multiple "backends". 
+- **Very low serialization overhead**.
 - The user can enable/disable logged variables at run-time.
-- Direct [MCAP](https://mcap.dev/) recording.
-- ROS2 publisher (coming soon). 
 
+Available sinks:
+
+- Direct [MCAP](https://mcap.dev/) recording.
+- `DummySink`, mostly useful for debugging and unit testing.
+- ROS2 publisher (coming soon). 
 
 # Example
 
@@ -26,7 +29,6 @@ suited to record data in a periodic loop (very frequent in robotics applications
 ```cpp
 #include "data_tamer/data_tamer.hpp"
 #include "data_tamer/sinks/dummy_sink.hpp"
-#include <iostream>
 
 int main()
 {
@@ -57,7 +59,7 @@ int main()
   // This is the way you store the current snapshot of the values
   channel->takeSnapshot();
 
-  // You can disable (i.e., stop recording) a value like this
+  // You can disable (i.e., stop recording) a value
   channel->setEnabled(id1, false);
   // or
   logged_float->setEnabled(false);
