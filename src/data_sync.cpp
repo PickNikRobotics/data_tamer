@@ -13,16 +13,13 @@ struct DataSinkBase::Pimpl
   ~Pimpl()
   {
     run = false;
-    queue_cv.notify_one();
     thread.join();
   }
 
   DataSinkBase* self = nullptr;
-  std::mutex mutex;
   std::thread thread;
   std::atomic_bool run = true;
   jnk0le::Ringbuffer<std::vector<uint8_t>, 128, false, 32> queue;
-  std::condition_variable queue_cv;
 
   void threadLoop();
 };
@@ -35,15 +32,7 @@ DataSinkBase::~DataSinkBase()
 
 bool DataSinkBase::pushSnapshot(const std::vector<uint8_t> &snapshot)
 {
-  {
-    std::lock_guard const lock(_p->mutex);
-    if(_p->queue.isFull()) {
-      return false;
-    }
-    _p->queue.insert(&snapshot);
-  }
-  _p->queue_cv.notify_one();
-  return true;
+  return _p->queue.insert(&snapshot);
 }
 
 void DataSinkBase::Pimpl::threadLoop()
@@ -53,21 +42,12 @@ void DataSinkBase::Pimpl::threadLoop()
 
   while(run)
   {
-    std::unique_lock lk(mutex);
-    queue_cv.wait(lk, [this]{
-      return !queue.isEmpty() || !run;
-    });
-
-    if(!run)
-    {
-      break;
-    }
-
     if(queue.remove(&snapshot))
     {
-      lk.unlock();
       self->storeSnapshot(snapshot);
-      lk.lock();
+    }
+    else {
+      std::this_thread::sleep_for(std::chrono::microseconds(100));
     }
   }
 }

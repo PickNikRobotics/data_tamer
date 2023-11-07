@@ -156,6 +156,7 @@ bool LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
     // serialize
     size_t total_size = sizeof(uint64_t) + // timestamp
                         sizeof(uint64_t) + // schema hash
+                        sizeof(uint32_t) + // payload size
                         SerializeMe::BufferSize(active_flags_) +
                         payload_buffer_size_;
 
@@ -165,6 +166,7 @@ bool LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
     SerializeIntoBuffer( write_view, schema_.hash );
     SerializeIntoBuffer( write_view, timestamp.count() );
     SerializeIntoBuffer( write_view, active_flags_ );
+
     auto* ptr = write_view.data();
     for(auto const& entry: series_)
     {

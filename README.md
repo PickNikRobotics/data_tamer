@@ -51,7 +51,7 @@ int main()
   auto channel = ChannelsRegistry::Global().getChannel("my_channel");
 
   // If you don't want to use addDefaultSink, you can do it manually:
-  // channel->addDataSink(std::make_shared<DummySync>())
+  // channel->addDataSink(dummy_sink);
 
   // You can register any arithmetic value. You are responsible for their lifetime
   double value_real = 3.14;

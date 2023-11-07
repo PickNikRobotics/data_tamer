@@ -31,7 +31,11 @@ public:
   ValuePtr(ValuePtr&& other) = default;
   ValuePtr& operator=(ValuePtr&& other) = default;
 
-  size_t serialize(void* dest) const;
+  size_t serialize(void* dest) const
+  {
+    std::memcpy(dest, v_ptr_, memory_size_);
+    return memory_size_;
+  }
 
   /// Get the type of the stored variable pointer
   [[nodiscard]] BasicType type() const { return type_; }
@@ -41,6 +45,7 @@ private:
   BasicType type_ = BasicType::OTHER;
   std::uint8_t memory_size_ = 0;
 };
+
 
 
 }  // namespace DataTamer
