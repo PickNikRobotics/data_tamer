@@ -11,11 +11,11 @@ suited to record data in a periodic loop (very frequent in robotics applications
 
 ## Features
 
-- **Serialization schema is created at run-time**: no need to do any code geenration.
+- **Serialization schema is created at run-time**: no need to do any code generation.
 - **Suitable for real-time applications**: very low-latency (on the side of the callee).
 - **Multi-sink architecture**: recorded data can be forwarded to multiple "backends". 
 - **Very low serialization overhead**.
-- The user can enable/disable logged variables at run-time.
+- The user can enable/disable traced variables at run-time.
 
 Available sinks:
 
@@ -23,8 +23,15 @@ Available sinks:
 - `DummySink`, mostly useful for debugging and unit testing.
 - ROS2 publisher (coming soon). 
 
-# Example
+## Limitations
 
+- Traced variables can not be added (registered) once the recording starts.
+- Can only be used with triavially copiable objects (therefore, no variable size vectors).
+- Focused on periodic recording. Not the best option for sporadic, asynchornous events.
+- If you use `DataTamer::registerValue` you must be careful about the lifetime of the
+object. If you prefer a safer interface, use `DataTamer::createLoggedValue` instead.
+
+# Example
 
 ```cpp
 #include "data_tamer/data_tamer.hpp"
