@@ -14,7 +14,7 @@ suited to record data in a periodic loop (very frequent in robotics applications
 - **Serialization schema is created at run-time**: no need to do any code generation.
 - **Suitable for real-time applications**: very low-latency (on the side of the callee).
 - **Multi-sink architecture**: recorded data can be forwarded to multiple "backends". 
-- **Very low serialization overhead**.
+- **Very low serialization overhead**, in the order of 1 bit per traced value.
 - The user can enable/disable traced variables at run-time.
 
 Available sinks:
