@@ -29,7 +29,7 @@ class MCAPSink : public DataSinkBase {
   ~MCAPSink() override;
 
   void addChannel(std::string const& channel_name,
-                  Dictionary const& dictionary) override;
+                  Schema const& schema) override;
 
   bool storeSnapshot(const std::vector<uint8_t>& snapshot) override;
 
@@ -45,8 +45,8 @@ class MCAPSink : public DataSinkBase {
   std::string filepath_;
   std::unique_ptr<mcap::McapWriter> writer_;
 
-  std::unordered_map<uint64_t, uint16_t> dictionary_to_channel_;
-  std::unordered_map<std::string, Dictionary> dictionaries_;
+  std::unordered_map<uint64_t, uint16_t> hash_to_channel_id_;
+  std::unordered_map<std::string, Schema> schemas_;
 
   std::chrono::seconds reset_time_ = std::chrono::seconds(60 * 10);
   std::chrono::system_clock::time_point start_time_;

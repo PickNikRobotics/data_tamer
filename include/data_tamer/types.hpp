@@ -1,7 +1,9 @@
 #pragma once
 
 #include <cstdint>
+#include <ostream>
 #include <string>
+#include <vector>
 
 namespace DataTamer {
 
@@ -60,14 +62,37 @@ inline constexpr BasicType GetBasicType() {
   return BasicType::OTHER;
 }
 
-
 struct RegistrationID
 {
   size_t first_index = 0;
   size_t fields_count = 0;
 
+  // sintactic sugar to be used to concatenate contiguous RegistrationID.
+  // See example custom_type.cpp
   void operator+=(const RegistrationID& other) {
     fields_count += other.fields_count;
+  }
+};
+
+/**
+ * @brief DataTamer uses a simple "flat" schema of key/value pairs (each pair is a "field").
+ */
+struct Schema {
+  struct Field {
+    std::string name;
+    BasicType type;
+  };
+  std::vector<Field> fields;
+  uint64_t hash = 0;
+
+  friend std::ostream& operator<<(std::ostream& os, const Schema& schema)
+  {
+    os << "hash: " << schema.hash << "\n";
+    for(const auto& entry: schema.fields)
+    {
+      os << ToStr(entry.type) << ' ' << entry.name << '\n';
+    }
+    return os;
   }
 };
 

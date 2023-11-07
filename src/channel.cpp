@@ -33,14 +33,14 @@ RegistrationID LogChannel::registerValueImpl(
     registered_values_.insert( {name, index} );
     payload_buffer_size_ += SizeOf(type);
 
-    // update dictionary and its hash (append only)
+    // update schema and its hash (append only)
     // https://stackoverflow.com/questions/2590677/how-do-i-combine-hash-values-in-c0x
     std::hash<std::string> str_hasher;
     std::hash<BasicType> type_hasher;
 
-    dictionary_.entries.emplace_back( Dictionary::Entry{name, type} );
+    schema_.fields.emplace_back( Schema::Field{name, type} );
 
-    auto& hash = dictionary_.hash;
+    auto& hash = schema_.hash;
     hash ^= str_hasher(name) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
     hash ^= type_hasher(type) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
 
@@ -72,7 +72,7 @@ RegistrationID LogChannel::registerValueImpl(
 LogChannel::LogChannel(std::string name) : channel_name_(name)
 {
   std::hash<std::string> str_hasher;
-  dictionary_.hash = str_hasher(channel_name_);
+  schema_.hash = str_hasher(channel_name_);
 }
 
 LogChannel::~LogChannel()
@@ -112,7 +112,7 @@ void LogChannel::addDataSink(std::shared_ptr<DataSinkBase> sink)
   sinks_.insert(sink);
 }
 
-void LogChannel::update()
+void LogChannel::updateActiveMask()
 {
   if (active_flags_dirty_)
   {
@@ -128,20 +128,20 @@ void LogChannel::update()
       }
     }
   }
-  if( dictionary_.hash != prev_dictionary_hash_)
+  if( schema_.hash != prev_schema_hash_)
   {
-    prev_dictionary_hash_ = dictionary_.hash;
+    prev_schema_hash_ = schema_.hash;
     for(auto const& sink: sinks_)
     {
-      sink->addChannel(channel_name_, dictionary_);
+      sink->addChannel(channel_name_, schema_);
     }
   }
 }
 
-Dictionary LogChannel::getDictionary() const
+Schema LogChannel::getSchema() const
 {
   std::lock_guard const lock(mutex_);
-  return dictionary_;
+  return schema_;
 }
 
 bool LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
@@ -152,17 +152,17 @@ bool LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
     {
       return false;
     }
-    update();
+    updateActiveMask();
     // serialize
     size_t total_size = sizeof(uint64_t) + // timestamp
-                        sizeof(uint64_t) + // dictionary hash
+                        sizeof(uint64_t) + // schema hash
                         SerializeMe::BufferSize(active_flags_) +
                         payload_buffer_size_;
 
     snapshot_buffer_.resize(total_size);
 
     SerializeMe::SpanBytes write_view(snapshot_buffer_);
-    SerializeIntoBuffer( write_view, dictionary_.hash );
+    SerializeIntoBuffer( write_view, schema_.hash );
     SerializeIntoBuffer( write_view, timestamp.count() );
     SerializeIntoBuffer( write_view, active_flags_ );
     auto* ptr = write_view.data();

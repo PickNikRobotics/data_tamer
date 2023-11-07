@@ -1,9 +1,7 @@
 #pragma once
 
 #include "data_tamer/values.hpp"
-#include "data_tamer/dictionary.hpp"
 #include "data_tamer/data_sink.hpp"
-#include "data_tamer/contrib/ringbuffer.hpp"
 
 #include <atomic>
 #include <deque>
@@ -110,9 +108,9 @@ public:
   [[nodiscard]] const ActiveMask& getActiveFlags();
 
   /**
-   * @brief getDictionary. See description of class Dictionary
+   * @brief getSchema. See description of class Schema
    */
-  [[nodiscard]] Dictionary getDictionary() const;
+  [[nodiscard]] Schema getSchema() const;
 
 
   std::mutex& writeMutex() { return mutex_; }
@@ -139,15 +137,13 @@ private:
   ActiveMask active_flags_;
 
   std::vector<uint8_t> snapshot_buffer_;
-  uint64_t prev_dictionary_hash_ = 0;
+  uint64_t prev_schema_hash_ = 0;
 
-  Dictionary dictionary_;
+  Schema schema_;
 
   std::unordered_set<std::shared_ptr<DataSinkBase>> sinks_;
 
-  void updateDictionary();
-
-  void update();
+  void updateActiveMask();
 
   RegistrationID registerValueImpl(const std::string& name,
                                    ValuePtr&& value_ptr);

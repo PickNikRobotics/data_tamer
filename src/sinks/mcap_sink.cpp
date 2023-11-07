@@ -22,7 +22,7 @@ void DataTamer::MCAPSink::openFile(std::string const& filepath) {
   }
   start_time_ = std::chrono::system_clock::now();
   // clean up, in case this was opened a second time
-  dictionary_to_channel_.clear();
+  hash_to_channel_id_.clear();
 }
 
 MCAPSink::~MCAPSink() {
@@ -30,31 +30,31 @@ MCAPSink::~MCAPSink() {
 }
 
 void MCAPSink::addChannel(std::string const& channel_name,
-                          Dictionary const& dictionary) {
-  dictionaries_[channel_name] = dictionary;
-  auto it = dictionary_to_channel_.find(dictionary.hash);
-  if (it != dictionary_to_channel_.end()) {
+                          Schema const& schema) {
+  schemas_[channel_name] = schema;
+  auto it = hash_to_channel_id_.find(schema.hash);
+  if (it != hash_to_channel_id_.end()) {
     return;
   }
 
   // write the schema, one entry per line
   std::string schema_str;
-  for (auto const& entry : dictionary.entries) {
+  for (auto const& entry : schema.fields) {
     schema_str += entry.name + " " + ToStr(entry.type) + "\n";
   }
 
   auto const schema_name =
-      channel_name + "::" + std::to_string(dictionary.hash);
+      channel_name + "::" + std::to_string(schema.hash);
 
   // Register a Schema
-  mcap::Schema schema(schema_name, kDataTamer, schema_str);
-  writer_->addSchema(schema);
+  mcap::Schema mcap_schema(schema_name, kDataTamer, schema_str);
+  writer_->addSchema(mcap_schema);
 
   // Register a Channel
-  mcap::Channel publisher(channel_name, kDataTamer, schema.id);
+  mcap::Channel publisher(channel_name, kDataTamer, mcap_schema.id);
   writer_->addChannel(publisher);
 
-  dictionary_to_channel_[dictionary.hash] = publisher.id;
+  hash_to_channel_id_[schema.hash] = publisher.id;
 }
 
 bool MCAPSink::storeSnapshot(const std::vector<uint8_t>& snapshot) {
@@ -69,7 +69,7 @@ bool MCAPSink::storeSnapshot(const std::vector<uint8_t>& snapshot) {
 
   // Write our message
   mcap::Message msg;
-  msg.channelId = dictionary_to_channel_.at(hash);
+  msg.channelId = hash_to_channel_id_.at(hash);
   msg.sequence = 1;  // Optional
   // Timestamp requires nanosecond
   msg.logTime = mcap::Timestamp(timestamp);
@@ -88,8 +88,8 @@ bool MCAPSink::storeSnapshot(const std::vector<uint8_t>& snapshot) {
     openFile(filepath_);
 
     // rebuild the channels
-    for (auto const& [name, dictionary] : dictionaries_) {
-      addChannel(name, dictionary);
+    for (auto const& [name, schema] : schemas_) {
+      addChannel(name, schema);
     }
   }
   return true;

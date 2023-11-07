@@ -1,8 +1,8 @@
 #pragma once
 
+#include "data_tamer/types.hpp"
 #include "data_tamer/contrib/SerializeMe.hpp"
-#include "data_tamer/dictionary.hpp"
-#include "data_tamer/contrib/ringbuffer.hpp"
+
 
 #include <atomic>
 #include <chrono>
@@ -22,13 +22,13 @@ bool GetBit(const ActiveMask& mask, size_t index);
 void SetBit(ActiveMask& mask, size_t index, bool val);
 
 struct SnapshotHeader {
-  /// Unique identifier of the dictionary
-  std::size_t dictionary_hash;
+  /// Unique identifier of the schema
+  std::size_t schema_hash;
 
   /// snapshot timestamp
   std::chrono::nanoseconds timestamp;
 
-  /// Vector that tell us if an entry of the dictionary is
+  /// Vector that tell us if an field of the schema is
   /// active or not. It is basically an optimized vector
   /// of bools, where each byte contains 8 boolean flags.
   ActiveMask active_mask;
@@ -63,14 +63,14 @@ class DataSinkBase {
   virtual ~DataSinkBase();
 
   /**
-   * @brief addChannel will register a dictionary into the sink.
-   * That dictionary will be recognized by its hash.
+   * @brief addChannel will register a schema into the sink.
+   * That schema will be recognized by its hash.
    *
-   * @param name        name of the channel
-   * @param dictionary  dictionary.
+   * @param name    name of the channel
+   * @param schema  a schema obtained usually from LogChannel::getSchema()
    */
   virtual void addChannel(const std::string& name,
-                          const Dictionary& dictionary) = 0;
+                          const Schema& schema) = 0;
 
   /**
    * @brief pushSnapshot will push the data into a protected queue,
@@ -125,7 +125,7 @@ template <> struct Serializer<DataTamer::SnapshotHeader>
 {
   template <class Operator> void operator()(DataTamer::SnapshotHeader& obj, Operator& op)
   {
-    op(obj.dictionary_hash);
+    op(obj.schema_hash);
     op(obj.timestamp);
     op(obj.active_mask);
   }

@@ -44,4 +44,5 @@ size_t SizeOf(const BasicType& type)
   return kSizes[static_cast<size_t>(type)];
 }
 
+
 }  // namespace DataTamer

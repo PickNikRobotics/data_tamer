@@ -13,7 +13,7 @@ add_library(data_tamer STATIC
     include/data_tamer/values.hpp
     include/data_tamer/data_tamer.hpp
     include/data_tamer/channel.hpp
-    include/data_tamer/dictionary.hpp
+
     include/data_tamer/sinks/dummy_sink.hpp
 
     src/data_tamer.cpp

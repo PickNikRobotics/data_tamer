@@ -28,13 +28,13 @@ TEST(DataTamer, SinkAdd)
 
   std::this_thread::sleep_for(std::chrono::milliseconds(1));
 
-  const auto hash = channel->getDictionary().hash;
+  const auto hash = channel->getSchema().hash;
 
-  ASSERT_EQ(dummy_sink_A->dictionaries.size(), 1);
-  ASSERT_EQ(dummy_sink_A->dictionaries.begin()->first, hash);
+  ASSERT_EQ(dummy_sink_A->schamas.size(), 1);
+  ASSERT_EQ(dummy_sink_A->schamas.begin()->first, hash);
   ASSERT_EQ(dummy_sink_A->snapshots_count[hash], shapshot_count);
 
-  ASSERT_EQ(dummy_sink_B->dictionaries.size(), 1);
-  ASSERT_EQ(dummy_sink_B->dictionaries.begin()->first, hash);
+  ASSERT_EQ(dummy_sink_B->schamas.size(), 1);
+  ASSERT_EQ(dummy_sink_B->schamas.begin()->first, hash);
   ASSERT_EQ(dummy_sink_B->snapshots_count[hash], shapshot_count);
 }

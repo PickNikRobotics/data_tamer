@@ -1,4 +1,5 @@
 #include "data_tamer/data_sink.hpp"
+#include "data_tamer/contrib/ringbuffer.hpp"
 
 namespace DataTamer
 {
