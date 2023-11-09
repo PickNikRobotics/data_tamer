@@ -19,7 +19,7 @@ struct DataSinkBase::Pimpl
   DataSinkBase* self = nullptr;
   std::thread thread;
   std::atomic_bool run = true;
-  moodycamel::ConcurrentQueue<std::vector<uint8_t>> queue;
+  moodycamel::ConcurrentQueue<Snapshot> queue;
 
   void threadLoop();
 };
@@ -30,7 +30,7 @@ DataSinkBase::DataSinkBase(): _p(new Pimpl(this))
 DataSinkBase::~DataSinkBase()
 {}
 
-bool DataSinkBase::pushSnapshot(const std::vector<uint8_t> &snapshot)
+bool DataSinkBase::pushSnapshot(const Snapshot &snapshot)
 {
   return _p->queue.enqueue(snapshot);
 }
@@ -38,7 +38,7 @@ bool DataSinkBase::pushSnapshot(const std::vector<uint8_t> &snapshot)
 void DataSinkBase::Pimpl::threadLoop()
 {
   run = true;
-  std::vector<uint8_t> snapshot;
+  Snapshot snapshot;
 
   while(run)
   {

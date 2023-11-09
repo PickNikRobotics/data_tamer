@@ -141,22 +141,19 @@ private:
 
   mutable std::mutex mutex_;
 
-  size_t payload_buffer_size_ = 0;
+  size_t payload_max_buffer_size_ = 0;
 
   std::vector<ValueHolder> series_;
   std::unordered_map<std::string, size_t> registered_values_;
 
-  std::atomic_bool active_flags_dirty_ = true;
-  ActiveMask active_flags_;
+  std::atomic_bool mask_dirty_ = true;
 
-  std::vector<uint8_t> snapshot_buffer_;
-  uint64_t prev_schema_hash_ = 0;
-
+  Snapshot snapshot_;
   Schema schema_;
 
   std::unordered_set<std::shared_ptr<DataSinkBase>> sinks_;
 
-  void updateActiveMask();
+  void updateActiveMask(ActiveMask& mask);
 
   RegistrationID registerValueImpl(const std::string& name,
                                    ValuePtr&& value_ptr);

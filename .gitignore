@@ -74,3 +74,4 @@ CMakeLists.txt.user*
 /build/
 /CMakeUserPresets.json
 /perf.*
+/data_tamer/build/*

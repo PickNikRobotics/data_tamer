@@ -17,7 +17,7 @@ public:
   std::unordered_map<uint64_t, Schema> schamas;
   std::unordered_map<uint64_t, std::string> schema_names;
   std::unordered_map<uint64_t, long> snapshots_count;
-  std::vector<uint8_t> latest_snapshot;
+  Snapshot latest_snapshot;
   
   void addChannel(std::string const& name, Schema const& schema) override
   {
@@ -26,14 +26,11 @@ public:
     snapshots_count[schema.hash] = 0;
   }
 
-  bool storeSnapshot(const std::vector<uint8_t>& snapshot) override
+  bool storeSnapshot(const Snapshot& snapshot) override
   {
     latest_snapshot = snapshot;
-    uint64_t hash = 0;
-    SerializeMe::SpanBytesConst span(snapshot.data(), snapshot.size());
 
-    SerializeMe::DeserializeFromBuffer(span, hash);
-    auto it = snapshots_count.find(hash);
+    auto it = snapshots_count.find(snapshot.schema_hash);
     if( it != snapshots_count.end())
     {
       it->second++;

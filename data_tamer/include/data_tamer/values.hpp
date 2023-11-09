@@ -33,7 +33,19 @@ public:
 
   size_t serialize(void* dest) const
   {
-    std::memcpy(dest, v_ptr_, memory_size_);
+    // slightly faster than memcpy
+    switch(memory_size_) {
+      case 8: *static_cast<uint64_t*>(dest) = *static_cast<const uint64_t*>(v_ptr_);
+        break;
+      case 4: *static_cast<uint32_t*>(dest) = *static_cast<const uint32_t*>(v_ptr_);
+        break;
+      case 2: *static_cast<uint16_t*>(dest) = *static_cast<const uint16_t*>(v_ptr_);
+        break;
+      case 1: *static_cast<uint8_t*>(dest) = *static_cast<const uint8_t*>(v_ptr_);
+        break;
+      default:
+        std::memcpy(dest, v_ptr_, memory_size_);
+    }
     return memory_size_;
   }
 

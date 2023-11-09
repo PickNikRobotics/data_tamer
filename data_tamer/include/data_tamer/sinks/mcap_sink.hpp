@@ -31,7 +31,7 @@ class MCAPSink : public DataSinkBase {
   void addChannel(std::string const& channel_name,
                   Schema const& schema) override;
 
-  bool storeSnapshot(const std::vector<uint8_t>& snapshot) override;
+  bool storeSnapshot(const Snapshot& snapshot) override;
 
   /// Wait for all the snapshots in the queue to be written on file.
   /// it is a blocking function

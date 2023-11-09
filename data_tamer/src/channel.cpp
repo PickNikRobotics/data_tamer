@@ -16,7 +16,7 @@ RegistrationID LogChannel::registerValueImpl(
   }
 
   std::lock_guard const lock(mutex_);
-  active_flags_dirty_ = true;
+  mask_dirty_ = true;
 
   // check if this name exists already
   auto it = registered_values_.find(name);
@@ -31,7 +31,7 @@ RegistrationID LogChannel::registerValueImpl(
 
     const size_t index = series_.size() -1;
     registered_values_.insert( {name, index} );
-    payload_buffer_size_ += SizeOf(type);
+    payload_max_buffer_size_ += SizeOf(type);
 
     // update schema and its hash (append only)
     // https://stackoverflow.com/questions/2590677/how-do-i-combine-hash-values-in-c0x
@@ -65,7 +65,7 @@ RegistrationID LogChannel::registerValueImpl(
   // mark as registered again
   instance.registered = true;
   instance.enabled = true;
-  payload_buffer_size_ += SizeOf(new_type);
+  payload_max_buffer_size_ += SizeOf(new_type);
   return {index, 1};
 }
 
@@ -90,7 +90,7 @@ void LogChannel::setEnabled(const RegistrationID& id, bool enable)
       instance.enabled = enable;
       // if changed, adjust the size of the payload
       const auto size = SizeOf(instance.holder.type());
-      payload_buffer_size_ += enable ? size : -size;
+      payload_max_buffer_size_ += enable ? size : -size;
     }
   }
 }
@@ -103,7 +103,7 @@ void LogChannel::unregister(const RegistrationID& id)
     auto& instance = series_[id.first_index + i];
     instance.registered = false;
     instance.enabled = false;
-    payload_buffer_size_ -= SizeOf(instance.holder.type());
+    payload_max_buffer_size_ -= SizeOf(instance.holder.type());
   }
 }
 
@@ -112,28 +112,16 @@ void LogChannel::addDataSink(std::shared_ptr<DataSinkBase> sink)
   sinks_.insert(sink);
 }
 
-void LogChannel::updateActiveMask()
+void LogChannel::updateActiveMask(ActiveMask& mask)
 {
-  if (active_flags_dirty_)
+  mask.clear();
+  mask.resize((series_.size() + 7) / 8, 0xFF);  // ceiling
+  for (size_t i = 0; i < series_.size(); i++)
   {
-    active_flags_dirty_ = false;
-    active_flags_.clear();
-    active_flags_.resize((series_.size() + 7) / 8, 0xFF);  // ceiling
-    for (size_t i = 0; i < series_.size(); i++)
+    auto const& instance = series_[i];
+    if (!instance.enabled)
     {
-      auto const& instance = series_[i];
-      if (!instance.enabled)
-      {
-        SetBit(active_flags_, i, false);
-      }
-    }
-  }
-  if( schema_.hash != prev_schema_hash_)
-  {
-    prev_schema_hash_ = schema_.hash;
-    for(auto const& sink: sinks_)
-    {
-      sink->addChannel(channel_name_, schema_);
+      SetBit(mask, i, false);
     }
   }
 }
@@ -146,39 +134,48 @@ Schema LogChannel::getSchema() const
 
 bool LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
 {
+  std::lock_guard const lock(mutex_);
+  if(sinks_.empty())
   {
-    std::lock_guard const lock(mutex_);
-    if(sinks_.empty())
+    return false;
+  }
+  // update the snapshot_.active_mask if necessary
+  if(mask_dirty_)
+  {
+    mask_dirty_ = false;
+    updateActiveMask(snapshot_.active_mask);
+  }
+  // call sink->addChannel (usually done once)
+  if( schema_.hash != snapshot_.schema_hash)
+  {
+    snapshot_.schema_hash = schema_.hash;
+    for(auto const& sink: sinks_)
     {
-      return false;
+      sink->addChannel(channel_name_, schema_);
     }
-    updateActiveMask();
-    // serialize
-    size_t total_size = sizeof(uint64_t) + // timestamp
-                        sizeof(uint64_t) + // schema hash
-                        sizeof(uint32_t) + // payload size
-                        SerializeMe::BufferSize(active_flags_) +
-                        payload_buffer_size_;
+  }
 
-    snapshot_buffer_.resize(total_size);
+  snapshot_.timestamp = timestamp;
+  // serialize data into snapshot_.payload
+  snapshot_.payload.resize(payload_max_buffer_size_);
 
-    SerializeMe::SpanBytes write_view(snapshot_buffer_);
-    SerializeIntoBuffer( write_view, schema_.hash );
-    SerializeIntoBuffer( write_view, timestamp.count() );
-    SerializeIntoBuffer( write_view, active_flags_ );
+  auto* payload_ptr = snapshot_.payload.data();
+  size_t actual_payload_size = 0;
 
-    for(auto const& entry: series_)
+  for(auto const& entry: series_)
+  {
+    if(entry.enabled)
     {
-      if(entry.enabled)
-      {
-        const auto size = entry.holder.serialize(write_view.data());
-        write_view.trimFront(size);
-      }
+      const auto entry_size = entry.holder.serialize(payload_ptr);
+      actual_payload_size += entry_size;
+      payload_ptr += entry_size;
     }
-    for(auto& sink: sinks_)
-    {
-      sink->pushSnapshot(snapshot_buffer_);
-    }
+  }
+  snapshot_.payload.resize(actual_payload_size);
+
+  for(auto& sink: sinks_)
+  {
+    sink->pushSnapshot(snapshot_);
   }
   return true;
 }

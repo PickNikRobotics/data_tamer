@@ -61,25 +61,26 @@ void MCAPSink::addChannel(std::string const& channel_name,
   hash_to_channel_id_[schema.hash] = publisher.id;
 }
 
-bool MCAPSink::storeSnapshot(const std::vector<uint8_t>& snapshot) {
+bool MCAPSink::storeSnapshot(const Snapshot& snapshot) {
 
-  SerializeMe::SpanBytesConst ptr(snapshot.data(), snapshot.size());
-  int64_t hash;
-  int64_t timestamp;
-  SerializeMe::DeserializeFromBuffer(ptr, hash);
-  SerializeMe::DeserializeFromBuffer(ptr, timestamp);
+  // the payload must contain both the ActiveMask and the other data
+  thread_local std::vector<uint8_t> merged_payload;
+  const auto size_mask = snapshot.active_mask.size();
+  const auto size_data = snapshot.payload.size();
 
-  // the payload must contain both the ActiveMask andthe other data
+  merged_payload.resize(size_mask + size_data);
+  memcpy(merged_payload.data(), snapshot.active_mask.data(), size_mask);
+  memcpy(merged_payload.data() + size_mask, snapshot.payload.data(), size_data);
 
   // Write our message
   mcap::Message msg;
-  msg.channelId = hash_to_channel_id_.at(hash);
+  msg.channelId = hash_to_channel_id_.at(snapshot.schema_hash);
   msg.sequence = 1;  // Optional
   // Timestamp requires nanosecond
-  msg.logTime = mcap::Timestamp(timestamp);
+  msg.logTime = mcap::Timestamp(snapshot.timestamp.count());
   msg.publishTime = msg.logTime;
-  msg.data = reinterpret_cast<std::byte const*>(ptr.data());  // NOLINT
-  msg.dataSize = ptr.size();
+  msg.data = reinterpret_cast<std::byte const*>(merged_payload.data());  // NOLINT
+  msg.dataSize = merged_payload.size();
   auto status = writer_->write(msg);
 
   // If reset_time_ is exceeded, we want to overwrite the current file.

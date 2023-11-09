@@ -19,7 +19,7 @@ using ActiveMask = std::vector<uint8_t>;
 bool GetBit(const ActiveMask& mask, size_t index);
 void SetBit(ActiveMask& mask, size_t index, bool val);
 
-struct SnapshotHeader {
+struct Snapshot {
   /// Unique identifier of the schema
   std::size_t schema_hash;
 
@@ -30,6 +30,8 @@ struct SnapshotHeader {
   /// active or not. It is basically an optimized vector
   /// of bools, where each byte contains 8 boolean flags.
   ActiveMask active_mask;
+
+  std::vector<uint8_t> payload;
 };
 
 /**
@@ -79,7 +81,7 @@ class DataSinkBase {
    *
    * @return false if the queue is full and snapshot was not pushed
    */
-  bool pushSnapshot(const std::vector<uint8_t>& snapshot);
+  bool pushSnapshot(const Snapshot& snapshot);
 
 protected:
   /**
@@ -88,7 +90,7 @@ protected:
    * @param snapshot data to be pushed into the sink.
    * @return true if push was successful.
    */
-  virtual bool storeSnapshot(const std::vector<uint8_t>& snapshot) = 0;
+  virtual bool storeSnapshot(const Snapshot& snapshot) = 0;
 
 private:
   struct Pimpl;
