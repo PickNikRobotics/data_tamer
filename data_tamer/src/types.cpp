@@ -1,11 +1,13 @@
 #include "data_tamer/types.hpp"
 #include <array>
+#include <cstring>
+#include <limits>
 #include <unordered_map>
 
 namespace DataTamer {
 
 static constexpr std::array<const char*, TypesCount> kNames = {
-    "bool", "byte", "char",
+    "bool", "char",
     "int8", "uint8",
     "int16", "uint16",
     "int32", "uint32",
@@ -38,10 +40,47 @@ BasicType FromStr(const std::string& str)
 size_t SizeOf(const BasicType& type)
 {
   static constexpr std::array<size_t, TypesCount> kSizes =
-      { 1, 1, 1, 1, 1,
-       2, 2, 4, 4, 8, 8,
-       4, 8, 0 };
+      { 1, 1,
+        1, 1,
+        2, 2, 4, 4, 8, 8,
+        4, 8, 0 };
   return kSizes[static_cast<size_t>(type)];
+}
+
+template<typename T>
+T DeserializeImpl(void *data)
+{
+  T var;
+  std::memcpy(&var, data, sizeof(T));
+  return var;
+}
+
+VarNumber DeserializeAsVarType(const BasicType &type, void*data)
+{
+  switch(type)
+  {
+    case BasicType::BOOL: return DeserializeImpl<bool>(data);
+    case BasicType::CHAR: return DeserializeImpl<char>(data);
+
+    case BasicType::INT8: return DeserializeImpl<int8_t>(data);
+    case BasicType::UINT8: return DeserializeImpl<uint8_t>(data);
+
+    case BasicType::INT16: return DeserializeImpl<int16_t>(data);
+    case BasicType::UINT16: return DeserializeImpl<uint16_t>(data);
+
+    case BasicType::INT32: return DeserializeImpl<int32_t>(data);
+    case BasicType::UINT32: return DeserializeImpl<uint32_t>(data);
+
+    case BasicType::INT64: return DeserializeImpl<int64_t>(data);
+    case BasicType::UINT64: return DeserializeImpl<uint64_t>(data);
+
+    case BasicType::FLOAT32: return DeserializeImpl<float>(data);
+    case BasicType::FLOAT64: return DeserializeImpl<double>(data);
+
+    case BasicType::OTHER:
+      return double(std::numeric_limits<double>::quiet_NaN());
+  }
+  return {};
 }
 
 

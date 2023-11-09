@@ -16,6 +16,7 @@
 
   <depend>rclcpp</depend>
   <depend>mcap-vendor</depend>
+  <depend>data_tamer_msgs</depend>
 
   <test_depend>ament_cmake_gtest</test_depend>
 

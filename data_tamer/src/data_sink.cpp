@@ -6,22 +6,36 @@ namespace DataTamer
 
 struct DataSinkBase::Pimpl
 {
-  Pimpl(DataSinkBase* base_class): self(base_class)
+  Pimpl(DataSinkBase* base_class)
   {
-    thread = std::thread([this]() { threadLoop(); });
+    run = true;
+
+    thread = std::thread(
+        [this, base_class]() {
+          while(run)
+          {
+            if(queue.try_dequeue(snapshot_copy))
+            {
+              base_class->storeSnapshot(snapshot_copy);
+            }
+            else {
+              // avoid busy loop
+              std::this_thread::sleep_for(std::chrono::microseconds(100));
+            }
+          }
+        });
   }
+
   ~Pimpl()
   {
     run = false;
     thread.join();
   }
 
-  DataSinkBase* self = nullptr;
   std::thread thread;
   std::atomic_bool run = true;
   moodycamel::ConcurrentQueue<Snapshot> queue;
-
-  void threadLoop();
+  Snapshot snapshot_copy;
 };
 
 DataSinkBase::DataSinkBase(): _p(new Pimpl(this))
@@ -33,23 +47,6 @@ DataSinkBase::~DataSinkBase()
 bool DataSinkBase::pushSnapshot(const Snapshot &snapshot)
 {
   return _p->queue.enqueue(snapshot);
-}
-
-void DataSinkBase::Pimpl::threadLoop()
-{
-  run = true;
-  Snapshot snapshot;
-
-  while(run)
-  {
-    if(queue.try_dequeue(snapshot))
-    {
-      self->storeSnapshot(snapshot);
-    }
-    else {
-      std::this_thread::sleep_for(std::chrono::microseconds(100));
-    }
-  }
 }
 
 }  // namespace DataTamer

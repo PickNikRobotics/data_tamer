@@ -4,12 +4,12 @@
 #include <ostream>
 #include <string>
 #include <vector>
+#include <variant>
 
 namespace DataTamer {
 
 enum class BasicType {
   BOOL,
-  BYTE,
   CHAR,
   INT8,
   UINT8,
@@ -28,7 +28,18 @@ enum class BasicType {
   OTHER
 };
 
-constexpr size_t TypesCount = 14;
+constexpr size_t TypesCount = 13;
+
+using VarNumber = std::variant<
+    bool, char,
+    int8_t, uint8_t,
+    int16_t, uint16_t,
+    int32_t, uint32_t,
+    int64_t, uint64_t,
+    float, double >;
+
+/// Reverse operation of ValuePtr::serialize
+VarNumber DeserializeAsVarType(const BasicType& type, void* data);
 
 /// Return the number of bytes needed to serialize the type
 size_t SizeOf(const BasicType& type);
@@ -41,8 +52,7 @@ BasicType FromStr(const std::string &str);
 
 template <typename T>
 inline constexpr BasicType GetBasicType() {
-  if constexpr (std::is_same_v<T, char>) return BasicType::BOOL;
-  if constexpr (std::is_same_v<T, std::byte>) return BasicType::BYTE;
+  if constexpr (std::is_same_v<T, bool>) return BasicType::BOOL;
   if constexpr (std::is_same_v<T, char>) return BasicType::CHAR;
   if constexpr (std::is_same_v<T, std::int8_t>) return BasicType::INT8;
   if constexpr (std::is_same_v<T, std::uint8_t>) return BasicType::UINT8;
@@ -95,5 +105,6 @@ struct Schema {
     return os;
   }
 };
+
 
 }  // namespace DataTamer

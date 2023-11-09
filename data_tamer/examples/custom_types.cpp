@@ -27,7 +27,7 @@ int main()
 {
   using namespace DataTamer;
 
-  auto dummy_sink = std::make_shared<DummySync>();
+  auto dummy_sink = std::make_shared<DummySink>();
   ChannelsRegistry::Global().addDefaultSink(dummy_sink);
   auto channel = ChannelsRegistry::Global().getChannel("my_channel");
 

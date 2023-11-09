@@ -8,14 +8,14 @@ int main()
 
   // start defining one or more Sinks that must be added by default.
   // Dp ot BEFORE creating a channel.
-  auto dummy_sink = std::make_shared<DummySync>();
+  auto dummy_sink = std::make_shared<DummySink>();
   ChannelsRegistry::Global().addDefaultSink(dummy_sink);
 
   // Create (or get) a channel using the global registry (singleton)
   auto channel = ChannelsRegistry::Global().getChannel("chan");
 
   // If you don't want to use addDefaultSink, you can do:
-  // channel->addDataSink(std::make_shared<DummySync>())
+  // channel->addDataSink(std::make_shared<DummySink>())
 
   // You can register any arithmetic value. You are responsible for their lifetime
   double value_real = 3.14;

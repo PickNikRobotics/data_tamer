@@ -31,12 +31,13 @@ struct Snapshot {
   /// of bools, where each byte contains 8 boolean flags.
   ActiveMask active_mask;
 
+  /// serialized dat containing all the values, ordered as in the schema
   std::vector<uint8_t> payload;
 };
 
 /**
  * @brief The DataSnapshot contains all the information passed by
- * LogChannel::takeSnapshot to a DataSync.
+ * LogChannel::takeSnapshot to a DataSink.
  *
  * Note: The vector contains:
  *
@@ -67,17 +68,16 @@ class DataSinkBase {
    * That schema will be recognized by its hash.
    *
    * @param name    name of the channel
-   * @param schema  a schema obtained usually from LogChannel::getSchema()
+   * @param schema  a schema, suaully obtained from LogChannel::getSchema()
    */
   virtual void addChannel(const std::string& name,
                           const Schema& schema) = 0;
 
   /**
-   * @brief pushSnapshot will push the data into a protected queue,
+   * @brief pushSnapshot will push the data into a concurrent queue,
    * that a different thread will consume, using storeSnapshot()
    *
-   * @param snapshot serialized data containing the SnapshotHeader
-   * and the payload
+   * @param snapshot see type Snapshot for details
    *
    * @return false if the queue is full and snapshot was not pushed
    */
@@ -85,10 +85,11 @@ class DataSinkBase {
 
 protected:
   /**
-   * @brief saveSnapshot is the method used by LogChannel to push new data.
+   * @brief storeSnapshot contains the code to execute when popping a snapshot from
+   * the queue.
    *
    * @param snapshot data to be pushed into the sink.
-   * @return true if push was successful.
+   * @return true if processed successfully
    */
   virtual bool storeSnapshot(const Snapshot& snapshot) = 0;
 

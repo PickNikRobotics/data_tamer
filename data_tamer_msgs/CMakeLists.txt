@@ -10,6 +10,7 @@ find_package(rosidl_default_generators REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/SchemaField.msg"
   "msg/Schema.msg"
+  "msg/Schemas.msg"
   "msg/Snapshot.msg"
 )
 

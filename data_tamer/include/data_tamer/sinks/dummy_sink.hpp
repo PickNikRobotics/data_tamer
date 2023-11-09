@@ -8,20 +8,20 @@ namespace DataTamer
 {
 
 /**
- * @brief The DummySync does nothing, only counting the number of snapshots received.
+ * @brief The DummySink does nothing, only counting the number of snapshots received.
  * Used mostly for testing and debugging.
  */
-class DummySync : public DataSinkBase
+class DummySink : public DataSinkBase
 {
 public:
-  std::unordered_map<uint64_t, Schema> schamas;
+  std::unordered_map<uint64_t, Schema> schemas;
   std::unordered_map<uint64_t, std::string> schema_names;
   std::unordered_map<uint64_t, long> snapshots_count;
   Snapshot latest_snapshot;
   
   void addChannel(std::string const& name, Schema const& schema) override
   {
-    schamas[schema.hash] = schema;
+    schemas[schema.hash] = schema;
     schema_names[schema.hash] = name;
     snapshots_count[schema.hash] = 0;
   }

@@ -171,11 +171,10 @@ private:
 
   RegistrationID registerValueImpl(const std::string& name,
                                    ValuePtr&& value_ptr);
-
-  void writerThreadLoop();
 };
 
-
+//----------------------------------------------------------------------
+//----------------------------------------------------------------------
 //----------------------------------------------------------------------
 
 template <typename T> inline

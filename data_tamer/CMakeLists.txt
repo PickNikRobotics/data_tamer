@@ -15,7 +15,13 @@ endif()
 if (MSVC)
     add_compile_options(/W4 /WX)
 else()
-    add_compile_options(-Wall -Wextra -pedantic -Werror)
+    add_compile_options(-Wall -Wextra -Werror)
+endif()
+
+find_package(ament_cmake QUIET)
+
+if ( ament_cmake_FOUND )
+    set(ROS2_SINK src/sinks/ros2_publisher_sink.cpp)
 endif()
 
 add_library(data_tamer STATIC
@@ -23,15 +29,16 @@ add_library(data_tamer STATIC
     include/data_tamer/data_tamer.hpp
     include/data_tamer/types.hpp
     include/data_tamer/values.hpp
+    include/data_tamer/sinks/dummy_sink.hpp
+    include/data_tamer/sinks/mcap_sink.hpp
 
     src/channel.cpp
     src/data_tamer.cpp
-    src/data_sync.cpp
+    src/data_sink.cpp
     src/types.cpp
-    src/values.cpp
 
-    include/data_tamer/sinks/dummy_sink.hpp
     src/sinks/mcap_sink.cpp
+    ${ROS2_SINK}
 )
 
 target_compile_features(data_tamer PUBLIC cxx_std_17)
@@ -50,11 +57,12 @@ if ( ament_cmake_FOUND )
 
     find_package(mcap_vendor REQUIRED)
     find_package(rclcpp REQUIRED)
+    find_package(data_tamer_msgs REQUIRED)
 
-    ament_target_dependencies(data_tamer mcap_vendor rclcpp)
+    ament_target_dependencies(data_tamer mcap_vendor rclcpp data_tamer_msgs)
 
     ament_export_targets(data_tamerTargets HAS_LIBRARY_TARGET)
-    ament_export_dependencies(mcap_vendor rclcpp)
+    ament_export_dependencies(mcap_vendor rclcpp data_tamer_msgs)
     ament_package()
 else()
     find_package(mcap REQUIRED)
