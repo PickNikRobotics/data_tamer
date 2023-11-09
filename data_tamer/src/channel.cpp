@@ -212,11 +212,12 @@ bool LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
   }
   _p->snapshot.payload.resize(actual_payload_size);
 
+  bool all_pushed = true;
   for(auto& sink: _p->sinks)
   {
-    sink->pushSnapshot(_p->snapshot);
+    all_pushed &= sink->pushSnapshot(_p->snapshot);
   }
-  return true;
+  return all_pushed;
 }
 
 

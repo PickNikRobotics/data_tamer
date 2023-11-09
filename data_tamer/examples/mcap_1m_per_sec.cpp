@@ -32,12 +32,9 @@ int main()
   }
 
   long count = 0;
-  auto now = std::chrono::system_clock::now();
-  auto dealine = now + std::chrono::seconds(10);
-  auto next_time = now + std::chrono::milliseconds(1);
 
   double t = 0;
-  while(next_time < dealine)
+  while(count < 10*1000) // 10 simulated seconds
   {
     auto S = std::sin(t);
     for(size_t i=0; i<vect_size; i++)
@@ -53,13 +50,16 @@ int main()
       std::cout << t << std::endl;
     }
     auto t1 = std::chrono::system_clock::now();
-    channel->takeSnapshot();
+    if(!channel->takeSnapshot())
+    {
+      std::cout << "pushing failed\n";
+    }
     auto t2 = std::chrono::system_clock::now();
+
     auto diff = std::chrono::duration_cast<std::chrono::nanoseconds>(t2-t1);
     time_diff_nsec += diff.count();
 
-    std::this_thread::sleep_until(next_time);
-    next_time += std::chrono::milliseconds(1);
+    std::this_thread::sleep_for(std::chrono::microseconds(100));
     t += 0.001;
   }
   std::cout << "average execution time of takeSnapshot(): "
