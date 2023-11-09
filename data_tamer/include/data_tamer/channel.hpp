@@ -123,8 +123,14 @@ public:
 
   [[nodiscard]] const std::string& channelName() const;
 
+  /** Enabling / disabling a value is much faster than
+   *  registering / unregistering.
+   *  It should be prefered when we want to temporary remove a
+   *  variable from the snapshot.
+   */
   void setEnabled(const RegistrationID& id, bool enable);
 
+  /// NOTE: the unregistered value will not be removed from the Schema
   void unregister(const RegistrationID& id);
 
   void addDataSink(std::shared_ptr<DataSinkBase> sink);
@@ -133,8 +139,7 @@ public:
    * @brief takeSnapshot copies the current value of all your registered values
    *  and send an instance of Snapshot to all your Sinks.
    *
-   * @param timestamp the timestamp. Usually time since epoch, but you can use something
-   * else, if your sinks support it.
+   * @param timestamp is the time since epoch, by default.
    *
    * @return true is succesfully pushed to all its sinks.
    */

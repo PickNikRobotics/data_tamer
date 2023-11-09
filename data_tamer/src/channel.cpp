@@ -51,7 +51,7 @@ RegistrationID LogChannel::registerValueImpl(
   {
     if(_p->logging_started)
     {
-      throw std::runtime_error("Can't add new value to the Schema once recording started, "
+      throw std::runtime_error("Can't register a new value once recording started, "
                                "i.e. after takeShapshot was called the first time");
     }
     // appending a new ValueHolder to series
@@ -62,15 +62,15 @@ RegistrationID LogChannel::registerValueImpl(
     const auto type = value_ptr.type();
 
     const size_t index = _p->series.size() -1;
+
     _p->registered_values.insert( {name, index} );
     _p->payload_max_buffer_size += SizeOf(type);
+    _p->schema.fields.emplace_back( Schema::Field{name, type} );
 
     // update schema and its hash (append only)
     // https://stackoverflow.com/questions/2590677/how-do-i-combine-hash-values-in-c0x
     std::hash<std::string> str_hasher;
     std::hash<BasicType> type_hasher;
-
-    _p->schema.fields.emplace_back( Schema::Field{name, type} );
 
     auto& hash = _p->schema.hash;
     hash ^= str_hasher(name) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
@@ -160,57 +160,59 @@ std::mutex &LogChannel::writeMutex() { return _p->mutex; }
 
 bool LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
 {
-  std::lock_guard const lock(_p->mutex);
-
-  if(_p->sinks.empty())
-  {
-    return false;
-  }
-  // update the _p->snapshot.active_mask if necessary
-  if(_p->mask_dirty)
-  {
-    _p->mask_dirty = false;
-    auto& mask = _p->snapshot.active_mask;
-    mask.clear();
-    const auto vect_size = (_p->series.size() + 7) / 8; // ceiling size
-    mask.resize(vect_size, 0xFF);
-    for (size_t i = 0; i < _p->series.size(); i++)
-    {
-      auto const& instance = _p->series[i];
-      if (!instance.enabled)
-      {
-        SetBit(mask, i, false);
-      }
-    }
-  }
-  // call sink->addChannel (usually done once)
-  if( !_p->logging_started )
-  {
-    _p->logging_started = true;
-    _p->snapshot.schema_hash = _p->schema.hash;
-    for(auto const& sink: _p->sinks)
-    {
-      sink->addChannel(_p->channel_name, _p->schema);
-    }
-  }
-
-  _p->snapshot.timestamp = timestamp;
-  // serialize data into _p->snapshot.payload
   _p->snapshot.payload.resize(_p->payload_max_buffer_size);
 
-  auto* payload_ptr = _p->snapshot.payload.data();
-  size_t actual_payload_size = 0;
-
-  for(auto const& entry: _p->series)
   {
-    if(entry.enabled)
+    std::lock_guard const lock(_p->mutex);
+
+    if(_p->sinks.empty())
     {
-      const auto entry_size = entry.holder.serialize(payload_ptr);
-      actual_payload_size += entry_size;
-      payload_ptr += entry_size;
+      return false;
     }
+    // update the _p->snapshot.active_mask if necessary
+    if(_p->mask_dirty)
+    {
+      _p->mask_dirty = false;
+      auto& mask = _p->snapshot.active_mask;
+      mask.clear();
+      const auto vect_size = (_p->series.size() + 7) / 8; // ceiling size
+      mask.resize(vect_size, 0xFF);
+      for (size_t i = 0; i < _p->series.size(); i++)
+      {
+        auto const& instance = _p->series[i];
+        if (!instance.enabled)
+        {
+          SetBit(mask, i, false);
+        }
+      }
+    }
+    // call sink->addChannel (usually done once)
+    if( !_p->logging_started )
+    {
+      _p->logging_started = true;
+      _p->snapshot.schema_hash = _p->schema.hash;
+      for(auto const& sink: _p->sinks)
+      {
+        sink->addChannel(_p->channel_name, _p->schema);
+      }
+    }
+
+    _p->snapshot.timestamp = timestamp;
+    // serialize data into _p->snapshot.payload
+    auto* payload_ptr = _p->snapshot.payload.data();
+    size_t actual_payload_size = 0;
+
+    for(auto const& entry: _p->series)
+    {
+      if(entry.enabled)
+      {
+        const auto entry_size = entry.holder.serialize(payload_ptr);
+        actual_payload_size += entry_size;
+        payload_ptr += entry_size;
+      }
+    }
+    _p->snapshot.payload.resize(actual_payload_size);
   }
-  _p->snapshot.payload.resize(actual_payload_size);
 
   bool all_pushed = true;
   for(auto& sink: _p->sinks)
