@@ -17,7 +17,7 @@ std::shared_ptr<LogChannel> ChannelsRegistry::getChannel(
     std::string const& channel_name) {
   auto it = channels_.find(channel_name);
   if (it == channels_.end()) {
-    auto new_channel = std::make_shared<LogChannel>(channel_name);
+    auto new_channel = LogChannel::create(channel_name);
     for (auto const& sink : default_sinks_) {
       new_channel->addDataSink(sink);
     }

@@ -19,6 +19,7 @@ inline std::chrono::nanoseconds NsecSinceEpoch()
 
 class DataSinkBase;
 class LogChannel;
+class ChannelsRegistry;
 
 /**
  * @brief The Value class is a container of a variable that
@@ -54,11 +55,10 @@ public:
    */
   void set(const T& value, bool auto_enable = false);
 
-  /**
-   * @brief get the stored value.
-   */
+  /// @brief get the stored value.
   T get();
 
+  /// @brief Disabling a LoggedValue means that we will not record it in the snapshot
   void setEnabled(bool enabled);
 
   bool isEnabled() const { return enabled_; }
@@ -75,11 +75,37 @@ private:
 template <typename T>
 RegistrationID RegisterVariable(LogChannel& channel, const std::string& name, T* value);
 
-
+/**
+ * @brief A LogChannel is a class used to record multiple values in a single
+ * "snapshot". Taking a snapshot is done usually in a periodic loop.
+ * Usually, instances of LogChannel are accessed through ChannelsRegistry. *
+ *
+ * There is no limit to the number of tracked values, but sometimes you may
+ * want to use different LogChannels in your application wither to:
+ *
+ * - aggregate them logically or
+ * - record them at different frequencies.
+ *
+ * Use the methods LogChannel::registerValue or LogChannel::createLoggedValue
+ * to add a new value.
+ * All you values must be registered before calling takeSnapshot for the first time.
+ *
+ */
 class LogChannel : public std::enable_shared_from_this<LogChannel> {
-public:
 
+protected:
+  // We make this private because the object must be wrapped
+  // inside a std::shared_ptr.
+  // This allows us to use std::weak_ptr in LoggedValue
   LogChannel(std::string name);
+
+public:
+  /// Use this static mentod do create an instance of LogChannel
+  static std::shared_ptr<LogChannel> create(std::string name)
+  {
+    return std::shared_ptr<LogChannel>(new LogChannel(name));
+  }
+
   ~LogChannel();
 
   LogChannel(const LogChannel&) = delete;
@@ -95,7 +121,7 @@ public:
   [[nodiscard]] std::shared_ptr<LoggedValue<T>> createLoggedValue(
       std::string const& name, T initial_value = T{});
 
-  [[nodiscard]] const std::string& channelName() const { return channel_name_; }
+  [[nodiscard]] const std::string& channelName() const;
 
   void setEnabled(const RegistrationID& id, bool enable);
 
@@ -103,6 +129,15 @@ public:
 
   void addDataSink(std::shared_ptr<DataSinkBase> sink);
 
+  /**
+   * @brief takeSnapshot copies the current value of all your registered values
+   *  and send an instance of Snapshot to all your Sinks.
+   *
+   * @param timestamp the timestamp. Usually time since epoch, but you can use something
+   * else, if your sinks support it.
+   *
+   * @return true is succesfully pushed to all its sinks.
+   */
   bool takeSnapshot(std::chrono::nanoseconds timestamp = NsecSinceEpoch());
 
   /**
@@ -121,39 +156,18 @@ public:
   [[nodiscard]] Schema getSchema() const;
 
   /** You will need to use this if:
+   *
   * - your variables were registered using LogChannel::registerValue AND
   * - the variables are being modified in a thread different than the one calling takeSnapshot()
   *
   * No need to worry about LoggedValues (they use the mutex internally)
   */
-  std::mutex& writeMutex() { return mutex_; }
+  std::mutex& writeMutex();
 
 private:
 
-  struct ValueHolder {
-    std::string name;
-    bool enabled = true;
-    bool registered = true;
-    ValuePtr holder;
-  };
-
-  std::string channel_name_;
-
-  mutable std::mutex mutex_;
-
-  size_t payload_max_buffer_size_ = 0;
-
-  std::vector<ValueHolder> series_;
-  std::unordered_map<std::string, size_t> registered_values_;
-
-  std::atomic_bool mask_dirty_ = true;
-
-  Snapshot snapshot_;
-  Schema schema_;
-
-  std::unordered_set<std::shared_ptr<DataSinkBase>> sinks_;
-
-  void updateActiveMask(ActiveMask& mask);
+  struct Pimpl;
+  std::unique_ptr<Pimpl> _p;
 
   RegistrationID registerValueImpl(const std::string& name,
                                    ValuePtr&& value_ptr);
@@ -173,7 +187,7 @@ RegistrationID LogChannel::registerValue(const std::string& name, T* value_ptr) 
   }
   else {
     static_assert(std::is_trivially_copyable_v<T>,
-                  "Only trivialy copiable objects can be registered");
+                  "Only trivialy copyable objects can be registered");
     return RegisterVariable(*this, name, value_ptr);
   }
 }
