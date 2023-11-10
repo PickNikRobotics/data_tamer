@@ -4,6 +4,7 @@
 #include "data_tamer/data_sink.hpp"
 
 #include <atomic>
+#include <chrono>
 #include <memory>
 #include <mutex>
 #include <unordered_set>
