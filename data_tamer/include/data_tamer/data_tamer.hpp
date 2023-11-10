@@ -21,6 +21,7 @@ public:
 private:
   std::unordered_map<std::string, std::shared_ptr<LogChannel>> channels_;
   std::unordered_set<std::shared_ptr<DataSinkBase>> default_sinks_;
+  std::mutex mutex_;
 };
 
 
