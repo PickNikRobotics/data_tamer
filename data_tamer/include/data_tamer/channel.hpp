@@ -118,6 +118,12 @@ public:
   template <typename T>
   RegistrationID registerValue(const std::string& name, T* value);
 
+  template <typename T, typename TArg>
+  RegistrationID registerValue(const std::string& name, std::vector<T, TArg>* value);
+
+  template <typename T, size_t N>
+  RegistrationID registerValue(const std::string& name, std::array<T, N>* value);
+
   template <typename T = double>
   [[nodiscard]] std::shared_ptr<LoggedValue<T>> createLoggedValue(
       std::string const& name, T initial_value = T{});
@@ -197,6 +203,32 @@ RegistrationID LogChannel::registerValue(const std::string& name, T* value_ptr) 
   }
 }
 
+template <typename T, typename TArg> inline
+    RegistrationID LogChannel::registerValue(const std::string& prefix, std::vector<T, TArg>* vect)
+{
+  if(vect->empty())
+  {
+    return {};
+  }
+  auto id = registerValue(prefix + "[0]", &(*vect)[0]);
+  for(size_t i=1; i<vect->size(); i++)
+  {
+    id += registerValue(prefix + "[" + std::to_string(i) + "]", &(*vect)[i]);
+  }
+  return id;
+}
+
+template <typename T, size_t N> inline
+    RegistrationID LogChannel::registerValue(const std::string& prefix, std::array<T, N>* vect)
+{
+  auto id = registerValue(prefix + "[0]", &(*vect)[0]);
+  for(size_t i=1; i<N; i++)
+  {
+    id += registerValue(prefix + "[" + std::to_string(i) + "]", &(*vect)[i]);
+  }
+  return id;
+}
+
 template <typename T> inline
 std::shared_ptr<LoggedValue<T>> LogChannel::createLoggedValue(
     std::string const& name, T initial_value)
@@ -263,22 +295,6 @@ T LoggedValue<T>::get()
     return value_;
   }
   return value_;
-}
-
-// Template specialization (kind-of) to register vectors
-template <typename T> RegistrationID
-RegisterVariable(LogChannel& channel, const std::string& prefix, std::vector<T> vect)
-{
-  if(vect.empty())
-  {
-    return {};
-  }
-  auto id = channel.registerValue(prefix + "[0]", &vect[0]);
-  for(size_t i=1; i<vect.size(); i++)
-  {
-    id += channel.registerValue(prefix + "[" + std::to_string(i) + "]", &vect[i]);
-  }
-  return id;
 }
 
 }  // namespace DataTamer

@@ -10,14 +10,47 @@ struct Point3D
   double z;
 };
 
+struct Quaternion
+{
+  double w;
+  double x;
+  double y;
+  double z;
+};
+
+struct Pose
+{
+  Point3D pos;
+  Quaternion rot;
+};
+
+// You need to add a template specialization of RegisterVariable<> for the new types
 namespace DataTamer
 {
 template <> RegistrationID
-RegisterVariable<Point3D>(LogChannel& channel, const std::string& prefix, Point3D* value)
+RegisterVariable<Point3D>(LogChannel& channel, const std::string& prefix, Point3D* v)
 {
-  auto id = channel.registerValue(prefix + "/x", &value->x);
-  id += channel.registerValue(prefix + "/y", &value->y);
-  id += channel.registerValue(prefix + "/z", &value->z);
+  auto id = channel.registerValue(prefix + "/x", &v->x);
+  id += channel.registerValue(prefix + "/y", &v->y);
+  id += channel.registerValue(prefix + "/z", &v->z);
+  return id;
+}
+
+template <> RegistrationID
+RegisterVariable<Quaternion>(LogChannel& channel, const std::string& prefix, Quaternion* v)
+{
+  auto id = channel.registerValue(prefix + "/x", &v->x);
+  id += channel.registerValue(prefix + "/y", &v->y);
+  id += channel.registerValue(prefix + "/z", &v->z);
+  id += channel.registerValue(prefix + "/w", &v->w);
+  return id;
+}
+
+template <> RegistrationID
+RegisterVariable<Pose>(LogChannel& channel, const std::string& prefix, Pose* v)
+{
+  auto id = channel.registerValue(prefix + "/position", &v->pos);
+  id += channel.registerValue(prefix + "/rotation", &v->rot);
   return id;
 }
 } // namespace DataTamer
@@ -33,9 +66,22 @@ int main()
 
   // Register as usual
   auto pointA = channel->createLoggedValue<Point3D>("pointA");
-
   Point3D pointB;
-  channel->registerValue("pointB", &pointB);
+  channel->registerValue<Point3D>("pointB", &pointB);
 
-  channel->takeSnapshot();
+  // complex types like Pose are also supported
+  Pose pose;
+  channel->registerValue("my_pose", &pose);
+
+  // Vector can be registered as long as their size will NEVER change
+  // Tour responsivibily to guaranty that!
+  std::vector<Point3D> points_vect(5);
+  channel->registerValue("points", &points_vect);
+
+  // std::array is also supported (safer than std::vector)
+  std::array<int, 3> value_array;
+  channel->registerValue("value_array", &value_array);
+
+  // Print the schema to understand ho they are serialized
+  std::cout << channel->getSchema() << std::endl;
 }

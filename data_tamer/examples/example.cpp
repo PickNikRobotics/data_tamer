@@ -2,12 +2,15 @@
 #include "data_tamer/sinks/dummy_sink.hpp"
 #include <iostream>
 
+
+
+
 int main()
 {
   using namespace DataTamer;
 
   // start defining one or more Sinks that must be added by default.
-  // Dp ot BEFORE creating a channel.
+  // Do addDefaultSink BEFORE creating a channel.
   auto dummy_sink = std::make_shared<DummySink>();
   ChannelsRegistry::Global().addDefaultSink(dummy_sink);
 
