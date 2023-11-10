@@ -13,3 +13,8 @@ add_executable(mcap_1m_per_sec mcap_1m_per_sec.cpp)
 target_include_directories(mcap_1m_per_sec
  PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include>)
 target_link_libraries(mcap_1m_per_sec data_tamer)
+
+add_executable(RAII_example raii.cpp)
+target_include_directories(RAII_example
+ PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include>)
+target_link_libraries(RAII_example data_tamer)
