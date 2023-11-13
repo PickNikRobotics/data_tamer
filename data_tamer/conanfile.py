@@ -5,7 +5,7 @@ from conan.tools.cmake import CMakeToolchain, CMake, cmake_layout, CMakeDeps
 
 class DataTamerConan(ConanFile):
     name = "data_tamer"
-    version = "0.0.1"
+    version = "0.2.0"
     package_type = "library"
     url = "https://github.com/facontidavide/data_tamer"
     license = "MIT"
@@ -25,7 +25,7 @@ class DataTamerConan(ConanFile):
     }
 
     def requirements(self):
-        # Available from asensus-ots-dev remote.
+
         self.requires("mcap/1.2.0")
         if self.options.tests:
             self.requires("gtest/1.14.0")
