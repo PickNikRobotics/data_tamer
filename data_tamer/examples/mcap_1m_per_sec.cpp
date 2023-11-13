@@ -53,17 +53,17 @@ void WritingThread(const std::string& channel_name)
 
 int main()
 {
-  // start defining one or more Sinks that must be added by default.
-  // Dp ot BEFORE creating a channel.
+  // Start defining one or more Sinks that must be added by default.
+  // Do this BEFORE creating a channel.
   auto mcap_sink = std::make_shared<MCAPSink>("test_1M.mcap");
   ChannelsRegistry::Global().addDefaultSink(mcap_sink);
 
   // Create (or get) a channel using the global registry (singleton)
   auto channel = ChannelsRegistry::Global().getChannel("chan");
 
-  // each WritingThread has 300 traced values
-  // in total, we will collect 300*4 = 1200 traced values at 1 KHz
-  // for 10 seconds (12 millions data points)
+  // Each WritingThread has 300 traced values.
+  // In total, we will collect 300*4 = 1200 traced values at 1 KHz
+  // for 10 seconds (12 million data points)
   const int N = 4;
   std::thread writers[N];
   for(int i=0; i<N; i++)
