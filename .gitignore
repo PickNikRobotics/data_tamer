@@ -79,3 +79,4 @@ build*
 /data_tamer/CMakeUserPresets.json
 .cache/*
 */.cache/*
+*.mcap
