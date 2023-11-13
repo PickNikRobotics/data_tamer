@@ -17,6 +17,10 @@ void WritingThread(const std::string& channel_name)
   std::vector<float> real32(vect_size);
   std::vector<int16_t> int16(vect_size);
 
+  channel->registerValue("real64", &real64);
+  channel->registerValue("real32", &real32);
+  channel->registerValue("int16", &int16);
+
   int count = 0;
   double t = 0;
   while(t < 10) // 10 simulated seconds

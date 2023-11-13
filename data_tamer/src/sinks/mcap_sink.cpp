@@ -70,9 +70,10 @@ bool MCAPSink::storeSnapshot(const Snapshot& snapshot) {
   const auto size_mask = snapshot.active_mask.size();
   const auto size_data = snapshot.payload.size();
 
-  merged_payload.resize(size_mask + size_data);
-  memcpy(merged_payload.data(), snapshot.active_mask.data(), size_mask);
-  memcpy(merged_payload.data() + size_mask, snapshot.payload.data(), size_data);
+  merged_payload.resize(size_mask + size_data + sizeof(uint32_t)*2);
+  SerializeMe::SpanBytes buffer(merged_payload);
+  SerializeMe::SerializeIntoBuffer(buffer, snapshot.active_mask);
+  SerializeMe::SerializeIntoBuffer(buffer, snapshot.payload);
 
   // Write our message
   mcap::Message msg;
