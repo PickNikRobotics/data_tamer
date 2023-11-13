@@ -51,7 +51,8 @@ class DataTamerConan(ConanFile):
         cmake = CMake(self)
         cmake.configure(
             {
-                "BUILD_EXAMPLES": self.options.examples,
+                "DATA_TAMER_BUILD_TESTS": self.options.tests,
+                "DATA_TAMER_BUILD_EXAMPLES": self.options.examples
             }
         )
         cmake.build()
