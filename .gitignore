@@ -71,8 +71,11 @@ CMakeLists.txt.user*
 # --------
 *.dll
 *.exe
-/build/
-/CMakeUserPresets.json
+
+# Custom
+build*
+*/CMakeUserPresets.json
 /perf.*
-/data_tamer/build/*
 /data_tamer/CMakeUserPresets.json
+.cache/*
+*/.cache/*
