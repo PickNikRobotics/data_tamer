@@ -48,7 +48,6 @@ namespace DataTamer
           schema_msg.schema_text += " ";
           schema_msg.schema_text += field.name + "\n";
         }
-        std::cout << schema_msg.schema_text << std::endl;
         msg.schemas.push_back(std::move(schema_msg));
       }
       schema_publisher_->publish(msg);
