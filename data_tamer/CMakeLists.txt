@@ -16,7 +16,7 @@ endif()
 if (MSVC)
     add_compile_options(/W4 /WX)
 else()
-    add_compile_options(-Wall -Wextra -Werror)
+    add_compile_options(-Wall -Wextra -Werror -pedantic)
 endif()
 
 find_package(ament_cmake QUIET)

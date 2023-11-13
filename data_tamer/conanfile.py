@@ -23,6 +23,15 @@ class DataTamerConan(ConanFile):
         "tests": True,
         "examples": True
     }
+    exports_sources = (
+        "3rdparty/*",
+        "include/*",
+        "src/*",
+        "examples/*",
+        "tests/*",
+        "CMakeLists.txt"
+    )
+
 
     def requirements(self):
 

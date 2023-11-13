@@ -34,7 +34,7 @@ int main()
   channel->takeSnapshot();
 
   // you can modify logged_float like this
-  logged_float->set(6.28);
+  logged_float->set(6.28f);
 
   // You can disable a value like this
   channel->setEnabled(id1, false);

@@ -19,7 +19,7 @@ void SerializeIntoBuffer(SpanBytes& buffer,
   SerializeMe::SerializeIntoBuffer(buffer, uint32_t(value.size()));
   std::memcpy(buffer.data(), value.data(), value.size());
   buffer.trimFront(value.size());
-};
+}
 } // end namespace SerializeMe
 
 #endif

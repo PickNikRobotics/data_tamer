@@ -28,9 +28,10 @@ void WritingThread(const std::string& channel_name)
     auto S = std::sin(t);
     for(size_t i=0; i<vect_size; i++)
     {
-      real64[i] = i + S;
-      real32[i] = i + S;
-      int16[i] = int( 10*(i+S) );
+      const auto value = static_cast<double>(i) + S;
+      real64[i] = value;
+      real32[i] = float(value);
+      int16[i] = int16_t(10*value);
     }
 
     if( count++ % 1000 == 0)
