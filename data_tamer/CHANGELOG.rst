@@ -2,8 +2,8 @@
 Changelog for package data_tamer
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.2.1 (2023-11-13)
+------------------
 * fix conan
 * fix conan
 * Contributors: Davide Faconti
