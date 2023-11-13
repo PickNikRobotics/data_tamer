@@ -40,14 +40,15 @@ namespace DataTamer
         data_tamer_msgs::msg::Schema schema_msg;
         schema_msg.hash = schema.hash;
         schema_msg.channel_name = channel_name;
-        schema_msg.fields.reserve(schema.fields.size());
+        schema_msg.schema_encoding = "type name;";
+
         for(const auto& field: schema.fields)
         {
-          data_tamer_msgs::msg::SchemaField field_msg;
-          field_msg.name = field.name;
-          field_msg.type = ToStr(field.type);
-          schema_msg.fields.push_back(std::move(field_msg));
+          schema_msg.schema_text += ToStr(field.type);
+          schema_msg.schema_text += " ";
+          schema_msg.schema_text += field.name + "\n";
         }
+        std::cout << schema_msg.schema_text << std::endl;
         msg.schemas.push_back(std::move(schema_msg));
       }
       schema_publisher_->publish(msg);

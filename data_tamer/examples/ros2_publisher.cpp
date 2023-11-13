@@ -9,7 +9,7 @@ int main(int argc, char * argv[])
   rclcpp::init(argc, argv);
   auto node = std::make_shared<rclcpp::Node>("test_datatamer");
 
-  auto ros2_sink = std::make_shared<ROS2PublisherSink>(node, node->name());
+  auto ros2_sink = std::make_shared<ROS2PublisherSink>(node, "test");
   ChannelsRegistry::Global().addDefaultSink(ros2_sink);
 
 
@@ -25,13 +25,27 @@ int main(int argc, char * argv[])
   channel->registerValue("real32", &real32);
   channel->registerValue("int16", &int16);
 
+  int count = 0;
+  double t = 0;
+
   while(rclcpp::ok())
   {
-    writers[i] = std::thread(WritingThread, std::string("channel_") + std::to_string(i));
-  }
-
-  for(int i=0; i<N; i++)
-  {
-    writers[i].join();
+    auto S = std::sin(t);
+    for(size_t i=0; i<vect_size; i++)
+    {
+      real64[i] = i + S;
+      real32[i] = i + S;
+      int16[i] = int( 10*(i+S) );
+    }
+    if( count++ % 500 == 0)
+    {
+      RCLCPP_INFO(node->get_logger(), "snapshots: %d\n", count);
+    }
+    if(!channel->takeSnapshot())
+    {
+      RCLCPP_ERROR(node->get_logger(), "pushing failed");
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    t += 0.005;
   }
 }

@@ -1,3 +1,4 @@
 uint64 hash
 string channel_name
-SchemaField[] fields
+string schema_encoding
+string schema_text
