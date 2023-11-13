@@ -7,6 +7,23 @@
 
 #include <mcap/writer.hpp>
 
+#if defined __has_include && __has_include ("boost/container/small_vector.hpp")
+#include <boost/container/small_vector.hpp>
+
+namespace SerializeMe
+{
+template <size_t N>
+void SerializeIntoBuffer(SpanBytes& buffer,
+                         boost::container::small_vector<uint8_t, N> const& value)
+{
+  SerializeMe::SerializeIntoBuffer(buffer, uint32_t(value.size()));
+  std::memcpy(buffer.data(), value.data(), value.size());
+  buffer.trimFront(value.size());
+};
+} // end namespace SerializeMe
+
+#endif
+
 namespace DataTamer {
 
 static constexpr char const* kDataTamer = "data_tamer";
