@@ -12,7 +12,7 @@ class ROS2PublisherSink : public DataSinkBase
 public:
   ROS2PublisherSink(std::shared_ptr<rclcpp::Node> node);
   
-  void addChannel(std::string const& name, Schema const& schema) override
+  void addChannel(const std::string& name, const Schema& schema) override
   {
   }
 

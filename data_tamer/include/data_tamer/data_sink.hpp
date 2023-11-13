@@ -93,6 +93,8 @@ protected:
    */
   virtual bool storeSnapshot(const Snapshot& snapshot) = 0;
 
+  void stopThread();
+
 private:
   struct Pimpl;
   std::unique_ptr<Pimpl> _p;

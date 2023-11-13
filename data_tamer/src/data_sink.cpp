@@ -6,30 +6,22 @@ namespace DataTamer
 
 struct DataSinkBase::Pimpl
 {
-  Pimpl(DataSinkBase* base_class)
+  Pimpl(DataSinkBase* self)
   {
     run = true;
 
     thread = std::thread(
-        [this, base_class]() {
+        [this, self]() {
           while(run)
           {
-            if(queue.try_dequeue(snapshot_copy))
+            while(queue.try_dequeue(snapshot_copy))
             {
-              base_class->storeSnapshot(snapshot_copy);
+              self->storeSnapshot(snapshot_copy);
             }
-            else {
-              // avoid busy loop
-              std::this_thread::sleep_for(std::chrono::microseconds(100));
-            }
+            // avoid busy loop
+            std::this_thread::sleep_for(std::chrono::microseconds(100));
           }
         });
-  }
-
-  ~Pimpl()
-  {
-    run = false;
-    thread.join();
   }
 
   std::thread thread;
@@ -42,11 +34,22 @@ DataSinkBase::DataSinkBase(): _p(new Pimpl(this))
 {}
 
 DataSinkBase::~DataSinkBase()
-{}
+{
+  stopThread();
+}
 
 bool DataSinkBase::pushSnapshot(const Snapshot &snapshot)
 {
   return _p->queue.enqueue(snapshot);
+}
+
+void DataSinkBase::stopThread()
+{
+  _p->run = false;
+  if(_p->thread.joinable())
+  {
+    _p->thread.join();
+  }
 }
 
 }  // namespace DataTamer

@@ -18,9 +18,11 @@ public:
   std::unordered_map<uint64_t, std::string> schema_names;
   std::unordered_map<uint64_t, long> snapshots_count;
   Snapshot latest_snapshot;
+  std::mutex schema_mutex_;
   
   void addChannel(std::string const& name, Schema const& schema) override
   {
+    std::scoped_lock lk(schema_mutex_);
     schemas[schema.hash] = schema;
     schema_names[schema.hash] = name;
     snapshots_count[schema.hash] = 0;
@@ -28,6 +30,7 @@ public:
 
   bool storeSnapshot(const Snapshot& snapshot) override
   {
+    std::scoped_lock lk(schema_mutex_);
     latest_snapshot = snapshot;
 
     auto it = snapshots_count.find(snapshot.schema_hash);

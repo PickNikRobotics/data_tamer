@@ -30,11 +30,13 @@ void DataTamer::MCAPSink::openFile(std::string const& filepath) {
 }
 
 MCAPSink::~MCAPSink() {
+  stopThread();
   writer_->close();
 }
 
 void MCAPSink::addChannel(std::string const& channel_name,
                           Schema const& schema) {
+  std::scoped_lock lk(schema_mutex_);
   schemas_[channel_name] = schema;
   auto it = hash_to_channel_id_.find(schema.hash);
   if (it != hash_to_channel_id_.end()) {
@@ -74,7 +76,10 @@ bool MCAPSink::storeSnapshot(const Snapshot& snapshot) {
 
   // Write our message
   mcap::Message msg;
-  msg.channelId = hash_to_channel_id_.at(snapshot.schema_hash);
+  {
+    std::scoped_lock lk(schema_mutex_);
+    msg.channelId = hash_to_channel_id_.at(snapshot.schema_hash);
+  }
   msg.sequence = 1;  // Optional
   // Timestamp requires nanosecond
   msg.logTime = mcap::Timestamp(snapshot.timestamp.count());
@@ -98,10 +103,6 @@ bool MCAPSink::storeSnapshot(const Snapshot& snapshot) {
     }
   }
   return true;
-}
-
-void MCAPSink::flush() {
-  writer_->closeLastChunk();
 }
 
 void MCAPSink::setMaxTimeBeforeReset(std::chrono::seconds reset_time) {

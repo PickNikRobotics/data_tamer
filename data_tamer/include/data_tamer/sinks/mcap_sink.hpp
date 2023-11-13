@@ -33,10 +33,6 @@ class MCAPSink : public DataSinkBase {
 
   bool storeSnapshot(const Snapshot& snapshot) override;
 
-  /// Wait for all the snapshots in the queue to be written on file.
-  /// it is a blocking function
-  void flush();
-
   /// After a certain amount of time, the MCAP file will be reset
   /// and overwritten. Default value is 600 seconds (10 minutes)
   void setMaxTimeBeforeReset(std::chrono::seconds reset_time);
@@ -50,6 +46,8 @@ class MCAPSink : public DataSinkBase {
 
   std::chrono::seconds reset_time_ = std::chrono::seconds(60 * 10);
   std::chrono::system_clock::time_point start_time_;
+
+  std::mutex schema_mutex_;
 
   void openFile(std::string const& filepath);
 };
