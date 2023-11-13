@@ -19,6 +19,11 @@ public:
   std::unordered_map<uint64_t, long> snapshots_count;
   Snapshot latest_snapshot;
   std::mutex schema_mutex_;
+
+  ~DummySink() override
+  {
+    stopThread();
+  }
   
   void addChannel(std::string const& name, Schema const& schema) override
   {
