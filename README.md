@@ -1,5 +1,8 @@
 ![Data Tamer](data_tamer_logo.png)
 
+[![cmake Ubuntu](https://github.com/facontidavide/data_tamer/actions/workflows/cmake_ubuntu.yml/badge.svg)](https://github.com/facontidavide/data_tamer/actions/workflows/cmake_ubuntu.yml)
+[![codecov](https://codecov.io/gh/facontidavide/data_tamer/graph/badge.svg?token=D0wtsntWds)](https://codecov.io/gh/facontidavide/data_tamer)
+
 **DataTamer** is a spiritual successor of [pal_statistics](https://github.com/pal-robotics/pal_statistics).
 
 Its purpose is to trace **numerical** values in your application and export them into a
