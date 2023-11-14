@@ -90,9 +90,9 @@ TEST(DataTamer, TestRegistration)
   int32_t i2_bis = 33;
   int32_t i3 = 11;
 
-  channel->registerValue("v1", &v1);
+  auto id_v1 = channel->registerValue("v1", &v1);
   channel->registerValue("v2", &v2);
-  channel->registerValue("i1", &i1);
+  auto id_i1 = channel->registerValue("i1", &i1);
   channel->registerValue("i2", &i2);
 
   // changing the pointer to another one is valid
@@ -102,19 +102,39 @@ TEST(DataTamer, TestRegistration)
   ASSERT_ANY_THROW( channel->registerValue("v2", &i1); );
 
   channel->takeSnapshot();
+  // give time to the sink thread to do its work
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
   // chaning the pointer after takeSnapshot is valid
   channel->registerValue("i2", &i2_bis);
 
   // adding a new value after takeSnapshot is not valid (would change the schema)
   ASSERT_ANY_THROW( channel->registerValue("i3", &i3); );
-
-  // give time to the sink thread to do its work
-  std::this_thread::sleep_for(std::chrono::milliseconds(10));
-
   ASSERT_EQ(sink->latest_snapshot.active_mask.size(), 1);
 
   // payload should contain v1, v2, i1 and i2
-  size_t expected_size = sizeof(double) * 2 + sizeof(int32_t)*2;
+  auto expected_size = sizeof(double) * 2 + sizeof(int32_t)*2;
+  ASSERT_EQ(sink->latest_snapshot.payload.size(), expected_size);
+
+  //-----------------------------------------------------------------
+  // Unregister or disable some values. This should reduce the size of the snapshot
+  channel->unregister(id_v1);
+  channel->setEnabled(id_i1, false);
+
+  channel->takeSnapshot();
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+  // payload should contain v2, and i2
+  auto reduced_size = sizeof(double) + sizeof(int32_t);
+  ASSERT_EQ(sink->latest_snapshot.payload.size(), reduced_size);
+
+  //-----------------------------------------------------------------
+  // Register and enable again
+  channel->registerValue("v1", &v1);
+  channel->setEnabled(id_i1, true);
+
+  channel->takeSnapshot();
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
   ASSERT_EQ(sink->latest_snapshot.payload.size(), expected_size);
 }
