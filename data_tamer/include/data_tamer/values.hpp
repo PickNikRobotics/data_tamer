@@ -2,8 +2,8 @@
 
 #include <functional>
 #include <atomic>
+#include <cstring>
 #include "data_tamer/types.hpp"
-#include <eigen3/Eigen/Core>
 
 namespace DataTamer
 {
