@@ -2,6 +2,12 @@
 Changelog for package data_tamer_msgs
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Forthcoming
+-----------
+* Merge branch 'humble_dev'
+* more compact schema
+* Contributors: Davide Faconti
+
 0.2.1 (2023-11-13)
 ------------------
 

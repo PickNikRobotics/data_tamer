@@ -2,6 +2,19 @@
 Changelog for package data_tamer
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Forthcoming
+-----------
+* add coverage
+* fix bug
+* add CI
+* unit test added
+* allow registering again with new pointer
+* add docs
+* use custom mutex on linux
+* adding ros2 example
+* ros2 publisher sink
+* Contributors: Davide Faconti
+
 0.2.1 (2023-11-13)
 ------------------
 * fix conan
