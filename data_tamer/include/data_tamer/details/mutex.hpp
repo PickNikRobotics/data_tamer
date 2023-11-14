@@ -1,8 +1,12 @@
 #pragma once
 
-#ifdef __linux__
+#if defined(__linux__)
+#define USE_CUSTOM_MUTEX
+#endif
+
+#ifdef USE_CUSTOM_MUTEX
 #include <pthread.h>
-#else // windows code goes here
+#else
 #include <mutex>
 #endif
 
@@ -30,16 +34,16 @@ public:
   bool try_lock() noexcept;
 
 private:
-#ifdef __linux__
+#ifdef USE_CUSTOM_MUTEX
   pthread_mutex_t m_;
-#else // windows code goes here
+#else
   std::mutex m_;
 #endif
 };
 
 
 //-------------------------------------------
-#ifdef __linux__
+#ifdef USE_CUSTOM_MUTEX
 
 inline Mutex::Mutex() {
   pthread_mutexattr_t attr;
