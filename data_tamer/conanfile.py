@@ -29,7 +29,8 @@ class DataTamerConan(ConanFile):
         "src/*",
         "examples/*",
         "tests/*",
-        "CMakeLists.txt"
+        "CMakeLists.txt",
+        "data_tamerConfig.cmake.in"
     )
 
 
