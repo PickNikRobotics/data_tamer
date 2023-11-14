@@ -87,6 +87,7 @@ install(
 )
 
 if(DATA_TAMER_BUILD_TESTS)
+    enable_testing()
     add_subdirectory(tests)
 endif()
 
