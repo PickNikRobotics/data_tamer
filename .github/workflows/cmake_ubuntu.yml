@@ -37,7 +37,7 @@ jobs:
 
     - name: Install conan dependencies
       working-directory: ${{github.workspace}}/build
-      run: conan install ${{github.workspace}}/data_tamer/conanfile.txt -s build_type=${{env.BUILD_TYPE}} --build=missing -s compiler.cppstd=gnu17
+      run: ls ; conan install ${{github.workspace}}/data_tamer/conanfile.py -s build_type=${{env.BUILD_TYPE}} --build=missing -s compiler.cppstd=gnu17
 
     - name: Configure CMake
       shell: bash
