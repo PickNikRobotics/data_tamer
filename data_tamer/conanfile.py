@@ -33,7 +33,6 @@ class DataTamerConan(ConanFile):
         "data_tamerConfig.cmake.in"
     )
 
-
     def requirements(self):
 
         self.requires("mcap/1.2.0")
@@ -72,9 +71,4 @@ class DataTamerConan(ConanFile):
         cmake.install()
 
     def package_info(self):
-        self.cpp_info.set_property("cmake_find_mode", "none")
-        self.cpp_info.set_property("cmake_file_name", "data_tamer")
-        self.cpp_info.set_property(
-            "cmake_target_name", "data_tamer::data_tamer"
-        )
-        self.cpp_info.builddirs.append("")
+        self.cpp_info.libs = ["data_tamer"]
