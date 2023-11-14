@@ -96,7 +96,8 @@ if (NOT ament_cmake_FOUND )
     include(CMakePackageConfigHelpers)
 
     configure_package_config_file(
-      data_tamerConfig.cmake.in data_tamerConfig.cmake
+      ${CMAKE_CURRENT_SOURCE_DIR}/data_tamerConfig.cmake.in
+      ${CMAKE_CURRENT_BINARY_DIR}/data_tamerConfig.cmake
       INSTALL_DESTINATION lib/cmake/data_tamer
       PATH_VARS INCLUDE_INSTALL_DIR)
 
