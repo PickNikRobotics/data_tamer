@@ -105,10 +105,6 @@ if (NOT ament_cmake_FOUND )
         VERSION ${PROJECT_VERSION}
         COMPATIBILITY SameMajorVersion)
 
-    install(TARGETS data_tamer
-            DESTINATION ${CMAKE_INSTALL_LIBDIR}
-            EXPORT data_tamerTargets)
-
     install(EXPORT data_tamerTargets
             FILE data_tamerTargets.cmake
             NAMESPACE data_tamer::
