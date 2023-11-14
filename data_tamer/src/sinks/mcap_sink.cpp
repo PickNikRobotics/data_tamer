@@ -1,6 +1,8 @@
 #include "data_tamer/sinks/mcap_sink.hpp"
 #include "data_tamer/contrib/SerializeMe.hpp"
 
+#include <mutex>
+
 #ifndef USING_ROS2
 #define MCAP_IMPLEMENTATION
 #endif
@@ -28,8 +30,8 @@ namespace DataTamer {
 
 static constexpr char const* kDataTamer = "data_tamer";
 
-MCAPSink::MCAPSink(boost::filesystem::path const& path)
-    : filepath_(path.string()) {
+MCAPSink::MCAPSink(const std::string &filepath)
+    : filepath_(filepath) {
   openFile(filepath_);
 }
 
