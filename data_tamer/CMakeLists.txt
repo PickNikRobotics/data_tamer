@@ -41,6 +41,7 @@ add_library(data_tamer STATIC
 
     src/sinks/mcap_sink.cpp
     ${ROS2_SINK}
+    include/data_tamer/details/mutex.hpp
 )
 
 target_compile_features(data_tamer PUBLIC cxx_std_17)

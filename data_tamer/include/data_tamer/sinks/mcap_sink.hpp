@@ -1,11 +1,11 @@
 #pragma once
 
 #include "data_tamer/data_sink.hpp"
+#include "data_tamer/details/mutex.hpp"
 
 #include <atomic>
 #include <condition_variable>
 #include <deque>
-#include <mutex>
 #include <thread>
 #include <unordered_map>
 
@@ -47,7 +47,7 @@ class MCAPSink : public DataSinkBase {
   std::chrono::seconds reset_time_ = std::chrono::seconds(60 * 10);
   std::chrono::system_clock::time_point start_time_;
 
-  std::mutex schema_mutex_;
+  Mutex schema_mutex_;
 
   void openFile(std::string const& filepath);
 };

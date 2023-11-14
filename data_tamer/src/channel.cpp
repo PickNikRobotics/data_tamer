@@ -18,7 +18,7 @@ struct LogChannel::Pimpl
 
   std::string channel_name;
 
-  mutable std::mutex mutex;
+  mutable Mutex mutex;
 
   size_t payload_max_buffer_size = 0;
 
@@ -156,7 +156,7 @@ Schema LogChannel::getSchema() const
   return _p->schema;
 }
 
-std::mutex &LogChannel::writeMutex() { return _p->mutex; }
+Mutex &LogChannel::writeMutex() { return _p->mutex; }
 
 bool LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
 {

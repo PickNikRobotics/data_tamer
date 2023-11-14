@@ -1,8 +1,10 @@
 #pragma once
 
 #include "data_tamer/data_sink.hpp"
-#include "data_tamer/contrib/SerializeMe.hpp"
+#include "data_tamer/details/mutex.hpp"
+
 #include <unordered_map>
+#include <mutex>
 
 namespace DataTamer
 {
@@ -18,7 +20,7 @@ public:
   std::unordered_map<uint64_t, std::string> schema_names;
   std::unordered_map<uint64_t, long> snapshots_count;
   Snapshot latest_snapshot;
-  std::mutex schema_mutex_;
+  Mutex schema_mutex_;
 
   ~DummySink() override
   {

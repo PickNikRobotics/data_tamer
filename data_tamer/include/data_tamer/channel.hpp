@@ -2,11 +2,11 @@
 
 #include "data_tamer/values.hpp"
 #include "data_tamer/data_sink.hpp"
+#include "data_tamer/details/mutex.hpp"
 
 #include <atomic>
 #include <chrono>
 #include <memory>
-#include <mutex>
 #include <unordered_set>
 
 namespace DataTamer {
@@ -174,7 +174,7 @@ public:
   *
   * No need to worry about LoggedValues (they use the mutex internally)
   */
-  std::mutex& writeMutex();
+  Mutex& writeMutex();
 
 private:
 

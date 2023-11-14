@@ -1,7 +1,19 @@
 #include "data_tamer/data_tamer.hpp"
+#include <mutex>
 
 namespace DataTamer
 {
+
+struct ChannelsRegistry::Pimpl
+{
+  std::unordered_map<std::string, std::shared_ptr<LogChannel>> channels;
+  std::unordered_set<std::shared_ptr<DataSinkBase>> default_sinks;
+  Mutex mutex;
+};
+
+ChannelsRegistry::ChannelsRegistry(): _p(new Pimpl)
+{
+}
 
 ChannelsRegistry &ChannelsRegistry::Global()
 {
@@ -10,20 +22,20 @@ ChannelsRegistry &ChannelsRegistry::Global()
 }
 
 void ChannelsRegistry::addDefaultSink(std::shared_ptr<DataSinkBase> sink) {
-  std::scoped_lock lk(mutex_);
-  default_sinks_.insert(sink);
+  std::scoped_lock lk(_p->mutex);
+  _p->default_sinks.insert(sink);
 }
 
 std::shared_ptr<LogChannel> ChannelsRegistry::getChannel(
     std::string const& channel_name) {
-  std::scoped_lock lk(mutex_);
-  auto it = channels_.find(channel_name);
-  if (it == channels_.end()) {
+  std::scoped_lock lk(_p->mutex);
+  auto it = _p->channels.find(channel_name);
+  if (it == _p->channels.end()) {
     auto new_channel = LogChannel::create(channel_name);
-    for (auto const& sink : default_sinks_) {
+    for (auto const& sink : _p->default_sinks) {
       new_channel->addDataSink(sink);
     }
-    channels_.insert({channel_name, new_channel});
+    _p->channels.insert({channel_name, new_channel});
     return new_channel;
   }
   return it->second;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "data_tamer/data_sink.hpp"
+#include "data_tamer/details/mutex.hpp"
 #include "data_tamer_msgs/msg/schemas.hpp"
 #include "data_tamer_msgs/msg/snapshot.hpp"
 #include <unordered_map>
@@ -22,7 +23,7 @@ private:
   std::shared_ptr<rclcpp::Node> node_;
 
   std::unordered_map<std::string, Schema> schemas_;
-  std::mutex schema_mutex_;
+  Mutex schema_mutex_;
 
   rclcpp::Publisher<data_tamer_msgs::msg::Schemas>::SharedPtr schema_publisher_;
   rclcpp::Publisher<data_tamer_msgs::msg::Snapshot>::SharedPtr data_publisher_;

@@ -1,11 +1,14 @@
 #pragma once
 
 #include "data_tamer/channel.hpp"
+#include "data_tamer/details/mutex.hpp"
 
 namespace DataTamer {
 
 class ChannelsRegistry {
 public:
+
+  ChannelsRegistry();
 
   // global instance (similar to singleton)
   static ChannelsRegistry& Global();
@@ -19,9 +22,9 @@ public:
       std::string const& channel_name);
 
 private:
-  std::unordered_map<std::string, std::shared_ptr<LogChannel>> channels_;
-  std::unordered_set<std::shared_ptr<DataSinkBase>> default_sinks_;
-  std::mutex mutex_;
+
+  struct Pimpl;
+  std::unique_ptr<Pimpl> _p;
 };
 
 
