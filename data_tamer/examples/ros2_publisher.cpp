@@ -1,6 +1,8 @@
 #include "data_tamer/data_tamer.hpp"
 #include "data_tamer/sinks/ros2_publisher_sink.hpp"
+
 #include <iostream>
+#include <cmath>
 
 using namespace DataTamer;
 

@@ -9,8 +9,6 @@
 #include <thread>
 #include <unordered_map>
 
-#include <boost/filesystem.hpp>
-
 // Forward declaration. Header will be added in the cpp file
 namespace mcap {
 class McapWriter;
@@ -24,7 +22,7 @@ namespace DataTamer {
  */
 class MCAPSink : public DataSinkBase {
  public:
-  explicit MCAPSink(boost::filesystem::path const& path);
+  explicit MCAPSink(std::string const& filepath);
 
   ~MCAPSink() override;
 
