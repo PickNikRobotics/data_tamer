@@ -15,6 +15,10 @@ ChannelsRegistry::ChannelsRegistry(): _p(new Pimpl)
 {
 }
 
+ChannelsRegistry::~ChannelsRegistry()
+{
+}
+
 ChannelsRegistry &ChannelsRegistry::Global()
 {
   static ChannelsRegistry obj;

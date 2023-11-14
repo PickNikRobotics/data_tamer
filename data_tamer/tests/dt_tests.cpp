@@ -12,9 +12,10 @@ TEST(DataTamer, SinkAdd)
   auto dummy_sink_A = std::make_shared<DummySink>();
   auto dummy_sink_B = std::make_shared<DummySink>();
 
-  ChannelsRegistry::Global().addDefaultSink(dummy_sink_A);
+  ChannelsRegistry registry;
+  registry.addDefaultSink(dummy_sink_A);
 
-  auto channel = ChannelsRegistry::Global().getChannel("chan");
+  auto channel = registry.getChannel("chan");
   channel->addDataSink(dummy_sink_B);
 
   double var = 3.14;
@@ -71,5 +72,49 @@ TEST(DataTamer, SerializeVariant)
   uint8_t v3 = 200;
   auto n3 = serializeAndBack(v3);
   ASSERT_EQ(v3, std::get<uint8_t>(n3));
+}
 
+TEST(DataTamer, TestRegistration)
+{
+  ChannelsRegistry registry;
+  auto channel = registry.getChannel("chan");
+  auto sink = std::make_shared<DummySink>();
+  channel->addDataSink(sink);
+
+  double v1 = 69.0;
+  double v2 = 77.0;
+  double v2_bis = 42.0;
+
+  int32_t i1 = 55;
+  int32_t i2 = 44;
+  int32_t i2_bis = 33;
+  int32_t i3 = 11;
+
+  channel->registerValue("v1", &v1);
+  channel->registerValue("v2", &v2);
+  channel->registerValue("i1", &i1);
+  channel->registerValue("i2", &i2);
+
+  // changing the pointer to another one is valid
+  channel->registerValue("v2", &v2_bis);
+
+  // changing type is not valid
+  ASSERT_ANY_THROW( channel->registerValue("v2", &i1); );
+
+  channel->takeSnapshot();
+
+  // chaning the pointer after takeSnapshot is valid
+  channel->registerValue("i2", &i2_bis);
+
+  // adding a new value after takeSnapshot is not valid (would change the schema)
+  ASSERT_ANY_THROW( channel->registerValue("i3", &i3); );
+
+  // give time to the sink thread to do its work
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+  ASSERT_EQ(sink->latest_snapshot.active_mask.size(), 1);
+
+  // payload should contain v1, v2, i1 and i2
+  size_t expected_size = sizeof(double) * 2 + sizeof(int32_t)*2;
+  ASSERT_EQ(sink->latest_snapshot.payload.size(), expected_size);
 }

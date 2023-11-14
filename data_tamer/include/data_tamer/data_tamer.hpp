@@ -10,6 +10,9 @@ public:
 
   ChannelsRegistry();
 
+  // the Pimpl idiom does not allow a default destructor
+  ~ChannelsRegistry();
+
   // global instance (similar to singleton)
   static ChannelsRegistry& Global();
 
