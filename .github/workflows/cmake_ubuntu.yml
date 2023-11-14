@@ -37,21 +37,21 @@ jobs:
 
     - name: Install conan dependencies
       working-directory: ${{github.workspace}}/build
-      run: conan install ${{github.workspace}}/data_tamer/conanfile.py -s build_type=${{env.BUILD_TYPE}} --build=missing -s compiler.cppstd=gnu17 -of .
+      run: conan install ${{github.workspace}}/data_tamer/conanfile.py -s build_type=Debug --build=missing -s compiler.cppstd=gnu17 -of .
 
     - name: Configure CMake
       shell: bash
       working-directory: ${{github.workspace}}/build
-      run: cmake ${{github.workspace}}/data_tamer -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_TOOLCHAIN_FILE="./build/${{env.BUILD_TYPE}}/generators/conan_toolchain.cmake"
+      run: cmake ${{github.workspace}}/data_tamer -DCMAKE_BUILD_TYPE=Debug -DCMAKE_TOOLCHAIN_FILE="./build/Debug/generators/conan_toolchain.cmake" -DCMAKE_CXX_FLAGS_DEBUG="-g -fprofile-arcs -ftest-coverage"
 
     - name: Build
       shell: bash
       working-directory: ${{github.workspace}}/build
-      run: cmake --build . --config ${{env.BUILD_TYPE}}
+      run: cmake --build . --config Debug
       
     - name: run test (Linux)
       working-directory: ${{github.workspace}}/build
-      run: ctest
+      run: ctest -T test -T Coverage
       
     - name: Upload coverage reports to Codecov
       uses: codecov/codecov-action@v3
