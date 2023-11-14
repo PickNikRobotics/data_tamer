@@ -22,7 +22,8 @@ endif()
 find_package(ament_cmake QUIET)
 
 if ( ament_cmake_FOUND )
-    set(ROS2_SINK src/sinks/ros2_publisher_sink.cpp)
+    set(ROS2_SINK 
+        src/sinks/ros2_publisher_sink.cpp)
 endif()
 
 add_library(data_tamer STATIC
