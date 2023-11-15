@@ -39,7 +39,7 @@ using VarNumber = std::variant<
     float, double >;
 
 /// Reverse operation of ValuePtr::serialize
-VarNumber DeserializeAsVarType(const BasicType& type, void* data);
+VarNumber DeserializeAsVarType(const BasicType& type, const void* data);
 
 /// Return the number of bytes needed to serialize the type
 size_t SizeOf(const BasicType& type);
@@ -91,6 +91,23 @@ struct Schema {
   struct Field {
     std::string name;
     BasicType type;
+    bool is_vector = 0;
+    uint16_t array_size = 0;
+
+    friend std::ostream& operator<<(std::ostream& os, const Field& field)
+    {
+      os << ToStr(field.type);
+      if(field.is_vector && field.array_size != 0)
+      {
+        os <<"[" << field.array_size << "]";
+      }
+      if(field.is_vector && field.array_size == 0)
+      {
+        os <<"[]";
+      }
+      os << ' ' << field.name;
+      return os;
+    }
   };
   std::vector<Field> fields;
   uint64_t hash = 0;
@@ -98,9 +115,9 @@ struct Schema {
   friend std::ostream& operator<<(std::ostream& os, const Schema& schema)
   {
     os << "hash: " << schema.hash << "\n";
-    for(const auto& entry: schema.fields)
+    for(const auto& field: schema.fields)
     {
-      os << ToStr(entry.type) << ' ' << entry.name << '\n';
+      os << field << "\n";
     }
     return os;
   }

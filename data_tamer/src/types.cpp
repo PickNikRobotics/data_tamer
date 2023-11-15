@@ -48,14 +48,14 @@ size_t SizeOf(const BasicType& type)
 }
 
 template<typename T>
-T DeserializeImpl(void *data)
+T DeserializeImpl(const void *data)
 {
   T var;
   std::memcpy(&var, data, sizeof(T));
   return var;
 }
 
-VarNumber DeserializeAsVarType(const BasicType &type, void*data)
+VarNumber DeserializeAsVarType(const BasicType &type, const void *data)
 {
   switch(type)
   {

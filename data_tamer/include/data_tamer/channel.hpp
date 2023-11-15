@@ -84,7 +84,7 @@ private:
  * @return ID to be used to unregister the field(s)
  */
 template <typename T>
-RegistrationID RegisterVariable(LogChannel& channel, const std::string& name, T* value);
+RegistrationID RegisterVariable(LogChannel& channel, const std::string& name, const T* value);
 
 /**
  * @brief A LogChannel is a class used to record multiple values in a single
@@ -134,7 +134,7 @@ public:
    * @return       the ID to be used to unregister or enable/disable this value.
    */
   template <typename T>
-  RegistrationID registerValue(const std::string& name, T* value);
+  RegistrationID registerValue(const std::string& name, const T* value);
 
   /**
    * @brief registerValue add a vectors of values.
@@ -146,8 +146,8 @@ public:
    * @param value  pointer to the vectors of values.
    * @return       the ID to be used to unregister or enable/disable the values.
    */
-  template <typename T, typename TArg>
-  RegistrationID registerValue(const std::string& name, std::vector<T, TArg>* value);
+  template <template <class, class> class Container, class T, class... TArgs>
+  RegistrationID registerValue(const std::string& name, const Container<T, TArgs...>* value);
 
   /**
    * @brief registerValue add an array of values.
@@ -159,7 +159,7 @@ public:
    * @return       the ID to be used to unregister or enable/disable the values.
    */
   template <typename T, size_t N>
-  RegistrationID registerValue(const std::string& name, std::array<T, N>* value);
+  RegistrationID registerValue(const std::string& name, const std::array<T, N>* value);
 
   /**
    * @brief createLoggedValue is similar to registerValue(), but
@@ -240,7 +240,7 @@ private:
 //----------------------------------------------------------------------
 
 template <typename T> inline
-RegistrationID LogChannel::registerValue(const std::string& name, T* value_ptr) {
+RegistrationID LogChannel::registerValue(const std::string& name, const T *value_ptr) {
 
   if constexpr (GetBasicType<T>() != BasicType::OTHER )
   {
@@ -253,30 +253,45 @@ RegistrationID LogChannel::registerValue(const std::string& name, T* value_ptr) 
   }
 }
 
-template <typename T, typename TArg> inline
-    RegistrationID LogChannel::registerValue(const std::string& prefix, std::vector<T, TArg>* vect)
+template <template <class, class> class Container, class T, class... TArgs>
+inline RegistrationID LogChannel::registerValue(const std::string& prefix,
+                                                const Container<T, TArgs...>* vect)
 {
-  if(vect->empty())
+  if constexpr (GetBasicType<T>() != BasicType::OTHER )
   {
-    return {};
+    return registerValueImpl(prefix, ValuePtr(vect));
   }
-  auto id = registerValue(prefix + "[0]", &(*vect)[0]);
-  for(size_t i=1; i<vect->size(); i++)
+  else
   {
-    id += registerValue(prefix + "[" + std::to_string(i) + "]", &(*vect)[i]);
+    if(vect->empty())
+    {
+      return {};
+    }
+    auto id = registerValue(prefix + "[0]", &(*vect)[0]);
+    for(size_t i=1; i<vect->size(); i++)
+    {
+      id += registerValue(prefix + "[" + std::to_string(i) + "]", &(*vect)[i]);
+    }
+    return id;
   }
-  return id;
 }
 
 template <typename T, size_t N> inline
-    RegistrationID LogChannel::registerValue(const std::string& prefix, std::array<T, N>* vect)
+    RegistrationID LogChannel::registerValue(const std::string& prefix, const std::array<T, N>* vect)
 {
-  auto id = registerValue(prefix + "[0]", &(*vect)[0]);
-  for(size_t i=1; i<N; i++)
+  if constexpr (GetBasicType<T>() != BasicType::OTHER )
   {
-    id += registerValue(prefix + "[" + std::to_string(i) + "]", &(*vect)[i]);
+    return registerValueImpl(prefix, ValuePtr(vect));
   }
-  return id;
+  else
+  {
+    auto id = registerValue(prefix + "[0]", &(*vect)[0]);
+    for(size_t i=1; i<N; i++)
+    {
+      id += registerValue(prefix + "[" + std::to_string(i) + "]", &(*vect)[i]);
+    }
+    return id;
+  }
 }
 
 template <typename T> inline

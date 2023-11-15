@@ -28,7 +28,7 @@ struct Pose
 namespace DataTamer
 {
 template <> RegistrationID
-RegisterVariable<Point3D>(LogChannel& channel, const std::string& prefix, Point3D* v)
+RegisterVariable<Point3D>(LogChannel& channel, const std::string& prefix, const Point3D* v)
 {
   auto id = channel.registerValue(prefix + "/x", &v->x);
   id += channel.registerValue(prefix + "/y", &v->y);
@@ -37,7 +37,7 @@ RegisterVariable<Point3D>(LogChannel& channel, const std::string& prefix, Point3
 }
 
 template <> RegistrationID
-RegisterVariable<Quaternion>(LogChannel& channel, const std::string& prefix, Quaternion* v)
+RegisterVariable<Quaternion>(LogChannel& channel, const std::string& prefix, const Quaternion* v)
 {
   auto id = channel.registerValue(prefix + "/x", &v->x);
   id += channel.registerValue(prefix + "/y", &v->y);
@@ -47,7 +47,7 @@ RegisterVariable<Quaternion>(LogChannel& channel, const std::string& prefix, Qua
 }
 
 template <> RegistrationID
-RegisterVariable<Pose>(LogChannel& channel, const std::string& prefix, Pose* v)
+RegisterVariable<Pose>(LogChannel& channel, const std::string& prefix, const Pose* v)
 {
   auto id = channel.registerValue(prefix + "/position", &v->pos);
   id += channel.registerValue(prefix + "/rotation", &v->rot);

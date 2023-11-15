@@ -55,7 +55,8 @@ TEST(DataTamer, SerializeVariant)
   {
     uint8_t buffer[8];
     ValuePtr ptr(&value);
-    ptr.serialize(buffer);
+    SerializeMe::SpanBytes buff(buffer, 8);
+    ptr.serialize(buff);
     auto var = DeserializeAsVarType(ptr.type(), buffer);;
     std::visit( to_str, var);
     return var;

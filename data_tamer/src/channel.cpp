@@ -65,7 +65,9 @@ RegistrationID LogChannel::registerValueImpl(
 
     _p->registered_values.insert( {name, index} );
     _p->payload_max_buffer_size += SizeOf(type);
-    _p->schema.fields.emplace_back( Schema::Field{name, type} );
+
+    Schema::Field field{name, type, value_ptr.isVector(), value_ptr.vectorSize()};
+    _p->schema.fields.emplace_back(std::move(field));
 
     // update schema and its hash (append only)
     // https://stackoverflow.com/questions/2590677/how-do-i-combine-hash-values-in-c0x
@@ -84,9 +86,8 @@ RegistrationID LogChannel::registerValueImpl(
   const size_t index = it->second;
   auto& instance = _p->series[index];
 
-  const auto old_type = instance.holder.type();
-  const auto new_type = value_ptr.type();
-  if(new_type != old_type)
+  // check if the new holder is compatible
+  if(instance.holder != value_ptr)
   {
     throw std::runtime_error("Can't change the type of a previously "
                              "registered value");
@@ -96,7 +97,7 @@ RegistrationID LogChannel::registerValueImpl(
   if( !instance.registered )
   {
     instance.registered = true;
-    _p->payload_max_buffer_size += SizeOf(new_type);
+    _p->payload_max_buffer_size += SizeOf(value_ptr.type());
   }
   instance.enabled = true;
   instance.holder = std::move(value_ptr);
@@ -206,19 +207,16 @@ bool LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
 
     _p->snapshot.timestamp = timestamp;
     // serialize data into _p->snapshot.payload
-    auto* payload_ptr = _p->snapshot.payload.data();
-    size_t actual_payload_size = 0;
+    SerializeMe::SpanBytes payload_buffer(_p->snapshot.payload);
 
     for(auto const& entry: _p->series)
     {
       if(entry.enabled)
       {
-        const auto entry_size = entry.holder.serialize(payload_ptr);
-        actual_payload_size += entry_size;
-        payload_ptr += entry_size;
+        entry.holder.serialize(payload_buffer);
       }
     }
-    _p->snapshot.payload.resize(actual_payload_size);
+    _p->snapshot.payload.resize(_p->snapshot.payload.size() - payload_buffer.size());
   }
 
   bool all_pushed = true;
