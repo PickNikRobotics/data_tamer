@@ -45,7 +45,7 @@ int main()
   ChannelsRegistry::Global().addDefaultSink(mcap_sink);
 
   // Create (or get) a channel using the global registry (singleton)
-  auto channel = ChannelsRegistry::Global().getChannel("chan");
+  auto channel = ChannelsRegistry::Global().getChannel("lorenz");
   int timestep = 0;
   channel->registerValue("timestep", &timestep);
 
@@ -60,7 +60,8 @@ int main()
   double const rho = 28.;
   double const beta = 2.66;
   while (t_cur < t_max) {
-    channel->takeSnapshot(std::chrono::nanoseconds(static_cast<int>(std::round(t_cur * 1e9))));
+    auto t_nano = std::chrono::nanoseconds(static_cast<int>(std::round(t_cur * 1e9)));
+    channel->takeSnapshot(t_nano);
     p_t->x += dt * sigma * (p_t->y - p_t->x);
     p_t->y += dt * (p_t->x * (rho - p_t->z) - p_t->y);
     p_t->z += dt * (p_t->x * p_t->y - beta * p_t->z);
@@ -70,9 +71,9 @@ int main()
 
   // now, get rid of our reference to the object
   p_t.reset();
-  ++timestep;
 
   // won't fail because of make_shared_and_log automatically disabling the channel
   // thus we will have one point where timestep is alone at the end
-  channel->takeSnapshot();
+  auto t_nano = std::chrono::nanoseconds(static_cast<int>(std::round(t_cur * 1e9)));
+  channel->takeSnapshot(t_nano);
 }
