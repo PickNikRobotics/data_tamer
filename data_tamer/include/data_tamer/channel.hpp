@@ -3,6 +3,7 @@
 #include "data_tamer/values.hpp"
 #include "data_tamer/data_sink.hpp"
 #include "data_tamer/details/mutex.hpp"
+#include "data_tamer/details/locked_reference.hpp"
 
 #include <atomic>
 #include <chrono>
@@ -58,6 +59,8 @@ public:
 
   /// @brief get the stored value.
   T get();
+
+  LockedRef<T, Mutex> getLockedReference();
 
   /// @brief Disabling a LoggedValue means that we will not record it in the snapshot
   void setEnabled(bool enabled);
@@ -361,5 +364,17 @@ T LoggedValue<T>::get()
   }
   return value_;
 }
+
+template<typename T> inline
+    LockedRef<T, Mutex> LoggedValue<T>::getLockedReference()
+{
+  Mutex* mutex_ptr = nullptr;
+  if(auto chan = channel_.lock())
+  {
+    mutex_ptr = &chan->writeMutex();
+  }
+  return LockedRef<T, Mutex>(&value_, mutex_ptr);
+}
+
 
 }  // namespace DataTamer
