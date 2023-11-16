@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.14)
 
-project(data_tamer LANGUAGES CXX)
+project(data_tamer LANGUAGES CXX VERSION 0.3.3)
 
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -16,13 +16,14 @@ endif()
 if (MSVC)
     add_compile_options(/W4 /WX)
 else()
-    add_compile_options(-Wall -Wextra -Werror)
+    add_compile_options(-Wall -Wextra -Werror -pedantic)
 endif()
 
 find_package(ament_cmake QUIET)
 
 if ( ament_cmake_FOUND )
-    set(ROS2_SINK src/sinks/ros2_publisher_sink.cpp)
+    set(ROS2_SINK 
+        src/sinks/ros2_publisher_sink.cpp)
 endif()
 
 add_library(data_tamer STATIC
@@ -40,14 +41,16 @@ add_library(data_tamer STATIC
 
     src/sinks/mcap_sink.cpp
     ${ROS2_SINK}
+    include/data_tamer/details/mutex.hpp
 )
 
 target_compile_features(data_tamer PUBLIC cxx_std_17)
 target_include_directories(data_tamer
  PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/3rdparty>
   $<INSTALL_INTERFACE:include>
+ PRIVATE
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/3rdparty>
 )
 
 # detect if compiling in ROS2
@@ -84,7 +87,38 @@ install(
   INCLUDES DESTINATION include
 )
 
+if (NOT ament_cmake_FOUND )
+
+    set(LIBRARY_INSTALL_DIR lib)
+    set(INCLUDE_INSTALL_DIR include)
+
+    # Install config file for finding the package.
+    include(CMakePackageConfigHelpers)
+
+    configure_package_config_file(
+      ${CMAKE_CURRENT_SOURCE_DIR}/data_tamerConfig.cmake.in
+      ${CMAKE_CURRENT_BINARY_DIR}/data_tamerConfig.cmake
+      INSTALL_DESTINATION lib/cmake/data_tamer
+      PATH_VARS INCLUDE_INSTALL_DIR)
+
+    write_basic_package_version_file(
+        "data_tamerConfigVersion.cmake"
+        VERSION ${PROJECT_VERSION}
+        COMPATIBILITY SameMajorVersion)
+
+    install(EXPORT data_tamerTargets
+            FILE data_tamerTargets.cmake
+            NAMESPACE data_tamer::
+            DESTINATION lib/cmake/data_tamer )
+
+    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/data_tamerConfig.cmake"
+            DESTINATION lib/cmake/data_tamer )
+
+endif()
+
 if(DATA_TAMER_BUILD_TESTS)
+    include(CTest)
+    enable_testing()
     add_subdirectory(tests)
 endif()
 

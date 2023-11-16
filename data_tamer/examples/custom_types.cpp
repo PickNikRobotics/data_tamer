@@ -69,19 +69,19 @@ int main()
   Point3D pointB;
   channel->registerValue<Point3D>("pointB", &pointB);
 
-  // complex types like Pose are also supported
+  // Non-trivial types like Pose are also supported
   Pose pose;
   channel->registerValue("my_pose", &pose);
 
-  // Vector can be registered as long as their size will NEVER change
-  // Tour responsivibily to guaranty that!
+  // std::vectors can be registered as long as their size will NEVER change
+  // It is your responsibility to guarantee that!
   std::vector<Point3D> points_vect(5);
   channel->registerValue("points", &points_vect);
 
-  // std::array is also supported (safer than std::vector)
+  // std::array is also supported (safer than std::vector due to constant size)
   std::array<int, 3> value_array;
   channel->registerValue("value_array", &value_array);
 
-  // Print the schema to understand ho they are serialized
+  // Print the schema to understand how they are serialized
   std::cout << channel->getSchema() << std::endl;
 }

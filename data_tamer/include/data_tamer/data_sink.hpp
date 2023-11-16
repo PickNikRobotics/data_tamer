@@ -7,15 +7,21 @@
 #include <condition_variable>
 #include <cstdint>
 #include <memory>
-#include <mutex>
 #include <string>
 #include <vector>
 #include <thread>
 
+// #include <boost/container/small_vector.hpp>
+
 namespace DataTamer {
 
+//const size_t kMaxValues = 1024;
+//using ActiveMask = boost::container::small_vector<uint8_t, kMaxValues/8>;
+//using PayloadVector = boost::container::small_vector<uint8_t, kMaxValues*8>;
 
 using ActiveMask = std::vector<uint8_t>;
+using PayloadVector = std::vector<uint8_t>;
+
 bool GetBit(const ActiveMask& mask, size_t index);
 void SetBit(ActiveMask& mask, size_t index, bool val);
 
@@ -26,13 +32,13 @@ struct Snapshot {
   /// snapshot timestamp
   std::chrono::nanoseconds timestamp;
 
-  /// Vector that tell us if an field of the schema is
+  /// Vector that tell us if a field of the schema is
   /// active or not. It is basically an optimized vector
   /// of bools, where each byte contains 8 boolean flags.
   ActiveMask active_mask;
 
   /// serialized dat containing all the values, ordered as in the schema
-  std::vector<uint8_t> payload;
+  PayloadVector payload;
 };
 
 /**
@@ -92,6 +98,8 @@ protected:
    * @return true if processed successfully
    */
   virtual bool storeSnapshot(const Snapshot& snapshot) = 0;
+
+  void stopThread();
 
 private:
   struct Pimpl;

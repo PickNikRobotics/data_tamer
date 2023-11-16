@@ -1,15 +1,13 @@
 #pragma once
 
 #include "data_tamer/data_sink.hpp"
+#include "data_tamer/details/mutex.hpp"
 
 #include <atomic>
 #include <condition_variable>
 #include <deque>
-#include <mutex>
 #include <thread>
 #include <unordered_map>
-
-#include <boost/filesystem.hpp>
 
 // Forward declaration. Header will be added in the cpp file
 namespace mcap {
@@ -24,7 +22,7 @@ namespace DataTamer {
  */
 class MCAPSink : public DataSinkBase {
  public:
-  explicit MCAPSink(boost::filesystem::path const& path);
+  explicit MCAPSink(std::string const& filepath);
 
   ~MCAPSink() override;
 
@@ -32,10 +30,6 @@ class MCAPSink : public DataSinkBase {
                   Schema const& schema) override;
 
   bool storeSnapshot(const Snapshot& snapshot) override;
-
-  /// Wait for all the snapshots in the queue to be written on file.
-  /// it is a blocking function
-  void flush();
 
   /// After a certain amount of time, the MCAP file will be reset
   /// and overwritten. Default value is 600 seconds (10 minutes)
@@ -50,6 +44,8 @@ class MCAPSink : public DataSinkBase {
 
   std::chrono::seconds reset_time_ = std::chrono::seconds(60 * 10);
   std::chrono::system_clock::time_point start_time_;
+
+  Mutex schema_mutex_;
 
   void openFile(std::string const& filepath);
 };

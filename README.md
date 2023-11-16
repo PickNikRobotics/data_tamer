@@ -1,5 +1,8 @@
 ![Data Tamer](data_tamer_logo.png)
 
+[![cmake Ubuntu](https://github.com/facontidavide/data_tamer/actions/workflows/cmake_ubuntu.yml/badge.svg)](https://github.com/facontidavide/data_tamer/actions/workflows/cmake_ubuntu.yml)
+[![codecov](https://codecov.io/gh/facontidavide/data_tamer/graph/badge.svg?token=D0wtsntWds)](https://codecov.io/gh/facontidavide/data_tamer)
+
 **DataTamer** is a spiritual successor of [pal_statistics](https://github.com/pal-robotics/pal_statistics).
 
 Its purpose is to trace **numerical** values in your application and export them into a
@@ -86,7 +89,7 @@ Assuming conan 2.x installed. From the source directory.
 **Release**:
 
 ```
-conan install . -s compiler.cppstd=gnu17 --build=missing -of build/Release -s build_type=Release
+conan install . -s compiler.cppstd=gnu17 --build=missing -s build_type=Release
 cmake -S . -B build/Release/ -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_TOOLCHAIN_FILE="build/Release/generators/conan_toolchain.cmake"
 cmake --build build/Release/ --parallel
@@ -95,7 +98,7 @@ cmake --build build/Release/ --parallel
 **Debug**:
 
 ```
-conan install . -s compiler.cppstd=gnu17 --build=missing -of build/Debug -s build_type=Debug
+conan install . -s compiler.cppstd=gnu17 --build=missing -s build_type=Debug
 cmake -S . -B build/Debug/ -DCMAKE_BUILD_TYPE=Debug \
       -DCMAKE_TOOLCHAIN_FILE="build/Debug/generators/conan_toolchain.cmake"
 cmake --build build/Debug/ --parallel

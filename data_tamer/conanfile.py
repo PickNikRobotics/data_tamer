@@ -5,7 +5,7 @@ from conan.tools.cmake import CMakeToolchain, CMake, cmake_layout, CMakeDeps
 
 class DataTamerConan(ConanFile):
     name = "data_tamer"
-    version = "0.0.1"
+    version = "0.3.3"
     package_type = "library"
     url = "https://github.com/facontidavide/data_tamer"
     license = "MIT"
@@ -23,9 +23,18 @@ class DataTamerConan(ConanFile):
         "tests": True,
         "examples": True
     }
+    exports_sources = (
+        "3rdparty/*",
+        "include/*",
+        "src/*",
+        "examples/*",
+        "tests/*",
+        "CMakeLists.txt",
+        "data_tamerConfig.cmake.in"
+    )
 
     def requirements(self):
-        # Available from asensus-ots-dev remote.
+
         self.requires("mcap/1.2.0")
         if self.options.tests:
             self.requires("gtest/1.14.0")
@@ -51,7 +60,8 @@ class DataTamerConan(ConanFile):
         cmake = CMake(self)
         cmake.configure(
             {
-                "BUILD_EXAMPLES": self.options.examples,
+                "DATA_TAMER_BUILD_TESTS": self.options.tests,
+                "DATA_TAMER_BUILD_EXAMPLES": self.options.examples
             }
         )
         cmake.build()
@@ -61,9 +71,4 @@ class DataTamerConan(ConanFile):
         cmake.install()
 
     def package_info(self):
-        self.cpp_info.set_property("cmake_find_mode", "none")
-        self.cpp_info.set_property("cmake_file_name", "data_tamer")
-        self.cpp_info.set_property(
-            "cmake_target_name", "data_tamer::data_tamer"
-        )
-        self.cpp_info.builddirs.append("")
+        self.cpp_info.libs = ["data_tamer"]

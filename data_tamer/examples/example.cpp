@@ -27,11 +27,14 @@ int main()
   [[maybe_unused]] auto id2 = channel->registerValue("value_int", &value_int);
 
   // If you prefer to use RAII, use this method instead
-  // logged_real will disable itself when it goes out of scope.
+  // logged_float will disable itself when it goes out of scope.
   auto logged_float = channel->createLoggedValue<float>("real");
 
   // this is the way you store the current snapshot of the values
   channel->takeSnapshot();
+
+  // you can modify logged_float like this
+  logged_float->set(6.28f);
 
   // You can disable a value like this
   channel->setEnabled(id1, false);

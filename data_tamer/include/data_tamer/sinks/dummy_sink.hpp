@@ -1,8 +1,10 @@
 #pragma once
 
 #include "data_tamer/data_sink.hpp"
-#include "data_tamer/contrib/SerializeMe.hpp"
+#include "data_tamer/details/mutex.hpp"
+
 #include <unordered_map>
+#include <mutex>
 
 namespace DataTamer
 {
@@ -18,9 +20,16 @@ public:
   std::unordered_map<uint64_t, std::string> schema_names;
   std::unordered_map<uint64_t, long> snapshots_count;
   Snapshot latest_snapshot;
+  Mutex schema_mutex_;
+
+  ~DummySink() override
+  {
+    stopThread();
+  }
   
   void addChannel(std::string const& name, Schema const& schema) override
   {
+    std::scoped_lock lk(schema_mutex_);
     schemas[schema.hash] = schema;
     schema_names[schema.hash] = name;
     snapshots_count[schema.hash] = 0;
@@ -28,6 +37,7 @@ public:
 
   bool storeSnapshot(const Snapshot& snapshot) override
   {
+    std::scoped_lock lk(schema_mutex_);
     latest_snapshot = snapshot;
 
     auto it = snapshots_count.find(snapshot.schema_hash);

@@ -1,18 +1,37 @@
 #include "data_tamer/sinks/mcap_sink.hpp"
 #include "data_tamer/contrib/SerializeMe.hpp"
 
+#include <mutex>
+
 #ifndef USING_ROS2
 #define MCAP_IMPLEMENTATION
 #endif
 
 #include <mcap/writer.hpp>
 
+#if defined __has_include && __has_include ("boost/container/small_vector.hpp")
+#include <boost/container/small_vector.hpp>
+
+namespace SerializeMe
+{
+template <size_t N>
+void SerializeIntoBuffer(SpanBytes& buffer,
+                         boost::container::small_vector<uint8_t, N> const& value)
+{
+  SerializeMe::SerializeIntoBuffer(buffer, uint32_t(value.size()));
+  std::memcpy(buffer.data(), value.data(), value.size());
+  buffer.trimFront(value.size());
+}
+} // end namespace SerializeMe
+
+#endif
+
 namespace DataTamer {
 
 static constexpr char const* kDataTamer = "data_tamer";
 
-MCAPSink::MCAPSink(boost::filesystem::path const& path)
-    : filepath_(path.string()) {
+MCAPSink::MCAPSink(const std::string &filepath)
+    : filepath_(filepath) {
   openFile(filepath_);
 }
 
@@ -30,11 +49,13 @@ void DataTamer::MCAPSink::openFile(std::string const& filepath) {
 }
 
 MCAPSink::~MCAPSink() {
+  stopThread();
   writer_->close();
 }
 
 void MCAPSink::addChannel(std::string const& channel_name,
                           Schema const& schema) {
+  std::scoped_lock lk(schema_mutex_);
   schemas_[channel_name] = schema;
   auto it = hash_to_channel_id_.find(schema.hash);
   if (it != hash_to_channel_id_.end()) {
@@ -68,13 +89,17 @@ bool MCAPSink::storeSnapshot(const Snapshot& snapshot) {
   const auto size_mask = snapshot.active_mask.size();
   const auto size_data = snapshot.payload.size();
 
-  merged_payload.resize(size_mask + size_data);
-  memcpy(merged_payload.data(), snapshot.active_mask.data(), size_mask);
-  memcpy(merged_payload.data() + size_mask, snapshot.payload.data(), size_data);
+  merged_payload.resize(size_mask + size_data + sizeof(uint32_t)*2);
+  SerializeMe::SpanBytes buffer(merged_payload);
+  SerializeMe::SerializeIntoBuffer(buffer, snapshot.active_mask);
+  SerializeMe::SerializeIntoBuffer(buffer, snapshot.payload);
 
   // Write our message
   mcap::Message msg;
-  msg.channelId = hash_to_channel_id_.at(snapshot.schema_hash);
+  {
+    std::scoped_lock lk(schema_mutex_);
+    msg.channelId = hash_to_channel_id_.at(snapshot.schema_hash);
+  }
   msg.sequence = 1;  // Optional
   // Timestamp requires nanosecond
   msg.logTime = mcap::Timestamp(snapshot.timestamp.count());
@@ -98,10 +123,6 @@ bool MCAPSink::storeSnapshot(const Snapshot& snapshot) {
     }
   }
   return true;
-}
-
-void MCAPSink::flush() {
-  writer_->closeLastChunk();
 }
 
 void MCAPSink::setMaxTimeBeforeReset(std::chrono::seconds reset_time) {

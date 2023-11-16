@@ -18,7 +18,7 @@ struct LogChannel::Pimpl
 
   std::string channel_name;
 
-  mutable std::mutex mutex;
+  mutable Mutex mutex;
 
   size_t payload_max_buffer_size = 0;
 
@@ -79,25 +79,27 @@ RegistrationID LogChannel::registerValueImpl(
     return {index, 1};
   }
 
-  // trying to registered again an unregistered holder
+  // trying to registered again an unregistered holder or to
+  // overwite its holder
   const size_t index = it->second;
   auto& instance = _p->series[index];
 
-  if(instance.registered)
-  {
-    throw std::runtime_error("Value already registered");
-  }
   const auto old_type = instance.holder.type();
   const auto new_type = value_ptr.type();
   if(new_type != old_type)
   {
     throw std::runtime_error("Can't change the type of a previously "
-                             "unregistered value");
+                             "registered value");
   }
-  // mark as registered again
-  instance.registered = true;
+
+  // if it was marked as NOT registered, we should registered it again
+  if( !instance.registered )
+  {
+    instance.registered = true;
+    _p->payload_max_buffer_size += SizeOf(new_type);
+  }
   instance.enabled = true;
-  _p->payload_max_buffer_size += SizeOf(new_type);
+  instance.holder = std::move(value_ptr);
   return {index, 1};
 }
 
@@ -106,6 +108,11 @@ LogChannel::LogChannel(std::string name) : _p(new Pimpl)
   _p->channel_name = std::move(name);
   std::hash<std::string> str_hasher;
   _p->schema.hash = str_hasher(_p->channel_name);
+}
+
+std::shared_ptr<LogChannel> LogChannel::create(std::string name)
+{
+  return std::shared_ptr<LogChannel>(new LogChannel(std::move(name)));
 }
 
 const std::string &LogChannel::channelName() const
@@ -156,7 +163,7 @@ Schema LogChannel::getSchema() const
   return _p->schema;
 }
 
-std::mutex &LogChannel::writeMutex() { return _p->mutex; }
+Mutex &LogChannel::writeMutex() { return _p->mutex; }
 
 bool LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
 {

@@ -1,6 +1,7 @@
 #include "data_tamer/data_tamer.hpp"
 #include "data_tamer/sinks/mcap_sink.hpp"
 #include <iostream>
+#include <cmath>
 
 using namespace DataTamer;
 
@@ -17,6 +18,10 @@ void WritingThread(const std::string& channel_name)
   std::vector<float> real32(vect_size);
   std::vector<int16_t> int16(vect_size);
 
+  channel->registerValue("real64", &real64);
+  channel->registerValue("real32", &real32);
+  channel->registerValue("int16", &int16);
+
   int count = 0;
   double t = 0;
   while(t < 10) // 10 simulated seconds
@@ -24,9 +29,10 @@ void WritingThread(const std::string& channel_name)
     auto S = std::sin(t);
     for(size_t i=0; i<vect_size; i++)
     {
-      real64[i] = i + S;
-      real32[i] = i + S;
-      int16[i] = int( 10*(i+S) );
+      const auto value = static_cast<double>(i) + S;
+      real64[i] = value;
+      real32[i] = float(value);
+      int16[i] = int16_t(10*value);
     }
 
     if( count++ % 1000 == 0)
@@ -53,17 +59,17 @@ void WritingThread(const std::string& channel_name)
 
 int main()
 {
-  // start defining one or more Sinks that must be added by default.
-  // Dp ot BEFORE creating a channel.
+  // Start defining one or more Sinks that must be added by default.
+  // Do this BEFORE creating a channel.
   auto mcap_sink = std::make_shared<MCAPSink>("test_1M.mcap");
   ChannelsRegistry::Global().addDefaultSink(mcap_sink);
 
   // Create (or get) a channel using the global registry (singleton)
   auto channel = ChannelsRegistry::Global().getChannel("chan");
 
-  // each WritingThread has 300 traced values
-  // in total, we will collect 300*4 = 1200 traced values at 1 KHz
-  // for 10 seconds (12 millions data points)
+  // Each WritingThread has 300 traced values.
+  // In total, we will collect 300*4 = 1200 traced values at 1 KHz
+  // for 10 seconds (12 million data points)
   const int N = 4;
   std::thread writers[N];
   for(int i=0; i<N; i++)

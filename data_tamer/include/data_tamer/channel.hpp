@@ -2,11 +2,11 @@
 
 #include "data_tamer/values.hpp"
 #include "data_tamer/data_sink.hpp"
+#include "data_tamer/details/mutex.hpp"
 
 #include <atomic>
 #include <chrono>
 #include <memory>
-#include <mutex>
 #include <unordered_set>
 
 namespace DataTamer {
@@ -23,8 +23,8 @@ class LogChannel;
 class ChannelsRegistry;
 
 /**
- * @brief The Value class is a container of a variable that
- * automatically register and unregister to a Channel.
+ * @brief The LoggedValue class is a container of a variable that
+ * automatically register/unregister to a Channel when created/destroyed.
  *
  * Setting and getting values is thread-safe.
  */
@@ -73,19 +73,30 @@ private:
 
 //---------------------------------------------------------
 
+/**
+ * @brief RegisterVariable must be specialized for user-defined types.
+ * See examples/custom_type.cpp to learn more.
+ *
+ * @param channel  the channel to register to
+ * @param name     name of the variable
+ * @param value    pointer to the value to be registered.
+ *
+ * @return ID to be used to unregister the field(s)
+ */
 template <typename T>
 RegistrationID RegisterVariable(LogChannel& channel, const std::string& name, T* value);
 
 /**
  * @brief A LogChannel is a class used to record multiple values in a single
- * "snapshot". Taking a snapshot is done usually in a periodic loop.
- * Usually, instances of LogChannel are accessed through ChannelsRegistry. *
+ * "snapshot". Taking a snapshot is usually done in a periodic loop.
+ *
+ * Instances of LogChannel are accessed through the ChannelsRegistry.
  *
  * There is no limit to the number of tracked values, but sometimes you may
- * want to use different LogChannels in your application wither to:
+ * want to use different LogChannels in your application to:
  *
  * - aggregate them logically or
- * - record them at different frequencies.
+ * - take snapshots at different frequencies.
  *
  * Use the methods LogChannel::registerValue or LogChannel::createLoggedValue
  * to add a new value.
@@ -101,11 +112,9 @@ protected:
   LogChannel(std::string name);
 
 public:
-  /// Use this static mentod do create an instance of LogChannel
-  static std::shared_ptr<LogChannel> create(std::string name)
-  {
-    return std::shared_ptr<LogChannel>(new LogChannel(name));
-  }
+  /// Use this static mentod do create an instance of LogChannel.
+  /// it is recommended to use ChannelsRegistry::getChannel() instead
+  static std::shared_ptr<LogChannel> create(std::string name);
 
   ~LogChannel();
 
@@ -115,31 +124,72 @@ public:
   LogChannel(LogChannel&&) = delete;
   LogChannel& operator=(LogChannel&&) = delete;
 
+  /**
+   * @brief registerValue add a value to be monitored.
+   * You must guaranty that the pointer to the value is still valid,
+   * when calling takeSnapshot.
+   *
+   * @param name   name of the value
+   * @param value  pointer to the value
+   * @return       the ID to be used to unregister or enable/disable this value.
+   */
   template <typename T>
   RegistrationID registerValue(const std::string& name, T* value);
 
+  /**
+   * @brief registerValue add a vectors of values.
+   * You must guaranty that the pointer to each value is still valid,
+   * when calling takeSnapshot.
+   * Do NOT resize the vector, once it is registered!
+   *
+   * @param name   name of the vector
+   * @param value  pointer to the vectors of values.
+   * @return       the ID to be used to unregister or enable/disable the values.
+   */
   template <typename T, typename TArg>
   RegistrationID registerValue(const std::string& name, std::vector<T, TArg>* value);
 
+  /**
+   * @brief registerValue add an array of values.
+   * You must guaranty that the pointer to the array is still valid,
+   * when calling takeSnapshot.
+   *
+   * @param name   name of the array
+   * @param value  pointer to the array of values.
+   * @return       the ID to be used to unregister or enable/disable the values.
+   */
   template <typename T, size_t N>
   RegistrationID registerValue(const std::string& name, std::array<T, N>* value);
 
+  /**
+   * @brief createLoggedValue is similar to registerValue(), but
+   * the value is wrapped in a safer RAII interface. See LoggedValue for details.
+   *
+   * @param name of the value
+   * @param initial_value  initial value to give to the LoggedValue
+   *
+   * @return the instance of LoggedValue, wrapped in a shared_ptr
+   */
   template <typename T = double>
   [[nodiscard]] std::shared_ptr<LoggedValue<T>> createLoggedValue(
       std::string const& name, T initial_value = T{});
 
+  /// Name of this channel (passed to the constructor)
   [[nodiscard]] const std::string& channelName() const;
 
   /** Enabling / disabling a value is much faster than
    *  registering / unregistering.
-   *  It should be prefered when we want to temporary remove a
-   *  variable from the snapshot.
+   *  It should be preferred when we want to temporary remove a
+   *  value from the snapshot.
    */
   void setEnabled(const RegistrationID& id, bool enable);
 
   /// NOTE: the unregistered value will not be removed from the Schema
   void unregister(const RegistrationID& id);
 
+  /**
+   * @brief addDataSink add a sink, i.e. a class collecting our snapshots.
+   */
   void addDataSink(std::shared_ptr<DataSinkBase> sink);
 
   /**
@@ -174,7 +224,7 @@ public:
   *
   * No need to worry about LoggedValues (they use the mutex internally)
   */
-  std::mutex& writeMutex();
+  Mutex& writeMutex();
 
 private:
 
