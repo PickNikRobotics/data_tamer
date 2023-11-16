@@ -44,6 +44,8 @@ public:
 
   void serialize(SerializeMe::SpanBytes& dest) const;
 
+  size_t getBufferSize() const;
+
   /// Get the type of the stored variable pointer
   [[nodiscard]] BasicType type() const { return type_; }
 
@@ -60,6 +62,7 @@ private:
   BasicType type_ = BasicType::OTHER;
   std::uint8_t memory_size_ = 0;
   std::function<void(SerializeMe::SpanBytes&)> serialize_impl_;
+  std::function<size_t()> get_size_impl_;
   bool is_vector_ = false;
   uint16_t array_size_ = 0;
 };
@@ -90,6 +93,7 @@ inline void ValuePtr::serialize(SerializeMe::SpanBytes &dest) const
   if(is_vector_)
   {
     serialize_impl_(dest);
+    return;
   }
   // slightly faster than memcpy
   switch(memory_size_) {
@@ -107,6 +111,14 @@ inline void ValuePtr::serialize(SerializeMe::SpanBytes &dest) const
   dest.trimFront(memory_size_);
 }
 
+inline size_t ValuePtr::getBufferSize() const
+{
+  if(!get_size_impl_) {
+    return memory_size_;
+  }
+  return get_size_impl_();
+}
+
 template <template <class, class> class Container, class T, class... TArgs>
 inline ValuePtr::ValuePtr(const Container<T, TArgs...>* vect)
   : v_ptr_(vect),
@@ -117,31 +129,29 @@ inline ValuePtr::ValuePtr(const Container<T, TArgs...>* vect)
   static_assert(GetBasicType<T>() != BasicType::OTHER,
                 "ValuePtr: can only accept vectors of numbers");
 
-  serialize_impl_ = [this](SerializeMe::SpanBytes& buffer) -> void
+  serialize_impl_ = [vect](SerializeMe::SpanBytes& buffer) -> void
   {
-    auto const* vect = static_cast<const Container<T, TArgs...>*>(v_ptr_);
-    SerializeMe::SerializeIntoBuffer(buffer, uint32_t(vect->size()));
-    for(const auto& val: *vect)
-    {
-      SerializeMe::SerializeIntoBuffer(buffer, val);
-    }
+    SerializeMe::SerializeIntoBuffer(buffer, *vect);
+  };
+  get_size_impl_ = [vect]()
+  {
+    return SerializeMe::BufferSize(*vect);
   };
 }
 
 template<typename T, size_t N> inline
-ValuePtr::ValuePtr(const std::array<T, N> *vect)
-  : v_ptr_(vect),
+ValuePtr::ValuePtr(const std::array<T, N> *array)
+  : v_ptr_(array),
   type_(GetBasicType<T>()),
-  memory_size_(sizeof(T)),
+  memory_size_(N * sizeof(T)),
   is_vector_(true),
   array_size_(N)
 {
   static_assert(GetBasicType<T>() != BasicType::OTHER,
                 "ValuePtr: can only accept arrays of numbers");
 
-  serialize_impl_ = [this](SerializeMe::SpanBytes& buffer) -> void
+  serialize_impl_ = [array](SerializeMe::SpanBytes& buffer) -> void
   {
-    auto const* array = static_cast<const std::array<T, N>*>(v_ptr_);
     for(size_t i=0; i<N; i++) {
       SerializeMe::SerializeIntoBuffer(buffer, (*array)[i]);
     }

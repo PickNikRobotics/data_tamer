@@ -304,7 +304,7 @@ inline size_t BufferSize(const T& val)
   else
   {
     static_assert(is_serializer_defined<T>(), "Missing specialization of class "
-                                              "Serialize<>. Check errors below");
+                                              "BufferSize<>. Check errors below");
 
     if constexpr (is_serializer_defined<T>())
     {
@@ -324,9 +324,9 @@ inline size_t BufferSize(const std::string& str)
 }
 
 template <class T, size_t N>
-inline size_t BufferSize(const std::array<T, N>& v)
+inline size_t BufferSize(const std::array<T, N>&)
 {
-  return sizeof(uint32_t) + BufferSize(T{}) * N;
+  return BufferSize(T{}) * N;
 }
 
 template <template <class, class> class Container, class T, class... TArgs>
@@ -334,7 +334,7 @@ inline size_t BufferSize(const Container<T, TArgs...>& vect)
 {
   if constexpr (std::is_trivially_copyable_v<T> && is_vector<Container<T, TArgs...>>())
   {
-    return sizeof(uint32_t) + std::size(vect) * BufferSize<T>(T{});
+    return sizeof(uint32_t) + vect.size() * sizeof(T);
   }
   else
   {
@@ -398,27 +398,19 @@ inline void DeserializeFromBuffer(SpanBytesConst& buffer, std::string& dest)
 template <typename T, size_t N>
 inline void DeserializeFromBuffer(SpanBytesConst& buffer, std::array<T, N>& dest)
 {
-  uint32_t num_values = 0;
-  DeserializeFromBuffer(buffer, num_values);
-
-  if (num_values * BufferSize(T{}) > buffer.size())
+  if (N * BufferSize(T{}) > buffer.size())
   {
     throw std::runtime_error("DeserializeFromBuffer: buffer overflow");
   }
 
-  if (N != num_values)
-  {
-    throw std::runtime_error("DeserializeFromBuffer: unexpected size");
-  }
-
   if constexpr (sizeof(T) == 1)
   {
-    memcpy(dest.data(), buffer.data(), num_values);
-    buffer.trimFront(num_values);
+    memcpy(dest.data(), buffer.data(), N);
+    buffer.trimFront(N);
   }
   else
   {
-    for (size_t i = 0; i < num_values; i++)
+    for (size_t i = 0; i < N; i++)
     {
       DeserializeFromBuffer(buffer, dest[i]);
     }

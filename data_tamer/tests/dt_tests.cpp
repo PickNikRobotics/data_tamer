@@ -139,3 +139,73 @@ TEST(DataTamer, TestRegistration)
 
   ASSERT_EQ(sink->latest_snapshot.payload.size(), expected_size);
 }
+
+TEST(DataTamer, Vector)
+{
+  ChannelsRegistry registry;
+  auto channel = registry.getChannel("chan");
+  auto sink = std::make_shared<DummySink>();
+  channel->addDataSink(sink);
+
+  std::vector<float> vect = {1, 2, 3, 4};
+
+  channel->registerValue("vect", &vect);
+
+  const auto expected_size = 4 * sizeof(float) + sizeof(uint32_t);
+
+  channel->takeSnapshot();
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  ASSERT_EQ(sink->latest_snapshot.payload.size(), expected_size);
+}
+
+TEST(DataTamer, Disable)
+{
+  ChannelsRegistry registry;
+  auto channel = registry.getChannel("chan");
+  auto sink = std::make_shared<DummySink>();
+  channel->addDataSink(sink);
+
+  double v1 = 11;
+  float v2 = 22;
+  int32_t v3 = 33;
+  uint16_t v4 = 44;
+  bool v5 = true;
+  std::array<double, 3> v6 = {1, 2, 3};
+  std::vector<float> v7 = {1, 2, 3, 4};
+
+  auto id_v1 = channel->registerValue("v1", &v1);
+  auto id_v2 = channel->registerValue("v2", &v2);
+  auto id_v3 = channel->registerValue("v3", &v3);
+  auto id_v4 = channel->registerValue("v4", &v4);
+  auto id_v5 = channel->registerValue("v5", &v5);
+  auto id_v6 = channel->registerValue("v6", &v6);
+  auto id_v7 = channel->registerValue("v7", &v7);
+
+  auto expected_size = sizeof(v1) + sizeof(v2) + sizeof(v3) +
+                       sizeof(v4) + sizeof(v5) +
+                       3 * sizeof(double) +
+                       4 * sizeof(float) + sizeof(uint32_t);
+
+  channel->takeSnapshot();
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  ASSERT_EQ(sink->latest_snapshot.payload.size(), expected_size);
+
+  auto checkSize = [&](const auto& id, int size)
+  {
+    channel->setEnabled(id, false);
+    channel->takeSnapshot();
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    channel->setEnabled(id, true);
+
+    auto expected = expected_size - size;
+    ASSERT_EQ(sink->latest_snapshot.payload.size(), expected);
+  };
+
+  checkSize(id_v1, sizeof(v1));
+  checkSize(id_v2, sizeof(v2));
+  checkSize(id_v3, sizeof(v3));
+  checkSize(id_v4, sizeof(v4));
+  checkSize(id_v5, sizeof(v5));
+  checkSize(id_v6, 3 * sizeof(double));
+  checkSize(id_v7, 4 * sizeof(float) + sizeof(uint32_t));
+}

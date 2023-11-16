@@ -20,8 +20,6 @@ struct LogChannel::Pimpl
 
   mutable Mutex mutex;
 
-  size_t payload_max_buffer_size = 0;
-
   std::vector<ValueHolder> series;
   std::unordered_map<std::string, size_t> registered_values;
 
@@ -64,7 +62,6 @@ RegistrationID LogChannel::registerValueImpl(
     const size_t index = _p->series.size() -1;
 
     _p->registered_values.insert( {name, index} );
-    _p->payload_max_buffer_size += SizeOf(type);
 
     Schema::Field field{name, type, value_ptr.isVector(), value_ptr.vectorSize()};
     _p->schema.fields.emplace_back(std::move(field));
@@ -97,7 +94,6 @@ RegistrationID LogChannel::registerValueImpl(
   if( !instance.registered )
   {
     instance.registered = true;
-    _p->payload_max_buffer_size += SizeOf(value_ptr.type());
   }
   instance.enabled = true;
   instance.holder = std::move(value_ptr);
@@ -134,9 +130,6 @@ void LogChannel::setEnabled(const RegistrationID& id, bool enable)
     if(instance.enabled != enable)
     {
       instance.enabled = enable;
-      // if changed, adjust the size of the payload
-      const auto size = SizeOf(instance.holder.type());
-      _p->payload_max_buffer_size += enable ? size : -size;
     }
   }
 }
@@ -149,7 +142,6 @@ void LogChannel::unregister(const RegistrationID& id)
     auto& instance = _p->series[id.first_index + i];
     instance.registered = false;
     instance.enabled = false;
-    _p->payload_max_buffer_size -= SizeOf(instance.holder.type());
   }
 }
 
@@ -168,8 +160,6 @@ Mutex &LogChannel::writeMutex() { return _p->mutex; }
 
 bool LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
 {
-  _p->snapshot.payload.resize(_p->payload_max_buffer_size);
-
   {
     std::lock_guard const lock(_p->mutex);
 
@@ -194,6 +184,15 @@ bool LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
         }
       }
     }
+
+    size_t payload_size = 0;
+    for (size_t i = 0; i < _p->series.size(); i++)
+    {
+      auto const& instance = _p->series[i];
+      payload_size += instance.holder.getBufferSize();
+    }
+    _p->snapshot.payload.resize(payload_size);
+
     // call sink->addChannel (usually done once)
     if( !_p->logging_started )
     {

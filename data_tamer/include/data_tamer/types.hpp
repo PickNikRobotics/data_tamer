@@ -8,7 +8,8 @@
 
 namespace DataTamer {
 
-enum class BasicType {
+enum class BasicType
+{
   BOOL,
   CHAR,
   INT8,
@@ -51,7 +52,8 @@ char const* ToStr(const BasicType& type);
 BasicType FromStr(const std::string &str);
 
 template <typename T>
-inline constexpr BasicType GetBasicType() {
+inline constexpr BasicType GetBasicType()
+{
   if constexpr (std::is_same_v<T, bool>) return BasicType::BOOL;
   if constexpr (std::is_same_v<T, char>) return BasicType::CHAR;
   if constexpr (std::is_same_v<T, std::int8_t>) return BasicType::INT8;
@@ -87,8 +89,10 @@ struct RegistrationID
 /**
  * @brief DataTamer uses a simple "flat" schema of key/value pairs (each pair is a "field").
  */
-struct Schema {
-  struct Field {
+struct Schema
+{
+  struct Field
+  {
     std::string name;
     BasicType type;
     bool is_vector = 0;
