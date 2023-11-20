@@ -25,15 +25,10 @@ static void DT_TakeSnapshot(benchmark::State& state)
   for (auto _ : state)
   {
     channel->takeSnapshot();
-
-    state.PauseTiming();
-    // give time to the queue to pop
-    std::this_thread::sleep_for(std::chrono::microseconds(50));
-    state.ResumeTiming();
   }
 }
 
 
-BENCHMARK(DT_TakeSnapshot)->Arg(125)->Arg(250)->Arg(500)->Arg(1000);
+BENCHMARK(DT_TakeSnapshot)->Arg(125)->Arg(250)->Arg(500)->Arg(1000)->Arg(2000);
 
 BENCHMARK_MAIN();

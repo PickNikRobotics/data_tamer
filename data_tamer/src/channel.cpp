@@ -23,7 +23,7 @@ struct LogChannel::Pimpl
   std::vector<ValueHolder> series;
   std::unordered_map<std::string, size_t> registered_values;
 
-  std::atomic_bool mask_dirty = true;
+  bool mask_dirty = true;
 
   Snapshot snapshot;
   Schema schema;
@@ -124,6 +124,7 @@ void LogChannel::setEnabled(const RegistrationID& id, bool enable)
     if(instance.enabled != enable)
     {
       instance.enabled = enable;
+      _p->mask_dirty = true;
     }
   }
 }

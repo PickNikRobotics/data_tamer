@@ -189,6 +189,7 @@ TEST(DataTamer, Disable)
   channel->takeSnapshot();
   std::this_thread::sleep_for(std::chrono::milliseconds(10));
   ASSERT_EQ(sink->latest_snapshot.payload.size(), expected_size);
+  ASSERT_EQ(sink->latest_snapshot.active_mask[0], 0b11111111);
 
   auto checkSize = [&](const auto& id, int size)
   {
@@ -202,10 +203,23 @@ TEST(DataTamer, Disable)
   };
 
   checkSize(id_v1, sizeof(v1));
+  ASSERT_EQ(sink->latest_snapshot.active_mask[0], 0b11111110);
+
   checkSize(id_v2, sizeof(v2));
+  ASSERT_EQ(sink->latest_snapshot.active_mask[0], 0b11111101);
+
   checkSize(id_v3, sizeof(v3));
+  ASSERT_EQ(sink->latest_snapshot.active_mask[0], 0b11111011);
+
   checkSize(id_v4, sizeof(v4));
+  ASSERT_EQ(sink->latest_snapshot.active_mask[0], 0b11110111);
+
   checkSize(id_v5, sizeof(v5));
+  ASSERT_EQ(sink->latest_snapshot.active_mask[0], 0b11101111);
+
   checkSize(id_v6, 3 * sizeof(double));
+  ASSERT_EQ(sink->latest_snapshot.active_mask[0], 0b11011111);
+
   checkSize(id_v7, 4 * sizeof(float) + sizeof(uint32_t));
+  ASSERT_EQ(sink->latest_snapshot.active_mask[0], 0b10111111);
 }
