@@ -3,14 +3,25 @@
 [![cmake Ubuntu](https://github.com/facontidavide/data_tamer/actions/workflows/cmake_ubuntu.yml/badge.svg)](https://github.com/facontidavide/data_tamer/actions/workflows/cmake_ubuntu.yml)
 [![codecov](https://codecov.io/gh/facontidavide/data_tamer/graph/badge.svg?token=D0wtsntWds)](https://codecov.io/gh/facontidavide/data_tamer)
 
-**DataTamer** is a spiritual successor of [pal_statistics](https://github.com/pal-robotics/pal_statistics).
+When we talk about "logging", most of the time we refer to human-readable
+messages (strings) with different severity levels (INFO, ERROR, DEBUG, etc.).
+ 
+**DataTamer** solves a different problems: it logs/traces numerical values over time and
+periodically takes "snapshots" of these values, to later visualize them as timeseries.
 
-Its purpose is to trace **numerical** values in your application and export them into a
-format that allows users to visualize them as timeseries, 
-for instance in [PlotJuggler](https://github.com/facontidavide/PlotJuggler).
+As such, it is a great complement of [PlotJuggler](https://github.com/facontidavide/PlotJuggler),
+the timeseries visualization tool (note, you will need PlotJuggler 3.8 or later).
 
-All the values are aggregated in a single "snapshot", for this reason, it is particularly 
-suited to record data in a periodic loop (very frequent in robotics applications).
+**DataTamer** is your "fearless" C++ library to log numerical data:
+
+- Track hundreds or thousands of variables: even 1 million points per seconds 
+should have a negligible CPU overhead.
+- Perfect for real-time application: the code in the "hot" thread has very low latency.
+
+Kudos to [pal_statistics](https://github.com/pal-robotics/pal_statistics), for inspiring this project.
+
+Since all the values are aggregated in a single "snapshot", it is particularly 
+suited to record data in a periodic loop (very frequent use case in robotics applications).
 
 ## Features
 
@@ -24,15 +35,15 @@ Available sinks:
 
 - Direct [MCAP](https://mcap.dev/) recording.
 - `DummySink`, mostly useful for debugging and unit testing.
-- ROS2 publisher (coming soon). 
+- ROS2 publisher. 
 
 ## Limitations
 
 - Traced variables can not be added (registered) once the recording starts.
-- Can only be used with triavially copiable objects (therefore, no variable size vectors).
+- Variable size vectors are supported, but only for numerical values (not complex types).
 - Focused on periodic recording. Not the best option for sporadic, asynchornous events.
 - If you use `DataTamer::registerValue` you must be careful about the lifetime of the
-object. If you prefer a safer interface, use `DataTamer::createLoggedValue` instead.
+object. If you prefer a safer RAII interface, use `DataTamer::createLoggedValue` instead.
 
 # Example
 
@@ -53,7 +64,7 @@ int main()
   // global registry (singleton-like interface)
   auto channel = ChannelsRegistry::Global().getChannel("my_channel");
 
-  // If you don't want to use addDefaultSink, you can do it manually:
+  // If you don't want to use addDefaultSink, you can attach the sink manually:
   // channel->addDataSink(dummy_sink);
 
   // You can register any arithmetic value. You are responsible for their lifetime
@@ -90,7 +101,7 @@ Assuming conan 2.x installed. From the source directory.
 
 ```
 conan install . -s compiler.cppstd=gnu17 --build=missing -s build_type=Release
-cmake -S . -B build/Release/ -DCMAKE_BUILD_TYPE=Release \
+cmake -S . -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_TOOLCHAIN_FILE="build/Release/generators/conan_toolchain.cmake"
 cmake --build build/Release/ --parallel
 ```
@@ -99,7 +110,7 @@ cmake --build build/Release/ --parallel
 
 ```
 conan install . -s compiler.cppstd=gnu17 --build=missing -s build_type=Debug
-cmake -S . -B build/Debug/ -DCMAKE_BUILD_TYPE=Debug \
+cmake -S . -DCMAKE_BUILD_TYPE=Debug \
       -DCMAKE_TOOLCHAIN_FILE="build/Debug/generators/conan_toolchain.cmake"
 cmake --build build/Debug/ --parallel
 ```

@@ -256,6 +256,7 @@ inline std::optional<Schema> BuilSchemaFromText(const std::string& txt)
   std::istringstream ss(txt);
   std::string line;
   Schema schema;
+
   while (std::getline(ss, line))
   {
     trimString(line);
