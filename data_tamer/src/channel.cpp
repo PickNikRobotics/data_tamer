@@ -67,13 +67,7 @@ RegistrationID LogChannel::registerValueImpl(
     _p->schema.fields.emplace_back(std::move(field));
 
     // update schema and its hash (append only)
-    // https://stackoverflow.com/questions/2590677/how-do-i-combine-hash-values-in-c0x
-    std::hash<std::string> str_hasher;
-    std::hash<BasicType> type_hasher;
-
-    auto& hash = _p->schema.hash;
-    hash ^= str_hasher(name) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
-    hash ^= type_hasher(type) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
+    AddFieldToHash(field, _p->schema.hash);
 
     return {index, 1};
   }

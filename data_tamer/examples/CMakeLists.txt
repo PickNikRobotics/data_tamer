@@ -2,14 +2,19 @@
 function(CompileExample TARGET)
     add_executable(${TARGET} ${TARGET}.cpp)
     target_include_directories(${TARGET}
-     PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include>)
+     PUBLIC $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>)
     target_link_libraries(${TARGET} data_tamer)
 endfunction()
-
 
 CompileExample(example)
 CompileExample(custom_types)
 CompileExample(mcap_1m_per_sec)
+CompileExample(mcap_writer_sample)
+
+add_executable(mcap_reader mcap_reader.cpp)
+target_include_directories(mcap_reader
+ PUBLIC $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>)
+target_link_libraries(mcap_reader data_tamer mcap::mcap)
 
 if ( ament_cmake_FOUND )
     CompileExample(ros2_publisher)

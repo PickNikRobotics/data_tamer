@@ -1,6 +1,7 @@
 #include "data_tamer/sinks/mcap_sink.hpp"
 #include "data_tamer/contrib/SerializeMe.hpp"
 
+#include <sstream>
 #include <mutex>
 
 #ifndef USING_ROS2
@@ -8,6 +9,7 @@
 #endif
 
 #include <mcap/writer.hpp>
+#include <mcap/reader.hpp>
 
 #if defined __has_include && __has_include ("boost/container/small_vector.hpp")
 #include <boost/container/small_vector.hpp>
@@ -63,10 +65,11 @@ void MCAPSink::addChannel(std::string const& channel_name,
   }
 
   // write the schema, one entry per line
-  std::string schema_str;
-  for (auto const& entry : schema.fields) {
-    schema_str += entry.name + " " + ToStr(entry.type) + "\n";
+  std::stringstream ss;
+  for (auto const& field : schema.fields) {
+    ss << field << "\n";
   }
+  std::string schema_str = ss.str();
 
   auto const schema_name =
       channel_name + "::" + std::to_string(schema.hash);

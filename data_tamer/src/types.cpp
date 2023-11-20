@@ -6,7 +6,7 @@
 
 namespace DataTamer {
 
-static constexpr std::array<const char*, TypesCount> kNames = {
+static const std::array<std::string, TypesCount> kNames = {
     "bool", "char",
     "int8", "uint8",
     "int16", "uint16",
@@ -16,7 +16,7 @@ static constexpr std::array<const char*, TypesCount> kNames = {
     "other"
 };
 
-const char* ToStr(const BasicType& type)
+const std::string& ToStr(const BasicType& type)
 {
   return kNames[static_cast<size_t>(type)];
 }
@@ -81,6 +81,58 @@ VarNumber DeserializeAsVarType(const BasicType &type, const void *data)
       return double(std::numeric_limits<double>::quiet_NaN());
   }
   return {};
+}
+
+void AddFieldToHash(const Schema::Field &field, uint64_t &hash)
+{
+  // https://stackoverflow.com/questions/2590677/how-do-i-combine-hash-values-in-c0x
+  const std::hash<std::string> str_hasher;
+  const std::hash<BasicType> type_hasher;
+  const std::hash<bool> bool_hasher;
+  const std::hash<uint16_t> uint_hasher;
+
+  hash ^= str_hasher(field.name) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
+  hash ^= type_hasher(field.type) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
+  hash ^= bool_hasher(field.is_vector) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
+  hash ^= uint_hasher(field.array_size) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
+}
+
+std::ostream& operator<<(std::ostream &os, const Schema::Field &field)
+{
+  os << ToStr(field.type);
+  if(field.is_vector && field.array_size != 0)
+  {
+    os <<"[" << field.array_size << "]";
+  }
+  if(field.is_vector && field.array_size == 0)
+  {
+    os <<"[]";
+  }
+  os << ' ' << field.name;
+  return os;
+}
+
+std::ostream& operator<<(std::ostream &os, const Schema &schema)
+{
+  os << "hash: " << schema.hash << "\n";
+  for(const auto& field: schema.fields)
+  {
+    os << field << "\n";
+  }
+  return os;
+}
+
+bool Schema::Field::operator==(const Field &other) const
+{
+  return is_vector == other.is_vector &&
+         type == other.type &&
+         array_size == other.array_size &&
+         name == other.name;
+}
+
+bool Schema::Field::operator!=(const Field &other) const
+{
+  return !(*this == other);
 }
 
 

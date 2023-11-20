@@ -46,7 +46,7 @@ VarNumber DeserializeAsVarType(const BasicType& type, const void* data);
 size_t SizeOf(const BasicType& type);
 
 /// Return the name of the type
-char const* ToStr(const BasicType& type);
+const std::string &ToStr(const BasicType& type);
 
 /// Convert string to its type
 BasicType FromStr(const std::string &str);
@@ -98,34 +98,18 @@ struct Schema
     bool is_vector = 0;
     uint16_t array_size = 0;
 
-    friend std::ostream& operator<<(std::ostream& os, const Field& field)
-    {
-      os << ToStr(field.type);
-      if(field.is_vector && field.array_size != 0)
-      {
-        os <<"[" << field.array_size << "]";
-      }
-      if(field.is_vector && field.array_size == 0)
-      {
-        os <<"[]";
-      }
-      os << ' ' << field.name;
-      return os;
-    }
+    bool operator==(const Field& other) const;
+    bool operator!=(const Field& other) const;
+
+    friend std::ostream& operator<<(std::ostream& os, const Field& field);
   };
   std::vector<Field> fields;
   uint64_t hash = 0;
 
-  friend std::ostream& operator<<(std::ostream& os, const Schema& schema)
-  {
-    os << "hash: " << schema.hash << "\n";
-    for(const auto& field: schema.fields)
-    {
-      os << field << "\n";
-    }
-    return os;
-  }
+  friend std::ostream& operator<<(std::ostream& os, const Schema& schema);
 };
 
+
+void AddFieldToHash(const Schema::Field& field, uint64_t& hash);
 
 }  // namespace DataTamer
