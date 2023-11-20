@@ -27,7 +27,7 @@ static void DT_TakeSnapshot(benchmark::State& state)
     channel->takeSnapshot();
 
     state.PauseTiming();
-    // give time to the que to pop
+    // give time to the queue to pop
     std::this_thread::sleep_for(std::chrono::microseconds(50));
     state.ResumeTiming();
   }
