@@ -87,7 +87,7 @@ class DataSinkBase {
    *
    * @return false if the queue is full and snapshot was not pushed
    */
-  bool pushSnapshot(const Snapshot& snapshot);
+  virtual bool pushSnapshot(const Snapshot& snapshot);
 
 protected:
   /**

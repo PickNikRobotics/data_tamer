@@ -70,6 +70,8 @@ if ( ament_cmake_FOUND )
     ament_package()
 else()
     find_package(mcap REQUIRED)
+    find_package(benchmark QUIET)
+
     target_link_libraries(data_tamer PRIVATE mcap::mcap)
 endif()
 
@@ -126,5 +128,10 @@ if(DATA_TAMER_BUILD_EXAMPLES)
     add_subdirectory(examples)
 endif()
 
+if(benchmark_FOUND)
+    add_subdirectory(benchmarks)
+else()
+    message("Google Benchmark library not found")
+endif()
 
 
