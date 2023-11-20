@@ -6,7 +6,7 @@
 When we talk about "logging", most of the time we refer to human-readable
 messages (strings) with different severity levels (INFO, ERROR, DEBUG, etc.).
  
-**DataTamer** solves a different problems: it logs/traces numerical values over time and
+**DataTamer** solves a different problem: it logs/traces numerical values over time and
 periodically takes "snapshots" of these values, to later visualize them as timeseries.
 
 As such, it is a great complement of [PlotJuggler](https://github.com/facontidavide/PlotJuggler),
@@ -14,19 +14,19 @@ the timeseries visualization tool (note, you will need PlotJuggler 3.8 or later)
 
 **DataTamer** is your "fearless" C++ library to log numerical data:
 
-- Track hundreds or thousands of variables: even 1 million points per seconds 
+- Track hundreds or thousands of variables: even 1 million points per second 
 should have a negligible CPU overhead.
-- Perfect for real-time application: the code in the "hot" thread has very low latency.
+- Perfect for real-time applications: the code in the "hot" thread has very low latency, no matter how the data is saved.
 
 Kudos to [pal_statistics](https://github.com/pal-robotics/pal_statistics), for inspiring this project.
 
 Since all the values are aggregated in a single "snapshot", it is particularly 
-suited to record data in a periodic loop (very frequent use case in robotics applications).
+suited to record data in a periodic loop (a very frequent use case in robotics applications).
 
 ## Features
 
 - **Serialization schema is created at run-time**: no need to do any code generation.
-- **Suitable for real-time applications**: very low-latency (on the side of the callee).
+- **Suitable for real-time applications**: very low latency (on the side of the callee).
 - **Multi-sink architecture**: recorded data can be forwarded to multiple "backends". 
 - **Very low serialization overhead**, in the order of 1 bit per traced value.
 - The user can enable/disable traced variables at run-time.
@@ -41,7 +41,7 @@ Available sinks:
 
 - Traced variables can not be added (registered) once the recording starts.
 - Variable size vectors are supported, but only for numerical values (not complex types).
-- Focused on periodic recording. Not the best option for sporadic, asynchornous events.
+- Focused on periodic recording. Not the best option for sporadic, asynchronous events.
 - If you use `DataTamer::registerValue` you must be careful about the lifetime of the
 object. If you prefer a safer RAII interface, use `DataTamer::createLoggedValue` instead.
 
