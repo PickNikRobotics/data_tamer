@@ -2,6 +2,18 @@
 Changelog for package data_tamer
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Forthcoming
+-----------
+* add again channel name to hash
+* bug fixes in schema hash and parsing
+* add benchmark
+* readme update
+* added data_tamer_parser with some samples and testing
+* add locked reference
+* bug fixes and tests
+* refactored API to support containers
+* Contributors: Davide Faconti
+
 0.3.0 (2023-11-14)
 ------------------
 * add coverage
