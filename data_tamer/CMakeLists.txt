@@ -56,7 +56,7 @@ if(CMAKE_COMPILER_IS_GNUCXX AND ENABLE_COVERAGE)
         NAME ctest_coverage
         EXECUTABLE ctest
         DEPENDENCIES datatamer_test
-        EXCLUDE "3rdparty/*")
+        EXCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/*")
 endif()
 
 target_compile_features(data_tamer PUBLIC cxx_std_17)
