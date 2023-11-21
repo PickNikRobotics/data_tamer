@@ -118,6 +118,7 @@ std::ostream& operator<<(std::ostream &os, const Schema &schema)
 {
   os << "__version__: " << SCHEMA_VERSION << "\n";
   os << "__hash__: " << schema.hash << "\n";
+  os << "__channel_name__: " << schema.channel_name << "\n";
   for(const auto& field: schema.fields)
   {
     os << field << "\n";

@@ -79,6 +79,7 @@ struct Schema
   };
   std::vector<Field> fields;
   uint64_t hash = 0;
+  std::string channel_name;
 };
 
 Schema BuilSchemaFromText(const std::string& txt);
@@ -281,6 +282,15 @@ inline Schema BuilSchemaFromText(const std::string& txt)
       // check compatibility
       line.erase(0, sizeof("__hash__:"));
       declared_schema = std::stoul(line);
+      continue;
+    }
+
+    if(line.find("__channel_name__:") != std::string::npos)
+    {
+      // check compatibility
+      line.erase(0, sizeof("__channel_name__:"));
+      schema.channel_name = line;
+      schema.hash = std::hash<std::string>()(schema.channel_name);
       continue;
     }
 

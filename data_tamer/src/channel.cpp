@@ -96,6 +96,8 @@ RegistrationID LogChannel::registerValueImpl(
 
 LogChannel::LogChannel(std::string name) : _p(new Pimpl)
 {
+  _p->schema.hash = std::hash<std::string>()(name);
+  _p->schema.channel_name = name;
   _p->channel_name = std::move(name);
 }
 
@@ -191,6 +193,7 @@ bool LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
     {
       _p->logging_started = true;
       _p->snapshot.schema_hash = _p->schema.hash;
+      _p->snapshot.channel_name = channelName();
       for(auto const& sink: _p->sinks)
       {
         sink->addChannel(_p->channel_name, _p->schema);

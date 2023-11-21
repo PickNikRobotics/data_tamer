@@ -107,6 +107,7 @@ struct Schema
   };
   std::vector<Field> fields;
   uint64_t hash = 0;
+  std::string channel_name;
 
   friend std::ostream& operator<<(std::ostream& os, const Schema& schema);
 };

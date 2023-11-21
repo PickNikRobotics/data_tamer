@@ -15,10 +15,6 @@
 
 namespace DataTamer {
 
-//const size_t kMaxValues = 1024;
-//using ActiveMask = boost::container::small_vector<uint8_t, kMaxValues/8>;
-//using PayloadVector = boost::container::small_vector<uint8_t, kMaxValues*8>;
-
 using ActiveMask = std::vector<uint8_t>;
 using PayloadVector = std::vector<uint8_t>;
 
@@ -26,6 +22,9 @@ bool GetBit(const ActiveMask& mask, size_t index);
 void SetBit(ActiveMask& mask, size_t index, bool val);
 
 struct Snapshot {
+
+  std::string_view channel_name;
+
   /// Unique identifier of the schema
   std::size_t schema_hash;
 

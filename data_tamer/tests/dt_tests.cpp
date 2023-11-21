@@ -7,6 +7,15 @@
 
 using namespace DataTamer;
 
+TEST(DataTamer, BasicTypes)
+{
+  for(size_t i=0; i<TypesCount; i++)
+  {
+    auto type = static_cast<BasicType>(i);
+    ASSERT_EQ( FromStr(ToStr(type)), type);
+  }
+}
+
 TEST(DataTamer, SinkAdd)
 {
   auto dummy_sink_A = std::make_shared<DummySink>();
