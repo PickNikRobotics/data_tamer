@@ -1,4 +1,5 @@
 #include "data_tamer/data_tamer.hpp"
+#include <unordered_map>
 #include <mutex>
 
 namespace DataTamer
