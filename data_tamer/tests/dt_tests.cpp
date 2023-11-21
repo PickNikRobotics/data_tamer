@@ -1,9 +1,11 @@
 #include "data_tamer/data_tamer.hpp"
 #include "data_tamer/sinks/dummy_sink.hpp"
+
 #include <gtest/gtest.h>
+
 #include <variant>
 #include <string>
-
+#include <thread>
 
 using namespace DataTamer;
 

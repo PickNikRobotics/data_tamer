@@ -2,16 +2,13 @@
 
 #include "data_tamer/types.hpp"
 
-#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
-#include <thread>
-
-// #include <boost/container/small_vector.hpp>
 
 namespace DataTamer {
 
