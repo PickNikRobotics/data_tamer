@@ -193,7 +193,6 @@ bool LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
     {
       _p->logging_started = true;
       _p->snapshot.schema_hash = _p->schema.hash;
-      _p->snapshot.channel_name = channelName();
       for(auto const& sink: _p->sinks)
       {
         sink->addChannel(_p->channel_name, _p->schema);
@@ -201,6 +200,8 @@ bool LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
     }
 
     _p->snapshot.timestamp = timestamp;
+    _p->snapshot.channel_name = channelName();
+
     // serialize data into _p->snapshot.payload
     SerializeMe::SpanBytes payload_buffer(_p->snapshot.payload);
 
