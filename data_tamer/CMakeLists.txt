@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.14)
 
-project(data_tamer LANGUAGES CXX VERSION 0.4.0)
+project(data_tamer LANGUAGES C CXX VERSION 0.4.0)
 
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -43,6 +43,21 @@ add_library(data_tamer STATIC
     ${ROS2_SINK}
     include/data_tamer/details/mutex.hpp
 )
+
+if(CMAKE_COMPILER_IS_GNUCXX AND ENABLE_COVERAGE)
+
+    set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
+
+    include(CheckCXXCompilerFlag)
+    include(CodeCoverage)
+
+    append_coverage_compiler_flags_to_target(data_tamer)
+    setup_target_for_coverage_gcovr_xml(
+        NAME ctest_coverage
+        EXECUTABLE ctest
+        DEPENDENCIES datatamer_test
+        EXCLUDE "3rdparty/*")
+endif()
 
 target_compile_features(data_tamer PUBLIC cxx_std_17)
 target_include_directories(data_tamer
