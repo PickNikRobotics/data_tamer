@@ -64,11 +64,8 @@ void MCAPSink::addChannel(std::string const& channel_name,
     return;
   }
 
-  // write the schema, one entry per line
   std::stringstream ss;
-  for (auto const& field : schema.fields) {
-    ss << field << "\n";
-  }
+  ss << schema;
   std::string schema_str = ss.str();
 
   auto const schema_name =

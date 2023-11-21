@@ -1,6 +1,7 @@
 #include "data_tamer/types.hpp"
 #include <array>
 #include <cstring>
+#include <iostream>
 #include <limits>
 #include <unordered_map>
 
@@ -83,7 +84,7 @@ VarNumber DeserializeAsVarType(const BasicType &type, const void *data)
   return {};
 }
 
-void AddFieldToHash(const Schema::Field &field, uint64_t &hash)
+uint64_t AddFieldToHash(const Schema::Field &field, uint64_t hash)
 {
   // https://stackoverflow.com/questions/2590677/how-do-i-combine-hash-values-in-c0x
   const std::hash<std::string> str_hasher;
@@ -95,6 +96,7 @@ void AddFieldToHash(const Schema::Field &field, uint64_t &hash)
   hash ^= type_hasher(field.type) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
   hash ^= bool_hasher(field.is_vector) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
   hash ^= uint_hasher(field.array_size) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
+  return hash;
 }
 
 std::ostream& operator<<(std::ostream &os, const Schema::Field &field)
@@ -114,7 +116,8 @@ std::ostream& operator<<(std::ostream &os, const Schema::Field &field)
 
 std::ostream& operator<<(std::ostream &os, const Schema &schema)
 {
-  os << "hash: " << schema.hash << "\n";
+  os << "__version__: " << SCHEMA_VERSION << "\n";
+  os << "__hash__: " << schema.hash << "\n";
   for(const auto& field: schema.fields)
   {
     os << field << "\n";

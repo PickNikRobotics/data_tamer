@@ -35,25 +35,25 @@ public:
   ValuePtr(ValuePtr&& other) = default;
   ValuePtr& operator=(ValuePtr&& other) = default;
 
-  bool operator==(const ValuePtr& other) const;
+  [[nodiscard]] bool operator==(const ValuePtr& other) const;
 
-  bool operator!=(const ValuePtr& other) const
+  [[nodiscard]] bool operator!=(const ValuePtr& other) const
   {
     return !(*this == other);
   }
 
   void serialize(SerializeMe::SpanBytes& dest) const;
 
-  size_t getBufferSize() const;
+  [[nodiscard]] size_t getBufferSize() const;
 
   /// Get the type of the stored variable pointer
   [[nodiscard]] BasicType type() const { return type_; }
 
-  bool isVector() const {
+  [[nodiscard]] bool isVector() const {
     return is_vector_;
   }
 
-  uint16_t vectorSize() const {
+  [[nodiscard]] uint16_t vectorSize() const {
     return array_size_;
   }
 

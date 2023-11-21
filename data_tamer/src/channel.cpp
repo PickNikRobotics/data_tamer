@@ -64,10 +64,10 @@ RegistrationID LogChannel::registerValueImpl(
     _p->registered_values.insert( {name, index} );
 
     Schema::Field field{name, type, value_ptr.isVector(), value_ptr.vectorSize()};
-    _p->schema.fields.emplace_back(std::move(field));
-
     // update schema and its hash (append only)
-    AddFieldToHash(field, _p->schema.hash);
+    _p->schema.hash = AddFieldToHash(field, _p->schema.hash);
+
+    _p->schema.fields.emplace_back(std::move(field));
 
     return {index, 1};
   }
@@ -97,8 +97,6 @@ RegistrationID LogChannel::registerValueImpl(
 LogChannel::LogChannel(std::string name) : _p(new Pimpl)
 {
   _p->channel_name = std::move(name);
-  std::hash<std::string> str_hasher;
-  _p->schema.hash = str_hasher(_p->channel_name);
 }
 
 std::shared_ptr<LogChannel> LogChannel::create(std::string name)

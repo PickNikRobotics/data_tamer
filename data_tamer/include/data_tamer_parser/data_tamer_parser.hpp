@@ -3,6 +3,7 @@
 #include <array>
 #include <cstdint>
 #include <cstring>
+#include <iostream>
 #include <sstream>
 #include <string>
 #include <optional>
@@ -12,11 +13,10 @@
 #include <limits>
 #include <functional>
 
-#define DATA_TAMER_PROTOCOL "0.4"
-#define DATA_TAMER_PROTOCOL_MAJOR 0
-#define DATA_TAMER_PROTOCOL_MINOR 4
 
 namespace DataTamerParser {
+
+constexpr int SCHEMA_VERSION = 2;
 
 enum class BasicType
 {
@@ -81,7 +81,7 @@ struct Schema
   uint64_t hash = 0;
 };
 
-std::optional<Schema> BuilSchemaFromText(const std::string& txt);
+Schema BuilSchemaFromText(const std::string& txt);
 
 struct BufferSpan
 {
@@ -215,7 +215,7 @@ inline bool GetBit(BufferSpan mask, size_t index)
   return 0 != (byte & uint8_t(1 << (index % 8)));
 }
 
-inline void AddFieldToHash(const Schema::Field &field, uint64_t &hash)
+[[nodiscard]] inline uint64_t AddFieldToHash(const Schema::Field &field, uint64_t hash)
 {
   const std::hash<std::string> str_hasher;
   const std::hash<BasicType> type_hasher;
@@ -226,6 +226,7 @@ inline void AddFieldToHash(const Schema::Field &field, uint64_t &hash)
   hash ^= type_hasher(field.type) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
   hash ^= bool_hasher(field.is_vector) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
   hash ^= uint_hasher(field.array_size) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
+  return hash;
 }
 
 bool Schema::Field::operator==(const Field &other) const
@@ -236,7 +237,7 @@ bool Schema::Field::operator==(const Field &other) const
          name == other.name;
 }
 
-inline std::optional<Schema> BuilSchemaFromText(const std::string& txt)
+inline Schema BuilSchemaFromText(const std::string& txt)
 {
   auto startWith = [](const std::string& str, const std::string& match) -> bool
   {
@@ -256,6 +257,7 @@ inline std::optional<Schema> BuilSchemaFromText(const std::string& txt)
   std::istringstream ss(txt);
   std::string line;
   Schema schema;
+  uint64_t declared_schema = 0;
 
   while (std::getline(ss, line))
   {
@@ -264,6 +266,24 @@ inline std::optional<Schema> BuilSchemaFromText(const std::string& txt)
     {
       continue;
     }
+    if(line.find("__version__:") != std::string::npos)
+    {
+      // check compatibility
+      line.erase(0, sizeof("__version__:"));
+      if(std::stoi(line) != SCHEMA_VERSION)
+      {
+        throw std::runtime_error("Wrong SCHEMA_VERSION");
+      }
+      continue;
+    }
+    if(line.find("__hash__:") != std::string::npos)
+    {
+      // check compatibility
+      line.erase(0, sizeof("__hash__:"));
+      declared_schema = std::stoul(line);
+      continue;
+    }
+
     Schema::Field field;
 
     for(size_t i=0; i<TypesCount; i++)
@@ -278,7 +298,7 @@ inline std::optional<Schema> BuilSchemaFromText(const std::string& txt)
     }
     if(field.type == BasicType::OTHER)
     {
-      continue;
+      throw std::runtime_error(std::string("Unrecognize line: ")+line);
     }
 
     auto offset = ToStr(field.type).size();
@@ -290,13 +310,7 @@ inline std::optional<Schema> BuilSchemaFromText(const std::string& txt)
       {
         // get number
         std::string sub_string = line.substr(offset+1, pos - offset);
-        try {
-          field.array_size = std::stoi(sub_string);
-        }
-        catch(...)
-        {
-          return std::nullopt;
-        }
+        field.array_size = std::stoi(sub_string);
       }
     }
     offset = line.find(' ', offset);
@@ -304,9 +318,13 @@ inline std::optional<Schema> BuilSchemaFromText(const std::string& txt)
     trimString(field.name);
 
     // update the hash
-    AddFieldToHash(field, schema.hash);
+    schema.hash = AddFieldToHash(field, schema.hash);
 
     schema.fields.push_back(field);
+  }
+  if(declared_schema != 0 && declared_schema != schema.hash)
+  {
+    throw std::runtime_error("Error in hash calculation");
   }
   return schema;
 }

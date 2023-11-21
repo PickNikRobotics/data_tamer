@@ -1,4 +1,5 @@
 #include "data_tamer_parser/data_tamer_parser.hpp"
+#include "data_tamer/data_tamer.hpp"
 
 #include <gtest/gtest.h>
 #include <variant>
@@ -19,10 +20,8 @@ char[256] blob
 uint16  my/short
   )";
 
-  auto res = BuilSchemaFromText(text);
-  ASSERT_TRUE(res);
+  const auto schema = BuilSchemaFromText(text);
 
-  const auto& schema = *res;
   ASSERT_EQ(schema.fields.size(), 7);
 
   Schema::Field field0 = {"v1", BasicType::INT8, false, 0};
@@ -45,4 +44,44 @@ uint16  my/short
 
   Schema::Field field6 = {"my/short", BasicType::UINT16, false, 0};
   ASSERT_EQ(schema.fields[6], field6);
+}
+
+TEST(DataTamerParser, SchemaHash)
+{
+  // Create (or get) a channel using the global registry (singleton)
+  auto channel = DataTamer::ChannelsRegistry::Global().getChannel("channel");
+
+  // logs in channelA
+  std::vector<double> v1(10, 0);
+//  std::array<float, 4> v2 = {1, 2, 3, 4};
+//  int32_t v3 = 5;
+//  uint16_t v4 = 6;
+//  double v5 = 10;
+//  uint16_t v6 = 11;
+//  std::vector<uint8_t> v7(4, 12);
+//  std::array<uint32_t, 3> v8 = {13, 14, 15};
+
+  channel->registerValue("vector_10", &v1);
+//  channel->registerValue("array_4", &v2);
+//  channel->registerValue("val_int32", &v3);
+//  channel->registerValue("val_int16", &v4);
+//  channel->registerValue("real_value", &v5);
+//  channel->registerValue("short_int", &v6);
+//  channel->registerValue("vector_4", &v7);
+//  channel->registerValue("array_3", &v8);
+
+  const auto schema_in = channel->getSchema();
+  std::ostringstream ss;
+  ss << schema_in;
+
+  const auto& schema_out = BuilSchemaFromText(ss.str());
+
+  ASSERT_EQ(schema_out.fields[0].name, "vector_10");
+//  ASSERT_EQ(schema_out.fields[1].name, "array_4");
+//  ASSERT_EQ(schema_out.fields[2].name, "val_int32");
+//  ASSERT_EQ(schema_out.fields[3].name, "val_int16");
+//  ASSERT_EQ(schema_out.fields[4].name, "real_value");
+//  ASSERT_EQ(schema_out.fields[5].name, "short_int");
+//  ASSERT_EQ(schema_out.fields[6].name, "vector_4");
+//  ASSERT_EQ(schema_out.fields[7].name, "array_3");
 }

@@ -58,14 +58,14 @@ public:
   void set(const T& value, bool auto_enable = false);
 
   /// @brief get the stored value.
-  T get();
+  [[nodiscard]] T get();
 
-  LockedRef<T, Mutex> getLockedReference();
+  [[nodiscard]] LockedRef<T, Mutex> getLockedReference();
 
   /// @brief Disabling a LoggedValue means that we will not record it in the snapshot
   void setEnabled(bool enabled);
 
-  bool isEnabled() const { return enabled_; }
+  [[nodiscard]] bool isEnabled() const { return enabled_; }
 
 private:
   std::weak_ptr<LogChannel> channel_;
@@ -234,8 +234,8 @@ private:
   struct Pimpl;
   std::unique_ptr<Pimpl> _p;
 
-  RegistrationID registerValueImpl(const std::string& name,
-                                   ValuePtr&& value_ptr);
+  [[nodiscard]] RegistrationID registerValueImpl(const std::string& name,
+                                                 ValuePtr&& value_ptr);
 };
 
 //----------------------------------------------------------------------

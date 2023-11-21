@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.14)
 
-project(data_tamer LANGUAGES CXX VERSION 0.3.3)
+project(data_tamer LANGUAGES CXX VERSION 0.4.0)
 
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -52,6 +52,7 @@ target_include_directories(data_tamer
  PRIVATE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/3rdparty>
 )
+target_compile_definitions(data_tamer PUBLIC -DDATA_TAMER_VERSION="${CMAKE_PROJECT_VERSION}")
 
 # detect if compiling in ROS2
 find_package(ament_cmake QUIET)

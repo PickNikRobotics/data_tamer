@@ -8,6 +8,8 @@
 
 namespace DataTamer {
 
+constexpr int SCHEMA_VERSION = 2;
+
 enum class BasicType
 {
   BOOL,
@@ -40,16 +42,16 @@ using VarNumber = std::variant<
     float, double >;
 
 /// Reverse operation of ValuePtr::serialize
-VarNumber DeserializeAsVarType(const BasicType& type, const void* data);
+[[nodiscard]] VarNumber DeserializeAsVarType(const BasicType& type, const void* data);
 
 /// Return the number of bytes needed to serialize the type
-size_t SizeOf(const BasicType& type);
+[[nodiscard]] size_t SizeOf(const BasicType& type);
 
 /// Return the name of the type
-const std::string &ToStr(const BasicType& type);
+[[nodiscard]] const std::string &ToStr(const BasicType& type);
 
 /// Convert string to its type
-BasicType FromStr(const std::string &str);
+[[nodiscard]] BasicType FromStr(const std::string &str);
 
 template <typename T>
 inline constexpr BasicType GetBasicType()
@@ -110,6 +112,6 @@ struct Schema
 };
 
 
-void AddFieldToHash(const Schema::Field& field, uint64_t& hash);
+[[nodiscard]]  uint64_t AddFieldToHash(const Schema::Field& field, uint64_t hash);
 
 }  // namespace DataTamer
