@@ -320,7 +320,7 @@ inline Schema BuilSchemaFromText(const std::string& txt)
       {
         // get number
         std::string sub_string = line.substr(offset+1, pos - offset);
-        field.array_size = std::stoi(sub_string);
+        field.array_size = static_cast<uint16_t>(std::stoi(sub_string));
       }
     }
     offset = line.find(' ', offset);

@@ -192,24 +192,24 @@ TEST(DataTamer, Disable)
   auto id_v6 = channel->registerValue("v6", &v6);
   auto id_v7 = channel->registerValue("v7", &v7);
 
-  auto expected_size = sizeof(v1) + sizeof(v2) + sizeof(v3) +
-                       sizeof(v4) + sizeof(v5) +
-                       3 * sizeof(double) +
-                       4 * sizeof(float) + sizeof(uint32_t);
+  size_t expected_size = sizeof(v1) + sizeof(v2) + sizeof(v3) +
+                         sizeof(v4) + sizeof(v5) +
+                         3 * sizeof(double) +
+                         4 * sizeof(float) + sizeof(uint32_t);
 
   channel->takeSnapshot();
   std::this_thread::sleep_for(std::chrono::milliseconds(10));
   ASSERT_EQ(sink->latest_snapshot.payload.size(), expected_size);
   ASSERT_EQ(sink->latest_snapshot.active_mask[0], 0b11111111);
 
-  auto checkSize = [&](const auto& id, int size)
+  auto checkSize = [&](const auto& id, size_t size)
   {
     channel->setEnabled(id, false);
     channel->takeSnapshot();
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
     channel->setEnabled(id, true);
 
-    auto expected = expected_size - size;
+    size_t expected = expected_size - size;
     ASSERT_EQ(sink->latest_snapshot.payload.size(), expected);
   };
 

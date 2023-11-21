@@ -15,7 +15,7 @@ public:
 
 static void DT_TakeSnapshot(benchmark::State& state)
 {
-  std::vector<float> values(state.range(0));
+  std::vector<float> values(size_t(state.range(0)));
 
   auto channel = ChannelsRegistry::Global().getChannel("channel");
   channel->addDataSink(std::make_shared<NullSink>());

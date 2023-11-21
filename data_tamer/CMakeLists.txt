@@ -16,7 +16,11 @@ endif()
 if (MSVC)
     add_compile_options(/W4 /WX)
 else()
-    add_compile_options(-Wall -Wextra -Werror -pedantic)
+    add_compile_options(-Wall -Wcast-align -Wconversion -Wdouble-promotion -Wextra -Wimplicit-fallthrough
+        -Wno-deprecated-declarations -Wno-ignored-attributes -Wno-unused-parameter
+        -Wnon-virtual-dtor -Wno-unused-variable -Wnull-dereference -Wold-style-cast
+        -Woverloaded-virtual -Wshadow -Wsign-conversion
+        -Werror -Wpedantic)
 endif()
 
 find_package(ament_cmake QUIET)

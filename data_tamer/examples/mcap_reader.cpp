@@ -92,9 +92,9 @@ int main(int argc, char** argv)
   for(const auto& [channel_name, msg_counts]: message_counts_per_channel)
   {
     std::cout << channel_name << ":" << std::endl;
-    for(const auto& [name, msg_counts]: msg_counts)
+    for(const auto& [name, count]: msg_counts)
     {
-      std::cout << "   " << name << ":" << msg_counts << std::endl;
+      std::cout << "   " << name << ":" << count << std::endl;
     }
   }
   return 0;
