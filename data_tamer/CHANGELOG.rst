@@ -2,8 +2,8 @@
 Changelog for package data_tamer
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.4.0 (2023-11-21)
+------------------
 * add again channel name to hash
 * bug fixes in schema hash and parsing
 * add benchmark
