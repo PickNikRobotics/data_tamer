@@ -3,6 +3,7 @@
 #include "data_tamer/contrib/SerializeMe.hpp"
 
 #include <iostream>
+#include <unordered_map>
 
 namespace DataTamer
 {

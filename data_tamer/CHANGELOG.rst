@@ -2,6 +2,9 @@
 Changelog for package data_tamer
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Forthcoming
+-----------
+
 0.4.0 (2023-11-21)
 ------------------
 * add again channel name to hash
