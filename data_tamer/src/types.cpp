@@ -92,16 +92,32 @@ uint64_t AddFieldToHash(const Schema::Field &field, uint64_t hash)
   const std::hash<bool> bool_hasher;
   const std::hash<uint16_t> uint_hasher;
 
-  hash ^= str_hasher(field.name) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
-  hash ^= type_hasher(field.type) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
-  hash ^= bool_hasher(field.is_vector) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
-  hash ^= uint_hasher(field.array_size) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
+  auto combine = [&hash](const auto& hasher, const auto& val)
+  {
+    hash ^= hasher(val) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
+  };
+
+  combine(str_hasher, field.name);
+  combine(type_hasher, field.type);
+  if(field.type == BasicType::OTHER && field.custom_type)
+  {
+    combine(str_hasher, field.custom_type->typeName());
+  }
+  combine(bool_hasher, field.is_vector);
+  combine(uint_hasher, field.array_size);
   return hash;
 }
 
 std::ostream& operator<<(std::ostream &os, const Schema::Field &field)
 {
-  os << ToStr(field.type);
+  if(field.type == BasicType::OTHER && field.custom_type)
+  {
+    os << field.custom_type->typeName();
+  }
+  else {
+    os << ToStr(field.type);
+  }
+
   if(field.is_vector && field.array_size != 0)
   {
     os <<"[" << field.array_size << "]";

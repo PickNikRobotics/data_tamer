@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <ostream>
 #include <string>
 #include <vector>
@@ -88,6 +89,21 @@ struct RegistrationID
   }
 };
 
+// TODO: allow fields with unknown type, that DataTamer doesn't know how to serialize
+struct CustomTypeInfo
+{
+  virtual ~CustomTypeInfo() = default;
+  // name of the type, to be written in the schema string.
+  virtual const char* typeName() = 0;
+  // optional custom schema of the type
+  virtual const char* typeSchema() { return nullptr; }
+  // size in bytes of the serialized object.
+  // Needed to pre-allocate memory in the buffer
+  virtual uint32_t serializedSize(const void* src_instance) = 0;
+  // serialize an object into a buffer. Return the size in bytes of the serialized data
+  virtual uint32_t serialize(const void* src_instance, uint8_t* destination_buffer) = 0;
+};
+
 /**
  * @brief DataTamer uses a simple "flat" schema of key/value pairs (each pair is a "field").
  */
@@ -99,6 +115,7 @@ struct Schema
     BasicType type;
     bool is_vector = 0;
     uint16_t array_size = 0;
+    std::shared_ptr<CustomTypeInfo> custom_type;
 
     bool operator==(const Field& other) const;
     bool operator!=(const Field& other) const;

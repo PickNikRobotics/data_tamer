@@ -54,20 +54,20 @@ RegistrationID LogChannel::registerValueImpl(
                                "i.e. after takeShapshot was called the first time");
     }
     // appending a new ValueHolder to series
+    const auto type = value_ptr.type();
+    Schema::Field field{name, type, value_ptr.isVector(), value_ptr.vectorSize(), {}};
+
     Pimpl::ValueHolder instance;
     instance.name = name;
     instance.holder = std::move(value_ptr);
     _p->series.emplace_back(std::move(instance));
-    const auto type = value_ptr.type();
 
     const size_t index = _p->series.size() -1;
 
     _p->registered_values.insert( {name, index} );
 
-    Schema::Field field{name, type, value_ptr.isVector(), value_ptr.vectorSize()};
     // update schema and its hash (append only)
     _p->schema.hash = AddFieldToHash(field, _p->schema.hash);
-
     _p->schema.fields.emplace_back(std::move(field));
 
     return {index, 1};
