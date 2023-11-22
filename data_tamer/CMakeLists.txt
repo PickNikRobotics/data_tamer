@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.14)
 
-project(data_tamer LANGUAGES CXX VERSION 0.4.1)
+project(data_tamer VERSION 0.4.1)
 
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -22,6 +22,7 @@ else()
         -Woverloaded-virtual -Wshadow -Wsign-conversion
         -Werror -Wpedantic)
 endif()
+
 
 find_package(ament_cmake QUIET)
 

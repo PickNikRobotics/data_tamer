@@ -185,7 +185,7 @@ bool LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
     for (size_t i = 0; i < _p->series.size(); i++)
     {
       auto const& instance = _p->series[i];
-      payload_size += instance.holder.getBufferSize();
+      payload_size += instance.holder.getSerializedSize();
     }
     _p->snapshot.payload.resize(payload_size);
 

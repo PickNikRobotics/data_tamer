@@ -44,7 +44,7 @@ public:
 
   void serialize(SerializeMe::SpanBytes& dest) const;
 
-  [[nodiscard]] size_t getBufferSize() const;
+  [[nodiscard]] size_t getSerializedSize() const;
 
   /// Get the type of the stored variable pointer
   [[nodiscard]] BasicType type() const { return type_; }
@@ -111,7 +111,7 @@ inline void ValuePtr::serialize(SerializeMe::SpanBytes &dest) const
   dest.trimFront(memory_size_);
 }
 
-inline size_t ValuePtr::getBufferSize() const
+inline size_t ValuePtr::getSerializedSize() const
 {
   if(!get_size_impl_) {
     return memory_size_;
