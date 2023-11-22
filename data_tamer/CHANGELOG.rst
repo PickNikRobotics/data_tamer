@@ -2,6 +2,11 @@
 Changelog for package data_tamer
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Forthcoming
+-----------
+* preliminary custom type support
+* Contributors: Davide Faconti
+
 0.4.1 (2023-11-21)
 ------------------
 
