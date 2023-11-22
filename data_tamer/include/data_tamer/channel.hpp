@@ -166,9 +166,10 @@ public:
   RegistrationID registerValue(const std::string& name, const std::array<T, N>* value);
 
   /**
-   * @brief registerValue overload to use when T should be serialized using a CustomTypeInfo.
+   * @brief registerCustomValue should be used when you want to "bypass" the serialization
+   * provided by DataTamer and use your own.
    *
-   * ADVANCED: using this approach does **not** guaranty that the application parsing the
+   * This is an ADVANCED usage: using this approach does **not** guaranty that the application parsing the
    * data is able to deserialize it correctly. Sink mayl save the custom schema, but
    * it may or may not be enough.
    * Prefer the template specialization of RegisterVariable<T>, if you can.
