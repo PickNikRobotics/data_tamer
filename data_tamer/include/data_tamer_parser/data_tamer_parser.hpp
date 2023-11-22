@@ -403,11 +403,11 @@ bool ParseSnapshot(const Schema& schema,
 
           if(field.type == BasicType::OTHER)
           {
-            callback_custom(field.name, snapshot.payload, field.custom_type_name);
+            callback_custom(tmp_name, snapshot.payload, field.custom_type_name);
           }
           else {
             const auto var = DeserializeToVarNumber(field.type, buffer);
-            callback_number(field.name, var);
+            callback_number(tmp_name, var);
           }
         }
       }
