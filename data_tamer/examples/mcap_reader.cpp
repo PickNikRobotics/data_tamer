@@ -80,12 +80,12 @@ int main(int argc, char** argv)
     // Wrap IncrementCounter to add the channel_name
     const std::string& channel_name = msg.channel->topic;
     auto& message_counts = message_counts_per_channel[channel_name];
-    auto callback = [&](const std::string& series_name, const DataTamerParser::VarNumber&)
+    auto callback_number = [&](const std::string& series_name, const DataTamerParser::VarNumber&)
     {
       IncrementCounter(series_name, message_counts);
     };
 
-    DataTamerParser::ParseSnapshot(dt_schema, snapshot, callback);
+    DataTamerParser::ParseSnapshot(dt_schema, snapshot, callback_number);
   }
 
   // display the counted data samples
