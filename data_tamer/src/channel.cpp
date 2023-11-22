@@ -34,7 +34,7 @@ struct LogChannel::Pimpl
 };
 
 RegistrationID LogChannel::registerValueImpl(
-    const std::string& name, ValuePtr&& value_ptr)
+    const std::string& name, ValuePtr&& value_ptr, const std::shared_ptr<CustomTypeInfo>& type_info)
 {
   if (name.find(' ') != std::string::npos)
   {
@@ -55,7 +55,7 @@ RegistrationID LogChannel::registerValueImpl(
     }
     // appending a new ValueHolder to series
     const auto type = value_ptr.type();
-    Schema::Field field{name, type, value_ptr.isVector(), value_ptr.vectorSize(), {}};
+    Schema::Field field{name, type, value_ptr.isVector(), value_ptr.vectorSize(), type_info};
 
     Pimpl::ValueHolder instance;
     instance.name = name;

@@ -143,7 +143,8 @@ public:
    * @brief registerValue add a vectors of values.
    * You must guaranty that the pointer to each value is still valid,
    * when calling takeSnapshot.
-   * Do NOT resize the vector, once it is registered!
+   *
+   * IMPORTANT / DANGER: do NOT resize the vector, once it is registered!
    *
    * @param name   name of the vector
    * @param value  pointer to the vectors of values.
@@ -163,6 +164,22 @@ public:
    */
   template <typename T, size_t N>
   RegistrationID registerValue(const std::string& name, const std::array<T, N>* value);
+
+  /**
+   * @brief registerValue overload to use when T should be serialized using a CustomTypeInfo.
+   *
+   * ADVANCED: using this approach does **not** guaranty that the application parsing the
+   * data is able to deserialize it correctly. Sink mayl save the custom schema, but
+   * it may or may not be enough.
+   * Prefer the template specialization of RegisterVariable<T>, if you can.
+   *
+   * @param name      name of the array
+   * @param value     pointer to the array of values.
+   * @param type_info information needed to serialize this specific type.
+   * @return          the ID to be used to unregister or enable/disable the values.
+   */
+  template <typename T>
+  RegistrationID registerCustomValue(const std::string& name, const T* value, CustomTypeInfo::Ptr type_info);
 
   /**
    * @brief createLoggedValue is similar to registerValue(), but
@@ -235,7 +252,8 @@ private:
   std::unique_ptr<Pimpl> _p;
 
   [[nodiscard]] RegistrationID registerValueImpl(const std::string& name,
-                                                 ValuePtr&& value_ptr);
+                                                 ValuePtr&& value_ptr,
+                                                 const std::shared_ptr<CustomTypeInfo>& type_info);
 };
 
 //----------------------------------------------------------------------
@@ -247,7 +265,7 @@ RegistrationID LogChannel::registerValue(const std::string& name, const T *value
 
   if constexpr (GetBasicType<T>() != BasicType::OTHER )
   {
-    return registerValueImpl(name, ValuePtr(value_ptr));
+    return registerValueImpl(name, ValuePtr(value_ptr), {});
   }
   else {
     static_assert(std::is_trivially_copyable_v<T>,
@@ -256,16 +274,28 @@ RegistrationID LogChannel::registerValue(const std::string& name, const T *value
   }
 }
 
+
+template <typename T> inline
+RegistrationID LogChannel::registerCustomValue(const std::string& name, const T *value_ptr,
+                                               std::shared_ptr<CustomTypeInfo> type_info) {
+
+  static_assert(GetBasicType<T>() == BasicType::OTHER,
+                "This method should be used only for custom types");
+
+  return registerValueImpl(name, ValuePtr(value_ptr, type_info), type_info);
+}
+
 template <template <class, class> class Container, class T, class... TArgs>
 inline RegistrationID LogChannel::registerValue(const std::string& prefix,
                                                 const Container<T, TArgs...>* vect)
 {
   if constexpr (GetBasicType<T>() != BasicType::OTHER )
   {
-    return registerValueImpl(prefix, ValuePtr(vect));
+    return registerValueImpl(prefix, ValuePtr(vect), {});
   }
   else
   {
+    //TODO: this is NOT safe for vectors that change size at run-time
     if(vect->empty())
     {
       return {};
@@ -284,7 +314,7 @@ template <typename T, size_t N> inline
 {
   if constexpr (GetBasicType<T>() != BasicType::OTHER )
   {
-    return registerValueImpl(prefix, ValuePtr(vect));
+    return registerValueImpl(prefix, ValuePtr(vect), {});
   }
   else
   {

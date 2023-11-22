@@ -9,7 +9,7 @@
 
 namespace DataTamer {
 
-constexpr int SCHEMA_VERSION = 2;
+constexpr int SCHEMA_VERSION = 3;
 
 enum class BasicType
 {
@@ -92,6 +92,8 @@ struct RegistrationID
 // TODO: allow fields with unknown type, that DataTamer doesn't know how to serialize
 struct CustomTypeInfo
 {
+  using Ptr = std::shared_ptr<CustomTypeInfo>;
+
   virtual ~CustomTypeInfo() = default;
   // name of the type, to be written in the schema string.
   virtual const char* typeName() = 0;
@@ -101,7 +103,7 @@ struct CustomTypeInfo
   // Needed to pre-allocate memory in the buffer
   virtual uint32_t serializedSize(const void* src_instance) = 0;
   // serialize an object into a buffer. Return the size in bytes of the serialized data
-  virtual uint32_t serialize(const void* src_instance, uint8_t* destination_buffer) = 0;
+  virtual uint32_t serialize(const void* src_instance, uint8_t* dst_buffer) = 0;
 };
 
 /**

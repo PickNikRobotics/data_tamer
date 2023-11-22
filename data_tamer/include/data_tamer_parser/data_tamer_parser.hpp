@@ -16,7 +16,7 @@
 
 namespace DataTamerParser {
 
-constexpr int SCHEMA_VERSION = 2;
+constexpr int SCHEMA_VERSION = 3;
 
 enum class BasicType
 {
@@ -70,6 +70,7 @@ struct Schema
     BasicType type = BasicType::OTHER;
     bool is_vector = 0;
     uint16_t array_size = 0;
+    std::string custom_type_name;
 
     bool operator==(const Field &other) const;
 
@@ -267,6 +268,11 @@ inline Schema BuilSchemaFromText(const std::string& txt)
     {
       continue;
     }
+    if(line == "---------")
+    {
+      // we are not interested to this section of the schema
+      break;
+    }
     if(line.find("__version__:") != std::string::npos)
     {
       // check compatibility
@@ -306,12 +312,13 @@ inline Schema BuilSchemaFromText(const std::string& txt)
         break;
       }
     }
+
+    auto offset = line.find_first_of(" [");
     if(field.type == BasicType::OTHER)
     {
-      throw std::runtime_error(std::string("Unrecognize line: ")+line);
+      field.custom_type_name = line.substr(0, offset);
     }
 
-    auto offset = ToStr(field.type).size();
     if(line[offset]=='[')
     {
       field.is_vector = true;

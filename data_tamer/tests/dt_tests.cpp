@@ -234,3 +234,74 @@ TEST(DataTamer, Disable)
   checkSize(id_v7, 4 * sizeof(float) + sizeof(uint32_t));
   ASSERT_EQ(sink->latest_snapshot.active_mask[0], 0b10111111);
 }
+
+
+struct Point3D
+{
+  double x;
+  double y;
+  double z;
+};
+
+struct PointTypeInfo: public CustomTypeInfo
+{
+  ~PointTypeInfo() override = default;
+
+  const char* typeName() override {
+    return "Point3D";
+  }
+
+  const char* typeSchema() override {
+    return "float32 x\n"
+           "float32 y\n"
+           "float32 z\n";
+  }
+
+  uint32_t serializedSize(const void* src_instance)  override {
+    return sizeof(Point3D);
+  }
+  uint32_t serialize(const void* src_instance, uint8_t* dst_buffer) override
+  {
+    auto* p = static_cast<const Point3D*>(src_instance);
+    std::memcpy(dst_buffer, p, sizeof(Point3D));
+    return sizeof(Point3D);
+  }
+};
+
+TEST(DataTamer, CustomType)
+{
+  ChannelsRegistry registry;
+  auto channel = registry.getChannel("chan");
+  auto sink = std::make_shared<DummySink>();
+  channel->addDataSink(sink);
+
+  auto point_info = std::make_shared<PointTypeInfo>();
+
+  Point3D point = {1, 2, 3};
+  channel->registerCustomValue("point", &point, point_info);
+
+  channel->takeSnapshot();
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+  size_t expected = sizeof(uint32_t) + sizeof(Point3D);
+  ASSERT_EQ(sink->latest_snapshot.payload.size(), expected);
+
+  //-------------------------------------------------
+  // check that the schema includes the Point3D definition
+  const auto schema = channel->getSchema();
+  std::ostringstream ss;
+  ss << schema;
+  const std::string schema_txt = ss.str();
+
+  std::cout << schema_txt << std::endl;
+
+  const auto posA = schema_txt.find("Point3D point\n");
+  const auto posB = schema_txt.find("---------\nPoint3D\n---------\n");
+  const auto posC = schema_txt.find(point_info->typeSchema());
+
+  ASSERT_NE(std::string::npos, posA);
+  ASSERT_NE(std::string::npos, posB);
+  ASSERT_NE(std::string::npos, posC);
+  ASSERT_LT(posA, posB);
+  ASSERT_LT(posB, posC);
+}

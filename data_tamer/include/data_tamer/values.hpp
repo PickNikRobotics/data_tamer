@@ -20,6 +20,9 @@ public:
   template <typename T>
   ValuePtr(const T* pointer);
 
+  template <typename T>
+  ValuePtr(const T* pointer, CustomTypeInfo::Ptr type_info);
+
   // accept any type of container (std::vector, std::deque, std::list)
   // but T must be a numerical value
   template <template <class, class> class Container, class T, class... TArgs>
@@ -81,43 +84,25 @@ ValuePtr::ValuePtr(const T *pointer)
                 "ValuePtr: can only accept numbers");
 }
 
-inline bool ValuePtr::operator==(const ValuePtr &other) const
+template<typename T> inline
+    ValuePtr::ValuePtr(const T* pointer, std::shared_ptr<CustomTypeInfo> type_info)
+  : v_ptr_(pointer)
 {
-  return type_ == other.type_ &&
-         is_vector_ == other.is_vector_ &&
-         array_size_ == other.array_size_;
-}
-
-inline void ValuePtr::serialize(SerializeMe::SpanBytes &dest) const
-{
-  if(is_vector_)
+  serialize_impl_ = [type_info, pointer](SerializeMe::SpanBytes& buffer) -> void
   {
-    serialize_impl_(dest);
-    return;
-  }
-  // slightly faster than memcpy
-  switch(memory_size_) {
-    case 8: *reinterpret_cast<uint64_t*>(dest.data()) = *static_cast<const uint64_t*>(v_ptr_);
-      break;
-    case 4: *reinterpret_cast<uint32_t*>(dest.data()) = *static_cast<const uint32_t*>(v_ptr_);
-      break;
-    case 2: *reinterpret_cast<uint16_t*>(dest.data()) = *static_cast<const uint16_t*>(v_ptr_);
-      break;
-    case 1: *(dest.data()) = *static_cast<const uint8_t*>(v_ptr_);
-      break;
-    default:
-      std::memcpy(dest.data(), v_ptr_, memory_size_);
-  }
-  dest.trimFront(memory_size_);
+    // serialize first the size of the object
+    const uint32_t msg_size = type_info->serializedSize(pointer);
+    SerializeMe::SerializeIntoBuffer(buffer, msg_size);
+    // serialize the object
+    type_info->serialize(pointer, buffer.data());
+    buffer.trimFront(msg_size);
+  };
+  get_size_impl_ = [type_info, pointer]()
+  {
+    return type_info->serializedSize(pointer) + sizeof(uint32_t);
+  };
 }
 
-inline size_t ValuePtr::getSerializedSize() const
-{
-  if(!get_size_impl_) {
-    return memory_size_;
-  }
-  return get_size_impl_();
-}
 
 template <template <class, class> class Container, class T, class... TArgs>
 inline ValuePtr::ValuePtr(const Container<T, TArgs...>* vect)
@@ -157,5 +142,44 @@ ValuePtr::ValuePtr(const std::array<T, N> *array)
     }
   };
 }
+
+inline bool ValuePtr::operator==(const ValuePtr &other) const
+{
+  return type_ == other.type_ &&
+         is_vector_ == other.is_vector_ &&
+         array_size_ == other.array_size_;
+}
+
+inline void ValuePtr::serialize(SerializeMe::SpanBytes &dest) const
+{
+  if(serialize_impl_)
+  {
+    serialize_impl_(dest);
+    return;
+  }
+  // slightly faster than memcpy
+  switch(memory_size_) {
+    case 8: *reinterpret_cast<uint64_t*>(dest.data()) = *static_cast<const uint64_t*>(v_ptr_);
+      break;
+    case 4: *reinterpret_cast<uint32_t*>(dest.data()) = *static_cast<const uint32_t*>(v_ptr_);
+      break;
+    case 2: *reinterpret_cast<uint16_t*>(dest.data()) = *static_cast<const uint16_t*>(v_ptr_);
+      break;
+    case 1: *(dest.data()) = *static_cast<const uint8_t*>(v_ptr_);
+      break;
+    default:
+      std::memcpy(dest.data(), v_ptr_, memory_size_);
+  }
+  dest.trimFront(memory_size_);
+}
+
+inline size_t ValuePtr::getSerializedSize() const
+{
+  if(!get_size_impl_) {
+    return memory_size_;
+  }
+  return get_size_impl_();
+}
+
 
 }  // namespace DataTamer

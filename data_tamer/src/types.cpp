@@ -3,6 +3,7 @@
 #include <cstring>
 #include <iostream>
 #include <limits>
+#include <map>
 #include <unordered_map>
 
 namespace DataTamer {
@@ -135,10 +136,27 @@ std::ostream& operator<<(std::ostream &os, const Schema &schema)
   os << "__version__: " << SCHEMA_VERSION << "\n";
   os << "__hash__: " << schema.hash << "\n";
   os << "__channel_name__: " << schema.channel_name << "\n";
+
+  std::map<std::string, std::shared_ptr<CustomTypeInfo>> custom_types;
   for(const auto& field: schema.fields)
   {
+    if(field.custom_type)
+    {
+      custom_types[field.custom_type->typeName()] = field.custom_type;
+    }
     os << field << "\n";
   }
+  for(const auto& [name, type]: custom_types)
+  {
+    const char* custom_schema = type->typeSchema();
+    if(custom_schema){
+      os << "---------\n"
+         << type->typeName() << "\n"
+         << "---------\n"
+         << custom_schema;
+    }
+  }
+
   return os;
 }
 
