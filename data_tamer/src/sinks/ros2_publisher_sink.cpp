@@ -40,20 +40,16 @@ namespace DataTamer
         data_tamer_msgs::msg::Schema schema_msg;
         schema_msg.hash = schema.hash;
         schema_msg.channel_name = channel_name;
-        schema_msg.schema_encoding = "type name;";
+        std::ostringstream ss;
+        ss << schema;
+        schema_msg.schema_text = ss.str();
 
-        for(const auto& field: schema.fields)
-        {
-          schema_msg.schema_text += ToStr(field.type);
-          schema_msg.schema_text += " ";
-          schema_msg.schema_text += field.name + "\n";
-        }
         msg.schemas.push_back(std::move(schema_msg));
       }
       schema_publisher_->publish(msg);
     }
     //----------------------------------------
-    data_msg_.timestamp_nsec = snapshot.timestamp.count();
+    data_msg_.timestamp_nsec = uint64_t(snapshot.timestamp.count());
     data_msg_.schema_hash = snapshot.schema_hash;
     data_msg_.active_mask = snapshot.active_mask;
     data_msg_.payload = snapshot.payload;

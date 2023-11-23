@@ -14,13 +14,15 @@ CompileExample(mcap_writer_sample)
 add_executable(mcap_reader mcap_reader.cpp)
 target_include_directories(mcap_reader
  PUBLIC $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>)
-target_link_libraries(mcap_reader data_tamer mcap::mcap)
 
 if ( ament_cmake_FOUND )
+    ament_target_dependencies(mcap_reader mcap_vendor)
+
     CompileExample(ros2_publisher)
 
-    install(TARGETS
-      ros2_publisher
-      DESTINATION lib/${PROJECT_NAME})
-
+    install(TARGETS ros2_publisher
+            DESTINATION lib/${PROJECT_NAME})
+else()
+    target_link_libraries(mcap_reader data_tamer mcap::mcap)
 endif()
+

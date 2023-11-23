@@ -32,12 +32,13 @@ int main(int argc, char * argv[])
 
   while(rclcpp::ok())
   {
-    auto S = std::sin(t);
+    double S = std::sin(t);
     for(size_t i=0; i<vect_size; i++)
     {
-      real64[i] = i + S;
-      real32[i] = i + S;
-      int16[i] = int( 10*(i+S) );
+      const double val = double(i) + S;
+      real64[i] = val;
+      real32[i] = float(val);
+      int16[i] = int16_t( 10*(val) );
     }
     if( count++ % 500 == 0)
     {
