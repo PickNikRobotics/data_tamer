@@ -5,8 +5,6 @@ namespace DataTamer
   ROS2PublisherSink::ROS2PublisherSink(std::shared_ptr<rclcpp::Node> node, 
                                        const std::string& topic_prefix)
   {
-    data_msg_.prefix = topic_prefix;
-
     rclcpp::QoS schemas_qos{rclcpp::KeepAll()};
     schemas_qos.reliable();
     schemas_qos.transient_local();  // latch

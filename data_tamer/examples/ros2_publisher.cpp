@@ -14,9 +14,8 @@ int main(int argc, char * argv[])
   auto ros2_sink = std::make_shared<ROS2PublisherSink>(node, "test");
   ChannelsRegistry::Global().addDefaultSink(ros2_sink);
 
-
   // Create (or get) a channel using the global registry (singleton)
-  auto channel = ChannelsRegistry::Global().getChannel("chan");
+  auto channel = ChannelsRegistry::Global().getChannel("channel");
 
   auto const vect_size = 100;
   std::vector<double> real64(vect_size);
