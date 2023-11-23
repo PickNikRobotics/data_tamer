@@ -2,8 +2,8 @@
 Changelog for package data_tamer
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.6.0 (2023-11-23)
+------------------
 @ add back compatibility to data_tamer_parser
 * works correctly with plotjuggler
 * fix ROS2 compilation

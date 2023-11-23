@@ -2,8 +2,8 @@
 Changelog for package data_tamer_msgs
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.6.0 (2023-11-23)
+------------------
 * works correctly with plotjuggler
 * fix ROS2 compilation
 * Contributors: Davide Faconti
