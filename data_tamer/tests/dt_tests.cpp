@@ -61,7 +61,6 @@ TEST(DataTamer, SerializeVariant)
     std::cout << std::to_string(arg) << std::endl;
   };
 
-
   auto serializeAndBack = [&](auto const& value)
   {
     uint8_t buffer[8];
@@ -273,8 +272,7 @@ TEST(DataTamer, CustomType)
   channel->takeSnapshot();
   std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
-  size_t expected = sizeof(uint32_t) + sizeof(Point3D);
-  ASSERT_EQ(sink->latest_snapshot.payload.size(), expected);
+  ASSERT_EQ(sink->latest_snapshot.payload.size(), sizeof(Point3D));
 
   //-------------------------------------------------
   // check that the schema includes the Point3D definition

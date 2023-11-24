@@ -270,12 +270,6 @@ RegistrationID LogChannel::registerValue(const std::string& name, const T *value
   }
   else {
     auto def = TypesRegistry::Global().getSerializer<T>();
-    if(!def)
-    {
-      auto null_func = [](const char*, const auto&){};
-      auto type_name = SerializeMe::TypeDefinition<T>().typeDef(null_func);
-      def = TypesRegistry::Global().addType<T>(type_name);
-    }
     return registerValueImpl(name, ValuePtr(value_ptr, def), def);
   }
 }
@@ -295,24 +289,14 @@ template <template <class, class> class Container, class T, class... TArgs>
 inline RegistrationID LogChannel::registerValue(const std::string& prefix,
                                                 const Container<T, TArgs...>* vect)
 {
-  return registerValueImpl(prefix, ValuePtr(vect), {});
-//  if constexpr (GetBasicType<T>() != BasicType::OTHER )
-//  {
-//  }
-//  else
-//  {
-//    //TODO: this is NOT safe for vectors that change size at run-time
-//    if(vect->empty())
-//    {
-//      return {};
-//    }
-//    auto id = registerValue(prefix + "[0]", &(*vect)[0]);
-//    for(size_t i=1; i<vect->size(); i++)
-//    {
-//      id += registerValue(prefix + "[" + std::to_string(i) + "]", &(*vect)[i]);
-//    }
-//    return id;
-//  }
+  if constexpr (GetBasicType<T>() != BasicType::OTHER )
+  {
+    return registerValueImpl(prefix, ValuePtr(vect), {});
+  }
+  else {
+    auto def = TypesRegistry::Global().getSerializer<T>();
+    return registerValueImpl(prefix, ValuePtr(vect), def);
+  }
 }
 
 template <typename T, size_t N> inline
@@ -324,12 +308,8 @@ template <typename T, size_t N> inline
   }
   else
   {
-    auto id = registerValue(prefix + "[0]", &(*vect)[0]);
-    for(size_t i=1; i<N; i++)
-    {
-      id += registerValue(prefix + "[" + std::to_string(i) + "]", &(*vect)[i]);
-    }
-    return id;
+    auto def = TypesRegistry::Global().getSerializer<T>();
+    return registerValueImpl(prefix, ValuePtr(vect, def), def);
   }
 }
 

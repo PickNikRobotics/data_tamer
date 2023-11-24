@@ -30,36 +30,36 @@ namespace SerializeMe
 template <>
 struct TypeDefinition<Point3D>
 {
-  template <class AddFieldT> const char* typeDef(AddFieldT& addField)
+  const char* typeName() const { return "Point3D"; }
+  template <class AddFieldT> void typeDef(AddFieldT& addField)
   {
     addField("x", &Point3D::x);
     addField("y", &Point3D::y);
     addField("z", &Point3D::z);
-    return "Point3D";
   }
 };
 
 template <>
 struct TypeDefinition<Quaternion>
 {
-  template <class AddFieldT> const char* typeDef(AddFieldT& addField)
+  const char* typeName() const { return "Quaternion"; }
+  template <class AddFieldT> void typeDef(AddFieldT& addField)
   {
     addField("w", &Quaternion::w);
     addField("x", &Quaternion::x);
     addField("y", &Quaternion::y);
     addField("z", &Quaternion::z);
-    return "Quaternion";
   }
 };
 
 template <>
 struct TypeDefinition<Pose>
 {
-  template <class AddFieldT> const char* typeDef(AddFieldT& addField)
+  const char* typeName() const { return "Pose"; }
+  template <class AddFieldT> void typeDef(AddFieldT& addField)
   {
     addField("position", &Pose::pos);
     addField("rotation", &Pose::rot);
-    return "Pose";
   }
 };
 

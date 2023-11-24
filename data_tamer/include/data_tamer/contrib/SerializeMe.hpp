@@ -237,7 +237,9 @@ template <class Type>
 struct TypeDefinition
 {
   TypeDefinition() = delete;
-  template <class AddFieldT> const char* typeDef(AddFieldT& addField);
+
+  const char* typeName() const;
+  template <class AddFieldT> void typeDef(AddFieldT& addField);
 };
 
 template <typename T, class = void>

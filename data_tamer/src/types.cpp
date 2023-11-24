@@ -1,4 +1,5 @@
 #include "data_tamer/types.hpp"
+#include "data_tamer/custom_types.hpp"
 #include <array>
 #include <cstring>
 #include <iostream>
@@ -140,24 +141,15 @@ std::ostream& operator<<(std::ostream &os, const Schema &schema)
 //  std::map<std::string, CustomSerializer::Ptr> custom_types;
   for(const auto& field: schema.fields)
   {
-    // TODO
-//    if(field.type == BasicType::OTHER)
-//    {
-//      custom_types[field.custom_type_name] = field.custom_type;
-//    }
     os << field << "\n";
   }
-  //TODO
-//  for(const auto& [name, type]: custom_types)
-//  {
-//    const char* custom_schema = type->typeSchema();
-//    if(custom_schema){
-//      os << "---------\n"
-//         << type->typeName() << "\n"
-//         << "---------\n"
-//         << custom_schema;
-//    }
-//  }
+
+  for(const auto& [type_name, custom_schema]: TypesRegistry::Global().schemas())
+  {
+    os << "===========================================================\n"
+       << "MSG: " << type_name << "\n"
+       << custom_schema;
+  }
 
   return os;
 }

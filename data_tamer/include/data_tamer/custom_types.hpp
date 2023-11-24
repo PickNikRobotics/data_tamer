@@ -2,6 +2,7 @@
 
 #include "data_tamer/types.hpp"
 
+#include <map>
 #include <mutex>
 #include <typeindex>
 #include <typeinfo>
@@ -28,17 +29,13 @@ public:
 };
 
 
+
 template <typename T>
 class CustomSerializerT : public CustomSerializer
 {
 public:
   CustomSerializerT(const std::string& type_name): _name(type_name)
   {
-    auto func = [this](const char* field_name, const auto& attr)
-    {
-      _schema += ToStr(GetBasicType<T>()) + " " + std::string(field_name);
-    };
-    SerializeMe::TypeDefinition<T>().typeDef(func);
   }
 
   const char* typeName() const override { return _name.c_str(); }
@@ -76,7 +73,8 @@ public:
   template <typename T> CustomSerializer::Ptr addType(const std::string& type_name)
   {
     std::scoped_lock lk(_mutex);
-    auto serializer = std::make_shared<CustomSerializerT<T>>(type_name);
+    CustomSerializer::Ptr serializer = std::make_shared<CustomSerializerT<T>>(type_name);
+    _schemas_by_name[serializer->typeName()] = serializer->typeSchema();
     _types[typeid(T)] = serializer;
     return serializer;
   }
@@ -85,11 +83,26 @@ public:
   {
     std::scoped_lock lk(_mutex);
     auto it = _types.find(typeid(T));
-    return it == _types.end() ? CustomSerializer::Ptr{} : it->second;
+
+    if(it == _types.end())
+    {
+      auto type_name = SerializeMe::TypeDefinition<T>().typeName();
+      CustomSerializer::Ptr serializer = std::make_shared<CustomSerializerT<T>>(type_name);
+      _schemas_by_name[serializer->typeName()] = serializer->typeSchema();
+      _types[typeid(T)] = serializer;
+      return serializer;
+    }
+    return it->second;
   }
+
+  const std::map<std::string, std::string>& schemas() const {
+    return _schemas_by_name;
+  }
+
 private:
 
   std::unordered_map<std::type_index, CustomSerializer::Ptr> _types;
+  std::map<std::string, std::string> _schemas_by_name;
   Mutex _mutex;
 };
 
