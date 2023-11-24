@@ -85,35 +85,35 @@ VarNumber DeserializeAsVarType(const BasicType &type, const void *data)
   return {};
 }
 
-uint64_t AddFieldToHash(const Schema::Field &field, uint64_t hash)
+uint64_t AddFieldToHash(const TypeField &field, uint64_t hash)
 {
   // https://stackoverflow.com/questions/2590677/how-do-i-combine-hash-values-in-c0x
   const std::hash<std::string> str_hasher;
   const std::hash<BasicType> type_hasher;
   const std::hash<bool> bool_hasher;
-  const std::hash<uint16_t> uint_hasher;
+  const std::hash<uint32_t> uint_hasher;
 
   auto combine = [&hash](const auto& hasher, const auto& val)
   {
     hash ^= hasher(val) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
   };
 
-  combine(str_hasher, field.name);
+  combine(str_hasher, field.field_name);
   combine(type_hasher, field.type);
-  if(field.type == BasicType::OTHER && field.custom_type)
+  if(field.type == BasicType::OTHER)
   {
-    combine(str_hasher, field.custom_type->typeName());
+    combine(str_hasher, field.type_name);
   }
   combine(bool_hasher, field.is_vector);
   combine(uint_hasher, field.array_size);
   return hash;
 }
 
-std::ostream& operator<<(std::ostream &os, const Schema::Field &field)
+std::ostream& operator<<(std::ostream &os, const TypeField &field)
 {
-  if(field.type == BasicType::OTHER && field.custom_type)
+  if(field.type == BasicType::OTHER)
   {
-    os << field.custom_type->typeName();
+    os << field.type_name;
   }
   else {
     os << ToStr(field.type);
@@ -127,7 +127,7 @@ std::ostream& operator<<(std::ostream &os, const Schema::Field &field)
   {
     os <<"[]";
   }
-  os << ' ' << field.name;
+  os << ' ' << field.field_name;
   return os;
 }
 
@@ -137,38 +137,41 @@ std::ostream& operator<<(std::ostream &os, const Schema &schema)
   os << "__hash__: " << schema.hash << "\n";
   os << "__channel_name__: " << schema.channel_name << "\n";
 
-  std::map<std::string, std::shared_ptr<CustomTypeInfo>> custom_types;
+//  std::map<std::string, CustomSerializer::Ptr> custom_types;
   for(const auto& field: schema.fields)
   {
-    if(field.custom_type)
-    {
-      custom_types[field.custom_type->typeName()] = field.custom_type;
-    }
+    // TODO
+//    if(field.type == BasicType::OTHER)
+//    {
+//      custom_types[field.custom_type_name] = field.custom_type;
+//    }
     os << field << "\n";
   }
-  for(const auto& [name, type]: custom_types)
-  {
-    const char* custom_schema = type->typeSchema();
-    if(custom_schema){
-      os << "---------\n"
-         << type->typeName() << "\n"
-         << "---------\n"
-         << custom_schema;
-    }
-  }
+  //TODO
+//  for(const auto& [name, type]: custom_types)
+//  {
+//    const char* custom_schema = type->typeSchema();
+//    if(custom_schema){
+//      os << "---------\n"
+//         << type->typeName() << "\n"
+//         << "---------\n"
+//         << custom_schema;
+//    }
+//  }
 
   return os;
 }
 
-bool Schema::Field::operator==(const Field &other) const
+bool TypeField::operator==(const TypeField &other) const
 {
   return is_vector == other.is_vector &&
          type == other.type &&
          array_size == other.array_size &&
-         name == other.name;
+         field_name == other.field_name &&
+         type_name == other.type_name;
 }
 
-bool Schema::Field::operator!=(const Field &other) const
+bool TypeField::operator!=(const TypeField &other) const
 {
   return !(*this == other);
 }

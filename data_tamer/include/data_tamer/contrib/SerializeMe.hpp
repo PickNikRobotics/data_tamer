@@ -234,12 +234,10 @@ inline T EndianSwap(T t)
 }
 
 template <class Type>
-struct Serializer
+struct TypeDefinition
 {
-  Serializer() = delete;
-
-  template <class Operator>
-  void operator()(Type& obj, Operator& op);
+  TypeDefinition() = delete;
+  template <class AddFieldT> const char* typeDef(AddFieldT& addField);
 };
 
 template <typename T, class = void>
@@ -248,7 +246,7 @@ struct is_serializer_specialized : std::false_type
 };
 
 template <typename T>
-struct is_serializer_specialized<T, decltype(Serializer<T>(), void())> : std::true_type
+struct is_serializer_specialized<T, decltype(TypeDefinition<T>(), void())> : std::true_type
 {
 };
 
@@ -309,9 +307,11 @@ inline size_t BufferSize(const T& val)
     if constexpr (is_serializer_defined<T>())
     {
       size_t total_size = 0;
-      auto func = [&total_size](auto const& field) { total_size += BufferSize(field); };
+      auto func = [&val, &total_size](const char*, auto const& field) {
+        total_size += BufferSize(val.*field);
+      };
 
-      Serializer<T>().operator()(const_cast<T&>(val), func);
+      TypeDefinition<T>().typeDef(func);
       return total_size;
     }
   }
@@ -374,8 +374,11 @@ inline void DeserializeFromBuffer(SpanBytesConst& buffer, T& dest)
                                               "Serialize<>. Check errors below");
     if constexpr (is_serializer_defined<T>())
     {
-      auto func = [&buffer](auto& field) { DeserializeFromBuffer(buffer, field); };
-      Serializer<T>().operator()(const_cast<T&>(dest), func);
+      auto func = [&dest, &buffer](const char*, const auto& field)
+      {
+        DeserializeFromBuffer(buffer, dest.*field);
+      };
+      TypeDefinition<T>().typeDef(func);
     }
   }
 }
@@ -481,8 +484,11 @@ inline void SerializeIntoBuffer(SpanBytes& buffer, T const& value)
                                               "Serialize<>. Check errors below");
     if constexpr (is_serializer_defined<T>())
     {
-      auto func = [&buffer](auto const& field) { SerializeIntoBuffer(buffer, field); };
-      Serializer<T>().operator()(const_cast<T&>(value), func);
+      auto func = [&value, &buffer](const char*, auto const& field)
+      {
+        SerializeIntoBuffer(buffer, value.*field);
+      };
+      TypeDefinition<T>().typeDef(func);
     }
   }
 }
@@ -515,17 +521,25 @@ inline void SerializeIntoBuffer(SpanBytes& buffer, std::array<T, N> const& vect)
     throw std::runtime_error("SerializeIntoBuffer: array exceeds maximum size");
   }
 
-  if ((N + sizeof(uint32_t)) > buffer.size())
+  if constexpr (std::is_arithmetic_v<T> || std::is_same_v<T, std::byte>)
   {
-    throw std::runtime_error("SerializeIntoBuffer: buffer overflow");
+    if(N*sizeof(T) > buffer.size())
+    {
+      throw std::runtime_error("SerializeIntoBuffer: buffer overflow");
+    }
   }
 
-  const auto size = static_cast<uint32_t>(vect.size());
-  SerializeIntoBuffer(buffer, size);
-
-  for (const T& v : vect)
+  if constexpr (sizeof(T) == 1)
   {
-    SerializeIntoBuffer(buffer, v);
+    std::memcpy(vect.data(), buffer.data(), N);
+    buffer.trimFront(N);
+  }
+  else
+  {
+    for (size_t i=0; i<N; i++)
+    {
+      SerializeIntoBuffer(buffer, vect[i]);
+    }
   }
 }
 

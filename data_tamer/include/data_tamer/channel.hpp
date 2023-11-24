@@ -86,8 +86,8 @@ private:
  *
  * @return ID to be used to unregister the field(s)
  */
-template <typename T>
-RegistrationID RegisterVariable(LogChannel& channel, const std::string& name, const T* value);
+//template <typename T>
+//RegistrationID RegisterVariable(LogChannel& channel, const std::string& name, const T* value);
 
 /**
  * @brief A LogChannel is a class used to record multiple values in a single
@@ -180,7 +180,7 @@ public:
    * @return          the ID to be used to unregister or enable/disable the values.
    */
   template <typename T>
-  RegistrationID registerCustomValue(const std::string& name, const T* value, CustomTypeInfo::Ptr type_info);
+  RegistrationID registerCustomValue(const std::string& name, const T* value, CustomSerializer::Ptr type_info);
 
   /**
    * @brief createLoggedValue is similar to registerValue(), but
@@ -254,7 +254,7 @@ private:
 
   [[nodiscard]] RegistrationID registerValueImpl(const std::string& name,
                                                  ValuePtr&& value_ptr,
-                                                 const std::shared_ptr<CustomTypeInfo>& type_info);
+                                                 CustomSerializer::Ptr type_info);
 };
 
 //----------------------------------------------------------------------
@@ -269,45 +269,50 @@ RegistrationID LogChannel::registerValue(const std::string& name, const T *value
     return registerValueImpl(name, ValuePtr(value_ptr), {});
   }
   else {
-    static_assert(std::is_trivially_copyable_v<T>,
-                  "Only trivialy copyable objects can be registered");
-    return RegisterVariable(*this, name, value_ptr);
+    auto def = TypesRegistry::Global().getSerializer<T>();
+    if(!def)
+    {
+      auto null_func = [](const char*, const auto&){};
+      auto type_name = SerializeMe::TypeDefinition<T>().typeDef(null_func);
+      def = TypesRegistry::Global().addType<T>(type_name);
+    }
+    return registerValueImpl(name, ValuePtr(value_ptr, def), def);
   }
 }
 
 
 template <typename T> inline
 RegistrationID LogChannel::registerCustomValue(const std::string& name, const T *value_ptr,
-                                               std::shared_ptr<CustomTypeInfo> type_info) {
+                                                      CustomSerializer::Ptr serializer) {
 
   static_assert(GetBasicType<T>() == BasicType::OTHER,
                 "This method should be used only for custom types");
 
-  return registerValueImpl(name, ValuePtr(value_ptr, type_info), type_info);
+  return registerValueImpl(name, ValuePtr(value_ptr, serializer), serializer);
 }
 
 template <template <class, class> class Container, class T, class... TArgs>
 inline RegistrationID LogChannel::registerValue(const std::string& prefix,
                                                 const Container<T, TArgs...>* vect)
 {
-  if constexpr (GetBasicType<T>() != BasicType::OTHER )
-  {
-    return registerValueImpl(prefix, ValuePtr(vect), {});
-  }
-  else
-  {
-    //TODO: this is NOT safe for vectors that change size at run-time
-    if(vect->empty())
-    {
-      return {};
-    }
-    auto id = registerValue(prefix + "[0]", &(*vect)[0]);
-    for(size_t i=1; i<vect->size(); i++)
-    {
-      id += registerValue(prefix + "[" + std::to_string(i) + "]", &(*vect)[i]);
-    }
-    return id;
-  }
+  return registerValueImpl(prefix, ValuePtr(vect), {});
+//  if constexpr (GetBasicType<T>() != BasicType::OTHER )
+//  {
+//  }
+//  else
+//  {
+//    //TODO: this is NOT safe for vectors that change size at run-time
+//    if(vect->empty())
+//    {
+//      return {};
+//    }
+//    auto id = registerValue(prefix + "[0]", &(*vect)[0]);
+//    for(size_t i=1; i<vect->size(); i++)
+//    {
+//      id += registerValue(prefix + "[" + std::to_string(i) + "]", &(*vect)[i]);
+//    }
+//    return id;
+//  }
 }
 
 template <typename T, size_t N> inline

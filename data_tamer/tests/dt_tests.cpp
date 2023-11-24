@@ -243,30 +243,20 @@ struct Point3D
   double z;
 };
 
-struct PointTypeInfo: public CustomTypeInfo
+namespace SerializeMe
 {
-  ~PointTypeInfo() override = default;
-
-  const char* typeName() override {
+template <>
+struct TypeDefinition<Point3D>
+{
+  template <class AddFieldFunc> const char* typeDef(AddFieldFunc& addField)
+  {
+    addField("x", &Point3D::x);
+    addField("y", &Point3D::y);
+    addField("z", &Point3D::z);
     return "Point3D";
   }
-
-  const char* typeSchema() override {
-    return "float32 x\n"
-           "float32 y\n"
-           "float32 z\n";
-  }
-
-  uint32_t serializedSize(const void* src_instance)  override {
-    return sizeof(Point3D);
-  }
-  uint32_t serialize(const void* src_instance, uint8_t* dst_buffer) override
-  {
-    auto* p = static_cast<const Point3D*>(src_instance);
-    std::memcpy(dst_buffer, p, sizeof(Point3D));
-    return sizeof(Point3D);
-  }
 };
+}
 
 TEST(DataTamer, CustomType)
 {
@@ -275,7 +265,7 @@ TEST(DataTamer, CustomType)
   auto sink = std::make_shared<DummySink>();
   channel->addDataSink(sink);
 
-  auto point_info = std::make_shared<PointTypeInfo>();
+  auto point_info = std::make_shared<CustomSerializerT<Point3D>>("Point3D");
 
   Point3D point = {1, 2, 3};
   channel->registerCustomValue("point", &point, point_info);

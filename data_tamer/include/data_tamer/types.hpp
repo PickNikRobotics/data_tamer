@@ -2,10 +2,16 @@
 
 #include <cstdint>
 #include <memory>
+
 #include <ostream>
 #include <string>
+#include <unordered_map>
 #include <vector>
 #include <variant>
+
+
+#include "data_tamer/contrib/SerializeMe.hpp"
+#include "data_tamer/details/mutex.hpp"
 
 namespace DataTamer {
 
@@ -89,21 +95,24 @@ struct RegistrationID
   }
 };
 
-// TODO: allow fields with unknown type, that DataTamer doesn't know how to serialize
-struct CustomTypeInfo
-{
-  using Ptr = std::shared_ptr<CustomTypeInfo>;
 
-  virtual ~CustomTypeInfo() = default;
-  // name of the type, to be written in the schema string.
-  virtual const char* typeName() = 0;
-  // optional custom schema of the type
-  virtual const char* typeSchema() { return nullptr; }
-  // size in bytes of the serialized object.
-  // Needed to pre-allocate memory in the buffer
-  virtual uint32_t serializedSize(const void* src_instance) = 0;
-  // serialize an object into a buffer. Return the size in bytes of the serialized data
-  virtual uint32_t serialize(const void* src_instance, uint8_t* dst_buffer) = 0;
+struct TypeField
+{
+  std::string field_name;
+  BasicType type;
+  std::string type_name;
+  bool is_vector = 0;
+  uint32_t array_size = 0;
+
+  bool operator==(const TypeField& other) const;
+  bool operator!=(const TypeField& other) const;
+
+  friend std::ostream& operator<<(std::ostream& os, const TypeField& field);
+};
+
+struct CustomType
+{
+  std::vector<TypeField> fields;
 };
 
 /**
@@ -111,27 +120,18 @@ struct CustomTypeInfo
  */
 struct Schema
 {
-  struct Field
-  {
-    std::string name;
-    BasicType type;
-    bool is_vector = 0;
-    uint16_t array_size = 0;
-    std::shared_ptr<CustomTypeInfo> custom_type;
-
-    bool operator==(const Field& other) const;
-    bool operator!=(const Field& other) const;
-
-    friend std::ostream& operator<<(std::ostream& os, const Field& field);
-  };
-  std::vector<Field> fields;
   uint64_t hash = 0;
+  std::vector<TypeField> fields;
   std::string channel_name;
+
+  std::unordered_map<std::string, CustomType> custom_types;
 
   friend std::ostream& operator<<(std::ostream& os, const Schema& schema);
 };
 
 
-[[nodiscard]]  uint64_t AddFieldToHash(const Schema::Field& field, uint64_t hash);
+[[nodiscard]]  uint64_t AddFieldToHash(const TypeField& field, uint64_t hash);
+
 
 }  // namespace DataTamer
+

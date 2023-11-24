@@ -33,8 +33,9 @@ struct LogChannel::Pimpl
   std::unordered_set<std::shared_ptr<DataSinkBase>> sinks;
 };
 
-RegistrationID LogChannel::registerValueImpl(
-    const std::string& name, ValuePtr&& value_ptr, const std::shared_ptr<CustomTypeInfo>& type_info)
+RegistrationID LogChannel::registerValueImpl(const std::string& name,
+                                             ValuePtr&& value_ptr,
+                                             CustomSerializer::Ptr type_info)
 {
   if (name.find(' ') != std::string::npos)
   {
@@ -55,7 +56,8 @@ RegistrationID LogChannel::registerValueImpl(
     }
     // appending a new ValueHolder to series
     const auto type = value_ptr.type();
-    Schema::Field field{name, type, value_ptr.isVector(), value_ptr.vectorSize(), type_info};
+    const std::string type_name = type_info ? type_info->typeName() : ToStr(type);
+    TypeField field{name, type, type_name, value_ptr.isVector(), value_ptr.vectorSize()};
 
     Pimpl::ValueHolder instance;
     instance.name = name;
