@@ -275,7 +275,7 @@ struct container_info<Container<T, TArgs...>> : container_info_<T, true, 0>
 };
 
 template <typename T, size_t S>
-struct container_info<std::array<T, S>> : container_info_<T, true, S>
+struct container_info<std::array<T, S>> : container_info_<T, true, int(S)>
 {
 };
 
