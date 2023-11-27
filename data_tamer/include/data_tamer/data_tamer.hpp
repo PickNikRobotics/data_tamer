@@ -3,11 +3,12 @@
 #include "data_tamer/channel.hpp"
 #include "data_tamer/details/mutex.hpp"
 
-namespace DataTamer {
+namespace DataTamer
+{
 
-class ChannelsRegistry {
+class ChannelsRegistry
+{
 public:
-
   ChannelsRegistry();
 
   // the Pimpl idiom does not allow a default destructor
@@ -21,14 +22,11 @@ public:
   void addDefaultSink(std::shared_ptr<DataSinkBase> sink);
 
   /// Create a new channel or get a previously create one.
-  [[nodiscard]] std::shared_ptr<LogChannel> getChannel(
-      std::string const& channel_name);
+  [[nodiscard]] std::shared_ptr<LogChannel> getChannel(std::string const& channel_name);
 
 private:
-
   struct Pimpl;
   std::unique_ptr<Pimpl> _p;
 };
 
-
-}  // namespace DataTamer
+}   // namespace DataTamer

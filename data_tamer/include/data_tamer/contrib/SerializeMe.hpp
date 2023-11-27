@@ -123,15 +123,13 @@ inline T const* Span<T>::data() const
 }
 
 template <typename T>
-inline
-T* Span<T>::data()
+inline T* Span<T>::data()
 {
   return data_;
 }
 
 template <typename T>
-inline
-size_t Span<T>::size() const
+inline size_t Span<T>::size() const
 {
   return size_;
 }
@@ -139,7 +137,7 @@ size_t Span<T>::size() const
 template <typename T>
 inline void Span<T>::trimFront(size_t offset)
 {
-  if( offset > size_)
+  if (offset > size_)
   {
     throw std::runtime_error("Buffer overrun");
   }
@@ -239,7 +237,8 @@ struct TypeDefinition
   TypeDefinition() = delete;
 
   std::string typeName() const;
-  template <class Function> void typeDef(Function& addField);
+  template <class Function>
+  void typeDef(Function& addField);
 };
 
 template <template <class, class> class Container, class T, class... TArgs>
@@ -247,12 +246,12 @@ struct TypeDefinition<Container<T, TArgs...>>
 {
   std::string typeName() const
   {
-    return TypeDefinition<T>().typeName()/* + "[]"*/;
+    return TypeDefinition<T>().typeName() /* + "[]"*/;
   }
 };
 
-template<typename T, size_t N>
-struct TypeDefinition<std::array<T,N>>
+template <typename T, size_t N>
+struct TypeDefinition<std::array<T, N>>
 {
   std::string typeName() const
   {
@@ -260,14 +259,14 @@ struct TypeDefinition<std::array<T,N>>
   }
 };
 
-
 template <typename T, class = void>
 struct is_serializer_specialized : std::false_type
 {
 };
 
 template <typename T>
-struct is_serializer_specialized<T, decltype(TypeDefinition<T>(), void())> : std::true_type
+struct is_serializer_specialized<T, decltype(TypeDefinition<T>(), void())>
+  : std::true_type
 {
 };
 
@@ -283,8 +282,7 @@ inline constexpr bool is_arithmetic()
   return std::is_arithmetic_v<T> || std::is_same_v<T, std::byte>;
 }
 
-
-template<typename _Tp, bool _is_container, int _size>
+template <typename _Tp, bool _is_container, int _size>
 struct container_info_
 {
   static constexpr bool is_container = _is_container;
@@ -306,7 +304,6 @@ template <typename T, size_t S>
 struct container_info<std::array<T, S>> : container_info_<T, true, S>
 {
 };
-
 
 template <typename>
 struct is_std_vector : std::false_type
@@ -422,8 +419,7 @@ inline void DeserializeFromBuffer(SpanBytesConst& buffer, T& dest)
                                               "Serialize<>. Check errors below");
     if constexpr (is_serializer_defined<T>())
     {
-      auto func = [&dest, &buffer](const char*, const auto& field)
-      {
+      auto func = [&dest, &buffer](const char*, const auto& field) {
         DeserializeFromBuffer(buffer, dest.*field);
       };
       TypeDefinition<T>().typeDef(func);
@@ -532,8 +528,7 @@ inline void SerializeIntoBuffer(SpanBytes& buffer, T const& value)
                                               "Serialize<>. Check errors below");
     if constexpr (is_serializer_defined<T>())
     {
-      auto func = [&value, &buffer](const char*, auto const& field)
-      {
+      auto func = [&value, &buffer](const char*, auto const& field) {
         SerializeIntoBuffer(buffer, value.*field);
       };
       TypeDefinition<T>().typeDef(func);
@@ -571,7 +566,7 @@ inline void SerializeIntoBuffer(SpanBytes& buffer, std::array<T, N> const& vect)
 
   if constexpr (std::is_arithmetic_v<T> || std::is_same_v<T, std::byte>)
   {
-    if(N*sizeof(T) > buffer.size())
+    if (N * sizeof(T) > buffer.size())
     {
       throw std::runtime_error("SerializeIntoBuffer: buffer overflow");
     }
@@ -584,7 +579,7 @@ inline void SerializeIntoBuffer(SpanBytes& buffer, std::array<T, N> const& vect)
   }
   else
   {
-    for (size_t i=0; i<N; i++)
+    for (size_t i = 0; i < N; i++)
     {
       SerializeIntoBuffer(buffer, vect[i]);
     }

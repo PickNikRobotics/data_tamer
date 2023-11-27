@@ -14,8 +14,8 @@
 #include <variant>
 #include <vector>
 
-
-namespace DataTamerParser {
+namespace DataTamerParser
+{
 
 constexpr int SCHEMA_VERSION = 4;
 
@@ -42,20 +42,16 @@ enum class BasicType
 
 constexpr size_t TypesCount = 13;
 
-using VarNumber = std::variant<
-    bool, char,
-    int8_t, uint8_t,
-    int16_t, uint16_t,
-    int32_t, uint32_t,
-    int64_t, uint64_t,
-    float, double >;
+using VarNumber = std::variant<bool, char, int8_t, uint8_t, int16_t, uint16_t, int32_t,
+                               uint32_t, int64_t, uint64_t, float, double>;
 
 struct BufferSpan
 {
   const uint8_t* data = nullptr;
   size_t size = 0;
 
-  void trimFront(size_t n) {
+  void trimFront(size_t n)
+  {
     data += n;
     size -= n;
   }
@@ -78,7 +74,6 @@ struct TypeField
 
 using FieldsVector = std::vector<TypeField>;
 
-
 /**
  * @brief DataTamer uses a simple "flat" schema of key/value pairs (each pair is a "field").
  */
@@ -93,8 +88,8 @@ struct Schema
 
 Schema BuilSchemaFromText(const std::string& txt);
 
-
-struct SnapshotView {
+struct SnapshotView
+{
   /// Unique identifier of the schema
   size_t schema_hash;
 
@@ -112,9 +107,8 @@ struct SnapshotView {
 
 bool GetBit(BufferSpan mask, size_t index);
 
-
 constexpr auto NullCustomCallback = [](const std::string&, const BufferSpan,
-                                       const std::string&){};
+                                       const std::string&) {};
 
 // Callback must be a std::function or lambda with signature:
 //
@@ -123,8 +117,7 @@ constexpr auto NullCustomCallback = [](const std::string&, const BufferSpan,
 // void(const std::string& name_field, const BufferSpan payload, const std::string& type_name)
 //
 template <typename NumberCallback, typename CustomCallback = decltype(NullCustomCallback)>
-bool ParseSnapshot(const Schema& schema,
-                   SnapshotView snapshot,
+bool ParseSnapshot(const Schema& schema, SnapshotView snapshot,
                    const NumberCallback& callback_number,
                    const CustomCallback& callback_custom = NullCustomCallback);
 
@@ -132,14 +125,14 @@ bool ParseSnapshot(const Schema& schema,
 //---------------------------------------------------------
 //---------------------------------------------------------
 
-template<typename T> inline
-    T Deserialize(BufferSpan& buffer)
+template <typename T>
+inline T Deserialize(BufferSpan& buffer)
 {
   T var;
   const auto N = sizeof(T);
   std::memcpy(&var, buffer.data, N);
   buffer.data += N;
-  if( N > buffer.size)
+  if (N > buffer.size)
   {
     throw std::runtime_error("Buffer overflow");
   }
@@ -147,28 +140,39 @@ template<typename T> inline
   return var;
 }
 
-inline VarNumber DeserializeToVarNumber(BasicType type,
-                                        BufferSpan& buffer)
+inline VarNumber DeserializeToVarNumber(BasicType type, BufferSpan& buffer)
 {
-  switch(type)
+  switch (type)
   {
-    case BasicType::BOOL: return Deserialize<bool>(buffer);
-    case BasicType::CHAR: return Deserialize<char>(buffer);
+    case BasicType::BOOL:
+      return Deserialize<bool>(buffer);
+    case BasicType::CHAR:
+      return Deserialize<char>(buffer);
 
-    case BasicType::INT8: return Deserialize<int8_t>(buffer);
-    case BasicType::UINT8: return Deserialize<uint8_t>(buffer);
+    case BasicType::INT8:
+      return Deserialize<int8_t>(buffer);
+    case BasicType::UINT8:
+      return Deserialize<uint8_t>(buffer);
 
-    case BasicType::INT16: return Deserialize<int16_t>(buffer);
-    case BasicType::UINT16: return Deserialize<uint16_t>(buffer);
+    case BasicType::INT16:
+      return Deserialize<int16_t>(buffer);
+    case BasicType::UINT16:
+      return Deserialize<uint16_t>(buffer);
 
-    case BasicType::INT32: return Deserialize<int32_t>(buffer);
-    case BasicType::UINT32: return Deserialize<uint32_t>(buffer);
+    case BasicType::INT32:
+      return Deserialize<int32_t>(buffer);
+    case BasicType::UINT32:
+      return Deserialize<uint32_t>(buffer);
 
-    case BasicType::INT64: return Deserialize<int64_t>(buffer);
-    case BasicType::UINT64: return Deserialize<uint64_t>(buffer);
+    case BasicType::INT64:
+      return Deserialize<int64_t>(buffer);
+    case BasicType::UINT64:
+      return Deserialize<uint64_t>(buffer);
 
-    case BasicType::FLOAT32: return Deserialize<float>(buffer);
-    case BasicType::FLOAT64: return Deserialize<double>(buffer);
+    case BasicType::FLOAT32:
+      return Deserialize<float>(buffer);
+    case BasicType::FLOAT64:
+      return Deserialize<double>(buffer);
 
     case BasicType::OTHER:
       return double(std::numeric_limits<double>::quiet_NaN());
@@ -182,7 +186,7 @@ inline bool GetBit(BufferSpan mask, size_t index)
   return 0 != (byte & uint8_t(1 << (index % 8)));
 }
 
-[[nodiscard]] inline uint64_t AddFieldToHash(const TypeField &field, uint64_t hash)
+[[nodiscard]] inline uint64_t AddFieldToHash(const TypeField& field, uint64_t hash)
 {
   // https://stackoverflow.com/questions/2590677/how-do-i-combine-hash-values-in-c0x
   const std::hash<std::string> str_hasher;
@@ -190,14 +194,13 @@ inline bool GetBit(BufferSpan mask, size_t index)
   const std::hash<bool> bool_hasher;
   const std::hash<uint32_t> uint_hasher;
 
-  auto combine = [&hash](const auto& hasher, const auto& val)
-  {
+  auto combine = [&hash](const auto& hasher, const auto& val) {
     hash ^= hasher(val) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
   };
 
   combine(str_hasher, field.field_name);
   combine(type_hasher, field.type);
-  if(field.type == BasicType::OTHER)
+  if (field.type == BasicType::OTHER)
   {
     combine(str_hasher, field.type_name);
   }
@@ -206,24 +209,22 @@ inline bool GetBit(BufferSpan mask, size_t index)
   return hash;
 }
 
-bool TypeField::operator==(const TypeField &other) const
+bool TypeField::operator==(const TypeField& other) const
 {
-  return is_vector == other.is_vector &&
-         type == other.type &&
-         array_size == other.array_size &&
-         field_name == other.field_name &&
+  return is_vector == other.is_vector && type == other.type &&
+         array_size == other.array_size && field_name == other.field_name &&
          type_name == other.type_name;
 }
 
 inline Schema BuilSchemaFromText(const std::string& txt)
 {
-
-  auto trimString = [](std::string& str)
-  {
-    while(str.back() == ' ' || str.back() == '\r') {
+  auto trimString = [](std::string& str) {
+    while (str.back() == ' ' || str.back() == '\r')
+    {
       str.pop_back();
     }
-    while(str.front() == ' ' || str.front() == '\r') {
+    while (str.front() == ' ' || str.front() == '\r')
+    {
       str.erase(0, 1);
     }
   };
@@ -238,16 +239,16 @@ inline Schema BuilSchemaFromText(const std::string& txt)
   while (std::getline(ss, line))
   {
     trimString(line);
-    if(line.empty())
+    if (line.empty())
     {
       continue;
     }
-    if(line.find("==============================") != std::string::npos)
+    if (line.find("==============================") != std::string::npos)
     {
       // get "MSG:" in the next line
       std::getline(ss, line);
       auto msg_pos = line.find("MSG: ");
-      if(msg_pos == std::string::npos)
+      if (msg_pos == std::string::npos)
       {
         throw std::runtime_error("Expecting \"MSG: \" at the beginning of line: " + line);
       }
@@ -259,40 +260,40 @@ inline Schema BuilSchemaFromText(const std::string& txt)
 
     // a single space is expected
     auto space_pos = line.find(' ');
-    if(space_pos == std::string::npos)
+    if (space_pos == std::string::npos)
     {
       throw std::runtime_error("Unexpected line: " + line);
     }
-    if(line.find("### ") == 0)
+    if (line.find("### ") == 0)
     {
       space_pos = line.find(' ', 5);
     }
 
     std::string str_left = line.substr(0, space_pos);
-    std::string str_right = line.substr(space_pos+1, line.size() - (space_pos+1));
+    std::string str_right = line.substr(space_pos + 1, line.size() - (space_pos + 1));
     trimString(str_left);
     trimString(str_right);
 
     const std::string* str_type = &str_left;
     const std::string* str_name = &str_right;
 
-    if(str_left == "### version:")
+    if (str_left == "### version:")
     {
       // check compatibility
-      if(std::stoi(str_right) != SCHEMA_VERSION)
+      if (std::stoi(str_right) != SCHEMA_VERSION)
       {
         throw std::runtime_error("Wrong SCHEMA_VERSION");
       }
       continue;
     }
-    if(str_left == "### hash:")
+    if (str_left == "### hash:")
     {
       // check compatibility
       declared_schema = std::stoul(str_right);
       continue;
     }
 
-    if(str_left == "### channel_name:")
+    if (str_left == "### channel_name:")
     {
       // check compatibility
       schema.channel_name = str_right;
@@ -303,33 +304,21 @@ inline Schema BuilSchemaFromText(const std::string& txt)
     TypeField field;
 
     static const std::array<std::string, TypesCount> kNamesNew = {
-        "bool", "char",
-        "int8", "uint8",
-        "int16", "uint16",
-        "int32", "uint32",
-        "int64", "uint64",
-        "float32", "float64",
-        "other"
-    };
+        "bool",   "char",  "int8",   "uint8",   "int16",   "uint16", "int32",
+        "uint32", "int64", "uint64", "float32", "float64", "other"};
     // backcompatibility to old format
     static const std::array<std::string, TypesCount> kNamesOld = {
-        "BOOL", "CHAR",
-        "INT8", "UINT8",
-        "INT16", "UINT16",
-        "INT32", "UINT32",
-        "INT64", "UINT64",
-        "FLOAT", "DOUBLE",
-        "OTHER"
-    };
+        "BOOL",   "CHAR",  "INT8",   "UINT8", "INT16",  "UINT16", "INT32",
+        "UINT32", "INT64", "UINT64", "FLOAT", "DOUBLE", "OTHER"};
 
-    for(size_t i=0; i<TypesCount; i++)
+    for (size_t i = 0; i < TypesCount; i++)
     {
-      if(str_left.find(kNamesNew[i]) == 0)
+      if (str_left.find(kNamesNew[i]) == 0)
       {
         field.type = static_cast<BasicType>(i);
         break;
       }
-      if(str_right.find(kNamesOld[i]) == 0)
+      if (str_right.find(kNamesOld[i]) == 0)
       {
         field.type = static_cast<BasicType>(i);
         std::swap(str_type, str_name);
@@ -337,20 +326,20 @@ inline Schema BuilSchemaFromText(const std::string& txt)
       }
     }
 
-    if(field.type == BasicType::OTHER)
+    if (field.type == BasicType::OTHER)
     {
       field.type_name = *str_type;
     }
 
     auto offset = str_type->find_first_of(" [");
-    if(offset != std::string::npos && str_type->at(offset)=='[')
+    if (offset != std::string::npos && str_type->at(offset) == '[')
     {
       field.is_vector = true;
       auto pos = str_type->find(']', offset);
-      if(pos != offset+1)
+      if (pos != offset + 1)
       {
         // get number
-        std::string number_string = line.substr(offset+1, pos - offset - 1);
+        std::string number_string = line.substr(offset + 1, pos - offset - 1);
         field.array_size = static_cast<uint16_t>(std::stoi(number_string));
       }
     }
@@ -359,45 +348,45 @@ inline Schema BuilSchemaFromText(const std::string& txt)
     trimString(field.field_name);
 
     // update the hash
-    if(field_vector == &schema.fields)
+    if (field_vector == &schema.fields)
     {
       schema.hash = AddFieldToHash(field, schema.hash);
     }
 
     field_vector->push_back(field);
   }
-  if(declared_schema != 0 && declared_schema != schema.hash)
+  if (declared_schema != 0 && declared_schema != schema.hash)
   {
     throw std::runtime_error("Error in hash calculation");
   }
   return schema;
 }
 
-template <typename NumberCallback, typename CustomCallback> inline
-    bool ParseSnapshot(const Schema& schema,
-                  SnapshotView snapshot,
-                  const NumberCallback& callback_number,
-                  const CustomCallback& callback_custom)
+template <typename NumberCallback, typename CustomCallback>
+inline bool ParseSnapshot(const Schema& schema, SnapshotView snapshot,
+                          const NumberCallback& callback_number,
+                          const CustomCallback& callback_custom)
 {
-  if(schema.hash != snapshot.schema_hash)
+  if (schema.hash != snapshot.schema_hash)
   {
     return false;
   }
   BufferSpan buffer = snapshot.payload;
 
-  for(size_t i=0; i<schema.fields.size(); i++)
+  for (size_t i = 0; i < schema.fields.size(); i++)
   {
     const auto& field = schema.fields[i];
-    if(GetBit(snapshot.active_mask, i))
+    if (GetBit(snapshot.active_mask, i))
     {
-      if(!field.is_vector)
+      if (!field.is_vector)
       {
         // regular field, not vector/array
-        if(field.type == BasicType::OTHER)
+        if (field.type == BasicType::OTHER)
         {
           callback_custom(field.field_name, snapshot.payload, field.type_name);
         }
-        else {
+        else
+        {
           const auto var = DeserializeToVarNumber(field.type, buffer);
           callback_number(field.field_name, var);
         }
@@ -405,20 +394,21 @@ template <typename NumberCallback, typename CustomCallback> inline
       else
       {
         uint32_t vect_size = field.array_size;
-        if(field.array_size == 0) // dynamic vector
+        if (field.array_size == 0)   // dynamic vector
         {
           vect_size = Deserialize<uint32_t>(buffer);
         }
-        for(size_t a=0; a<vect_size; a++)
+        for (size_t a = 0; a < vect_size; a++)
         {
           thread_local std::string tmp_name;
           tmp_name = field.field_name + "[" + std::to_string(a) + "]";
 
-          if(field.type == BasicType::OTHER)
+          if (field.type == BasicType::OTHER)
           {
             callback_custom(tmp_name, snapshot.payload, field.type_name);
           }
-          else {
+          else
+          {
             const auto var = DeserializeToVarNumber(field.type, buffer);
             callback_number(tmp_name, var);
           }
@@ -429,4 +419,4 @@ template <typename NumberCallback, typename CustomCallback> inline
   return true;
 }
 
-}  // namespace DataTamer
+}   // namespace DataTamerParser

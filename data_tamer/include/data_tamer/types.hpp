@@ -9,11 +9,12 @@
 #include <vector>
 #include <variant>
 
-
-namespace DataTamer {
+namespace DataTamer
+{
 
 constexpr int SCHEMA_VERSION = 4;
 
+// clang-format off
 enum class BasicType
 {
   BOOL,
@@ -37,6 +38,7 @@ enum class BasicType
 
 constexpr size_t TypesCount = 13;
 
+
 using VarNumber = std::variant<
     bool, char,
     int8_t, uint8_t,
@@ -44,6 +46,7 @@ using VarNumber = std::variant<
     int32_t, uint32_t,
     int64_t, uint64_t,
     float, double >;
+// clang-format on
 
 /// Reverse operation of ValuePtr::serialize
 [[nodiscard]] VarNumber DeserializeAsVarType(const BasicType& type, const void* data);
@@ -52,14 +55,15 @@ using VarNumber = std::variant<
 [[nodiscard]] size_t SizeOf(const BasicType& type);
 
 /// Return the name of the type
-[[nodiscard]] const std::string &ToStr(const BasicType& type);
+[[nodiscard]] const std::string& ToStr(const BasicType& type);
 
 /// Convert string to its type
-[[nodiscard]] BasicType FromStr(const std::string &str);
+[[nodiscard]] BasicType FromStr(const std::string& str);
 
 template <typename T>
 inline constexpr BasicType GetBasicType()
 {
+  // clang-format off
   if constexpr (std::is_same_v<T, bool>) return BasicType::BOOL;
   if constexpr (std::is_same_v<T, char>) return BasicType::CHAR;
   if constexpr (std::is_same_v<T, std::int8_t>) return BasicType::INT8;
@@ -76,11 +80,12 @@ inline constexpr BasicType GetBasicType()
 
   if constexpr (std::is_same_v<T, float>) return BasicType::FLOAT32;
   if constexpr (std::is_same_v<T, double>) return BasicType::FLOAT64;
-
+  // clang-format on
   return BasicType::OTHER;
 }
 
-template <typename T> inline constexpr bool IsNumericType()
+template <typename T>
+inline constexpr bool IsNumericType()
 {
   return std::is_arithmetic_v<T> || std::is_same_v<T, bool> || std::is_same_v<T, char>;
 }
@@ -91,7 +96,8 @@ struct RegistrationID
   size_t fields_count = 0;
 
   // syntactic sugar to be used to concatenate contiguous RegistrationID.
-  void operator+=(const RegistrationID& other) {
+  void operator+=(const RegistrationID& other)
+  {
     fields_count += other.fields_count;
   }
 };
@@ -113,7 +119,6 @@ struct TypeField
 
 using FieldsVector = std::vector<TypeField>;
 
-
 /**
  * @brief DataTamer uses a simple "flat" schema of key/value pairs (each pair is a "field").
  */
@@ -130,9 +135,6 @@ struct Schema
 
 std::string ToStr(const Schema& schema);
 
+[[nodiscard]] uint64_t AddFieldToHash(const TypeField& field, uint64_t hash);
 
-[[nodiscard]]  uint64_t AddFieldToHash(const TypeField& field, uint64_t hash);
-
-
-}  // namespace DataTamer
-
+}   // namespace DataTamer

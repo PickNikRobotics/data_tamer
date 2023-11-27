@@ -14,11 +14,11 @@ class ROS2PublisherSink : public DataSinkBase
 {
 public:
   ROS2PublisherSink(std::shared_ptr<rclcpp::Node> node, const std::string& topic_prefix);
-  
+
   void addChannel(const std::string& name, const Schema& schema) override;
 
   bool storeSnapshot(const Snapshot& snapshot) override;
-  
+
 private:
   std::shared_ptr<rclcpp::Node> node_;
 
@@ -32,6 +32,4 @@ private:
   data_tamer_msgs::msg::Snapshot data_msg_;
 };
 
-
-
-}  // namespace DataTamer
+}   // namespace DataTamer

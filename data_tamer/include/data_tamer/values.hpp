@@ -14,7 +14,8 @@ namespace DataTamer
  * @brief The ValuePtr is a non-owning pointer to
  * a variable.
  */
-class ValuePtr {
+class ValuePtr
+{
 public:
   ValuePtr() = default;
 
@@ -45,13 +46,18 @@ public:
   [[nodiscard]] size_t getSerializedSize() const;
 
   /// Get the type of the stored variable pointer
-  [[nodiscard]] BasicType type() const { return type_; }
+  [[nodiscard]] BasicType type() const
+  {
+    return type_;
+  }
 
-  [[nodiscard]] bool isVector() const {
+  [[nodiscard]] bool isVector() const
+  {
     return is_vector_;
   }
 
-  [[nodiscard]] uint16_t vectorSize() const {
+  [[nodiscard]] uint16_t vectorSize() const
+  {
     return array_size_;
   }
 
@@ -69,113 +75,94 @@ private:
 //------------------------------------------------------------
 //------------------------------------------------------------
 
-template<typename T> inline
-    ValuePtr::ValuePtr(const T* pointer, CustomSerializer::Ptr type_info)
-  : v_ptr_(pointer),
-  type_(GetBasicType<T>()),
-  memory_size_(sizeof(T)),
-  is_vector_(false)
+template <typename T>
+inline ValuePtr::ValuePtr(const T* pointer, CustomSerializer::Ptr type_info) :
+  v_ptr_(pointer), type_(GetBasicType<T>()), memory_size_(sizeof(T)), is_vector_(false)
 {
-  if(type_info)
+  if (type_info)
   {
-    serialize_impl_ = [type_info, pointer](SerializeMe::SpanBytes& buffer) -> void
-    {
+    serialize_impl_ = [type_info, pointer](SerializeMe::SpanBytes& buffer) -> void {
       type_info->serialize(pointer, buffer);
     };
-    get_size_impl_ = [type_info, pointer]()
-    {
+    get_size_impl_ = [type_info, pointer]() {
       return type_info->serializedSize(pointer);
     };
   }
 }
 
-
 template <template <class, class> class Container, class T, class... TArgs>
-inline ValuePtr::ValuePtr(const Container<T, TArgs...>* vect, CustomSerializer::Ptr type_info)
-  : v_ptr_(vect),
-  type_(GetBasicType<T>()),
-  memory_size_(sizeof(T)),
-  is_vector_(true)
+inline ValuePtr::ValuePtr(const Container<T, TArgs...>* vect,
+                          CustomSerializer::Ptr type_info) :
+  v_ptr_(vect), type_(GetBasicType<T>()), memory_size_(sizeof(T)), is_vector_(true)
 {
-  if(type_info)
+  if (type_info)
   {
-    serialize_impl_ = [type_info, vect](SerializeMe::SpanBytes& buffer) -> void
-    {
+    serialize_impl_ = [type_info, vect](SerializeMe::SpanBytes& buffer) -> void {
       type_info->serialize(vect, buffer);
     };
-    get_size_impl_ = [type_info, vect]()
-    {
-      return type_info->serializedSize(vect);
-    };
+    get_size_impl_ = [type_info, vect]() { return type_info->serializedSize(vect); };
   }
   else
   {
-    serialize_impl_ = [vect](SerializeMe::SpanBytes& buffer) -> void
-    {
+    serialize_impl_ = [vect](SerializeMe::SpanBytes& buffer) -> void {
       SerializeMe::SerializeIntoBuffer(buffer, *vect);
     };
-    get_size_impl_ = [vect]()
-    {
-      return SerializeMe::BufferSize(*vect);
-    };
+    get_size_impl_ = [vect]() { return SerializeMe::BufferSize(*vect); };
   }
 }
 
-template<typename T, size_t N> inline
-ValuePtr::ValuePtr(const std::array<T, N> *array, CustomSerializer::Ptr type_info)
-  : v_ptr_(array),
+template <typename T, size_t N>
+inline ValuePtr::ValuePtr(const std::array<T, N>* array,
+                          CustomSerializer::Ptr type_info) :
+  v_ptr_(array),
   type_(GetBasicType<T>()),
   memory_size_(N * sizeof(T)),
   is_vector_(true),
   array_size_(N)
 {
-  if(type_info)
+  if (type_info)
   {
-    serialize_impl_ = [type_info, array](SerializeMe::SpanBytes& buffer) -> void
-    {
+    serialize_impl_ = [type_info, array](SerializeMe::SpanBytes& buffer) -> void {
       type_info->serialize(array, buffer);
     };
-    get_size_impl_ = [type_info, array]()
-    {
-      return type_info->serializedSize(array);
-    };
+    get_size_impl_ = [type_info, array]() { return type_info->serializedSize(array); };
   }
   else
   {
-    serialize_impl_ = [array](SerializeMe::SpanBytes& buffer) -> void
-    {
+    serialize_impl_ = [array](SerializeMe::SpanBytes& buffer) -> void {
       SerializeMe::SerializeIntoBuffer(buffer, *array);
     };
-    get_size_impl_ = [array]()
-    {
-      return SerializeMe::BufferSize(*array);
-    };
+    get_size_impl_ = [array]() { return SerializeMe::BufferSize(*array); };
   }
 }
 
-inline bool ValuePtr::operator==(const ValuePtr &other) const
+inline bool ValuePtr::operator==(const ValuePtr& other) const
 {
-  return type_ == other.type_ &&
-         is_vector_ == other.is_vector_ &&
+  return type_ == other.type_ && is_vector_ == other.is_vector_ &&
          array_size_ == other.array_size_;
 }
 
-inline void ValuePtr::serialize(SerializeMe::SpanBytes &dest) const
+inline void ValuePtr::serialize(SerializeMe::SpanBytes& dest) const
 {
-  if(serialize_impl_)
+  if (serialize_impl_)
   {
     serialize_impl_(dest);
     return;
   }
   // slightly faster than memcpy
-  switch(memory_size_) {
-    case 8: *reinterpret_cast<uint64_t*>(dest.data()) = *static_cast<const uint64_t*>(v_ptr_);
+  switch (memory_size_)
+  {
+    case 8:
+      *reinterpret_cast<uint64_t*>(dest.data()) = *static_cast<const uint64_t*>(v_ptr_);
       break;
-    case 4: *reinterpret_cast<uint32_t*>(dest.data()) = *static_cast<const uint32_t*>(v_ptr_);
+    case 4:
+      *reinterpret_cast<uint32_t*>(dest.data()) = *static_cast<const uint32_t*>(v_ptr_);
       break;
-    case 2: *reinterpret_cast<uint16_t*>(dest.data()) = *static_cast<const uint16_t*>(v_ptr_);
+    case 2:
+      *reinterpret_cast<uint16_t*>(dest.data()) = *static_cast<const uint16_t*>(v_ptr_);
       break;
-    case 1: *(dest.data()) = *static_cast<const uint8_t*>(v_ptr_);
+    case 1:
+      *(dest.data()) = *static_cast<const uint8_t*>(v_ptr_);
       break;
     default:
       std::memcpy(dest.data(), v_ptr_, memory_size_);
@@ -185,11 +172,11 @@ inline void ValuePtr::serialize(SerializeMe::SpanBytes &dest) const
 
 inline size_t ValuePtr::getSerializedSize() const
 {
-  if(!get_size_impl_) {
+  if (!get_size_impl_)
+  {
     return memory_size_;
   }
   return get_size_impl_();
 }
 
-
-}  // namespace DataTamer
+}   // namespace DataTamer
