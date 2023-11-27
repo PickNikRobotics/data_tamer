@@ -261,10 +261,6 @@ private:
 //----------------------------------------------------------------------
 //----------------------------------------------------------------------
 
-// black magic from stack overflow
-template <class C, typename T>
-T getPointerType(T C::*v);
-
 template <typename T>
 inline void LogChannel::updateTypeRegistry()
 {
@@ -279,7 +275,7 @@ inline void LogChannel::updateTypeRegistry()
 
     if constexpr (GetBasicType<MemberType>() == BasicType::OTHER)
     {
-      field.type_name = SerializeMe::TypeDefinition<MemberType>().typeName();
+      field.type_name = TypeDefinition<MemberType>().typeName();
 
       if constexpr (container_info<MemberType>::is_container)
       {
@@ -298,11 +294,11 @@ inline void LogChannel::updateTypeRegistry()
 
   if constexpr (!IsNumericType<T>())
   {
-    const auto& type_name = SerializeMe::TypeDefinition<T>().typeName();
+    const auto& type_name = TypeDefinition<T>().typeName();
     auto added_serializer = _type_registry.addType<T>(type_name, true);
     if (added_serializer)
     {
-      SerializeMe::TypeDefinition<T>().typeDef(func);
+      TypeDefinition<T>().typeDef(func);
       addCustomType(type_name, fields);
     }
   }

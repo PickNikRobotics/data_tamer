@@ -234,29 +234,9 @@ inline T EndianSwap(T t)
 template <class Type>
 struct TypeDefinition
 {
-  TypeDefinition() = delete;
-
   std::string typeName() const;
   template <class Function>
   void typeDef(Function& addField);
-};
-
-template <template <class, class> class Container, class T, class... TArgs>
-struct TypeDefinition<Container<T, TArgs...>>
-{
-  std::string typeName() const
-  {
-    return TypeDefinition<T>().typeName() /* + "[]"*/;
-  }
-};
-
-template <typename T, size_t N>
-struct TypeDefinition<std::array<T, N>>
-{
-  std::string typeName() const
-  {
-    return TypeDefinition<T>().typeName() /*+ "[" + std::to_string(N) +"]"*/;
-  }
 };
 
 template <typename T, class = void>
@@ -269,12 +249,6 @@ struct is_serializer_specialized<T, decltype(TypeDefinition<T>(), void())>
   : std::true_type
 {
 };
-
-template <typename T>
-constexpr bool is_serializer_defined()
-{
-  return is_serializer_specialized<T>::value;
-}
 
 template <typename T>
 inline constexpr bool is_arithmetic()
@@ -346,19 +320,13 @@ inline size_t BufferSize(const T& val)
   }
   else
   {
-    static_assert(is_serializer_defined<T>(), "Missing specialization of class "
-                                              "BufferSize<>. Check errors below");
+    size_t total_size = 0;
+    auto func = [&val, &total_size](const char*, auto const& field) {
+      total_size += BufferSize(val.*field);
+    };
 
-    if constexpr (is_serializer_defined<T>())
-    {
-      size_t total_size = 0;
-      auto func = [&val, &total_size](const char*, auto const& field) {
-        total_size += BufferSize(val.*field);
-      };
-
-      TypeDefinition<T>().typeDef(func);
-      return total_size;
-    }
+    TypeDefinition<T>().typeDef(func);
+    return total_size;
   }
 }
 
@@ -415,15 +383,10 @@ inline void DeserializeFromBuffer(SpanBytesConst& buffer, T& dest)
   }
   else
   {
-    static_assert(is_serializer_defined<T>(), "Missing specialization of class "
-                                              "Serialize<>. Check errors below");
-    if constexpr (is_serializer_defined<T>())
-    {
-      auto func = [&dest, &buffer](const char*, const auto& field) {
-        DeserializeFromBuffer(buffer, dest.*field);
-      };
-      TypeDefinition<T>().typeDef(func);
-    }
+    auto func = [&dest, &buffer](const char*, const auto& field) {
+      DeserializeFromBuffer(buffer, dest.*field);
+    };
+    TypeDefinition<T>().typeDef(func);
   }
 }
 
@@ -524,15 +487,10 @@ inline void SerializeIntoBuffer(SpanBytes& buffer, T const& value)
   }
   else
   {
-    static_assert(is_serializer_defined<T>(), "Missing specialization of class "
-                                              "Serialize<>. Check errors below");
-    if constexpr (is_serializer_defined<T>())
-    {
-      auto func = [&value, &buffer](const char*, auto const& field) {
-        SerializeIntoBuffer(buffer, value.*field);
-      };
-      TypeDefinition<T>().typeDef(func);
-    }
+    auto func = [&value, &buffer](const char*, auto const& field) {
+      SerializeIntoBuffer(buffer, value.*field);
+    };
+    TypeDefinition<T>().typeDef(func);
   }
 }
 

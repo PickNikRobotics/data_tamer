@@ -245,7 +245,7 @@ struct TestType
   std::array<Pose, 3> poses;
 };
 
-namespace SerializeMe
+namespace DataTamer
 {
 template <>
 struct TypeDefinition<TestType>

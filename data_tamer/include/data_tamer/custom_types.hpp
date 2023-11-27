@@ -11,6 +11,45 @@
 namespace DataTamer
 {
 
+template <class T>
+struct TypeDefinition
+{
+  TypeDefinition() = delete;
+
+  /// Provide the name of the type.
+  ///  Implement this in your template specialization
+  std::string typeName() const;
+
+  /// Apply the function in the argument to each field
+  /// The signature of the function addField has:
+  ///  - a [const char*] as 1st argument
+  ///  - [pointer to member] of T as 2nd argument
+  template <class Function>
+  void typeDef(Function& addField);
+};
+
+// black magic from stack overflow
+template <class C, typename T>
+T getPointerType(T C::*v);
+
+template <template <class, class> class Container, class T, class... TArgs>
+struct TypeDefinition<Container<T, TArgs...>>
+{
+  std::string typeName() const
+  {
+    return TypeDefinition<T>().typeName();
+  }
+};
+
+template <typename T, size_t N>
+struct TypeDefinition<std::array<T, N>>
+{
+  std::string typeName() const
+  {
+    return TypeDefinition<T>().typeName();
+  }
+};
+
 class CustomSerializer
 {
 public:
@@ -112,3 +151,22 @@ inline CustomSerializer::Ptr TypesRegistry::addType(const std::string& type_name
 }
 
 }   // namespace DataTamer
+
+// Wrap into a different namespace
+namespace SerializeMe
+{
+
+template <class T>
+inline std::string TypeDefinition<T>::typeName() const
+{
+  return DataTamer::TypeDefinition<T>().typeName();
+}
+
+template <class T>
+template <class Function>
+void TypeDefinition<T>::typeDef(Function& addField)
+{
+  return DataTamer::TypeDefinition<T>().typeDef(addField);
+}
+
+}   // namespace SerializeMe

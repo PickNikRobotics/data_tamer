@@ -1,4 +1,4 @@
-#include "data_tamer/contrib/SerializeMe.hpp"
+#include "data_tamer/custom_types.hpp"
 
 struct Point3D
 {
@@ -22,8 +22,9 @@ struct Pose
 };
 
 
-namespace SerializeMe
+namespace DataTamer
 {
+
 template <>
 struct TypeDefinition<Point3D>
 {
