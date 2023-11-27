@@ -260,7 +260,7 @@ struct TypeDefinition<TestType>
     addField("poses", &TestType::poses);
   }
 };
-} // namespace SerializeMe
+} // namespace DataTamer
 
 TEST(DataTamer, CustomType)
 {

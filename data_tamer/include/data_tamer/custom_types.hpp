@@ -152,7 +152,8 @@ inline CustomSerializer::Ptr TypesRegistry::addType(const std::string& type_name
 
 }   // namespace DataTamer
 
-// Wrap into a different namespace
+// namespace wrapping
+// Forward DataTamer::TypeDefinition to SerializeMe::TypeDefinition
 namespace SerializeMe
 {
 
