@@ -145,11 +145,11 @@ std::ostream& operator<<(std::ostream &os, const Schema &schema)
     os << field << "\n";
   }
 
-  for(const auto& [type_name, custom]: schema.custom_types)
+  for(const auto& [type_name, custom_fields]: schema.custom_types)
   {
     os << "===========================================================\n"
        << "MSG: " << type_name << "\n";
-    for(const auto& field: custom.fields)
+    for(const auto& field: custom_fields)
     {
       os << field << "\n";
     }

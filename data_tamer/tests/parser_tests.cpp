@@ -110,12 +110,12 @@ TEST(DataTamerParser, CustomTypes)
   for(const auto& [type_name, custom_in]: schema_in.custom_types)
   {
     const auto& custom_out = schema_out.custom_types.at(type_name);
-    ASSERT_EQ(custom_in.fields.size(), custom_out.fields.size());
+    ASSERT_EQ(custom_in.size(), custom_out.size());
 
-    for(size_t i=0; i<custom_in.fields.size(); i++)
+    for(size_t i=0; i<custom_in.size(); i++)
     {
-      const auto& field_in = custom_in.fields[i];
-      const auto& field_out = custom_out.fields[i];
+      const auto& field_in = custom_in[i];
+      const auto& field_out = custom_out[i];
 
       ASSERT_EQ(field_in.field_name, field_out.field_name);
       ASSERT_EQ(static_cast<int>(field_in.type), static_cast<int>(field_out.type));

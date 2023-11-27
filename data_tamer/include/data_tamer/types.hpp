@@ -107,10 +107,8 @@ struct TypeField
   friend std::ostream& operator<<(std::ostream& os, const TypeField& field);
 };
 
-struct CustomType
-{
-  std::vector<TypeField> fields;
-};
+using FieldsVector = std::vector<TypeField>;
+
 
 /**
  * @brief DataTamer uses a simple "flat" schema of key/value pairs (each pair is a "field").
@@ -118,10 +116,10 @@ struct CustomType
 struct Schema
 {
   uint64_t hash = 0;
-  std::vector<TypeField> fields;
+  FieldsVector fields;
   std::string channel_name;
 
-  std::unordered_map<std::string, CustomType> custom_types;
+  std::unordered_map<std::string, FieldsVector> custom_types;
 
   friend std::ostream& operator<<(std::ostream& os, const Schema& schema);
 };

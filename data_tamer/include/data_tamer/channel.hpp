@@ -257,7 +257,7 @@ private:
 
   template <typename T> void updateTypeRegistry();
 
-  void addFieldToSchema(const std::string& custom_type_name, const CustomType& custom);
+  void addFieldToSchema(const std::string& custom_type_name, const FieldsVector& fields);
 
   [[nodiscard]] RegistrationID registerValueImpl(const std::string& name,
                                                  ValuePtr&& value_ptr,
@@ -270,8 +270,8 @@ private:
 
 template <typename T> inline void LogChannel::updateTypeRegistry()
 {
-  CustomType custom;
-  auto func = [this, &custom](const char* field_name, const auto& member)
+  FieldsVector fields;
+  auto func = [this, &fields](const char* field_name, const auto& member)
   {
     using MemberType = decltype(getPointerType(member));
     using SerializeMe::container_info;
@@ -296,7 +296,7 @@ template <typename T> inline void LogChannel::updateTypeRegistry()
         updateTypeRegistry<MemberType>();
       }
     }
-    custom.fields.push_back(field);
+    fields.push_back(field);
   };
 
   if constexpr(GetBasicType<T>() == BasicType::OTHER)
@@ -304,7 +304,7 @@ template <typename T> inline void LogChannel::updateTypeRegistry()
     _type_registry.addType<T>();
     SerializeMe::TypeDefinition<T>().typeDef(func);
     const auto& type_name = SerializeMe::TypeDefinition<T>().typeName();
-    addFieldToSchema(type_name, custom);
+    addFieldToSchema(type_name, fields);
   }
 }
 

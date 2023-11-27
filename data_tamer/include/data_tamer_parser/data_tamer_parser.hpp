@@ -76,10 +76,8 @@ struct TypeField
   bool operator!=(const TypeField& other) const;
 };
 
-struct CustomType
-{
-  std::vector<TypeField> fields;
-};
+using FieldsVector = std::vector<TypeField>;
+
 
 /**
  * @brief DataTamer uses a simple "flat" schema of key/value pairs (each pair is a "field").
@@ -87,10 +85,10 @@ struct CustomType
 struct Schema
 {
   uint64_t hash = 0;
-  std::vector<TypeField> fields;
+  FieldsVector fields;
   std::string channel_name;
 
-  std::map<std::string, CustomType> custom_types;
+  std::map<std::string, FieldsVector> custom_types;
 };
 
 Schema BuilSchemaFromText(const std::string& txt);
@@ -255,7 +253,7 @@ inline Schema BuilSchemaFromText(const std::string& txt)
       }
       line.erase(0, 5);
       trimString(line);
-      field_vector = &schema.custom_types[line].fields;
+      field_vector = &schema.custom_types[line];
       continue;
     }
 
