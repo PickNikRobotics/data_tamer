@@ -3,67 +3,15 @@
 #include <iostream>
 #include <thread>
 
-struct Point3D
-{
-  double x;
-  double y;
-  double z;
-};
 
-struct Quaternion
-{
-  double w;
-  double x;
-  double y;
-  double z;
-};
+// check the custom type in the following file,  that defines:
+//
+// - Point3D
+// - Quaternion
+// - Pose
 
-struct Pose
-{
-  Point3D pos;
-  Quaternion rot;
-};
+#include "geometry_types.hpp"
 
-
-namespace SerializeMe
-{
-template <>
-struct TypeDefinition<Point3D>
-{
-  const char* typeName() const { return "Point3D"; }
-  template <class AddFieldT> void typeDef(AddFieldT& addField)
-  {
-    addField("x", &Point3D::x);
-    addField("y", &Point3D::y);
-    addField("z", &Point3D::z);
-  }
-};
-
-template <>
-struct TypeDefinition<Quaternion>
-{
-  const char* typeName() const { return "Quaternion"; }
-  template <class AddFieldT> void typeDef(AddFieldT& addField)
-  {
-    addField("w", &Quaternion::w);
-    addField("x", &Quaternion::x);
-    addField("y", &Quaternion::y);
-    addField("z", &Quaternion::z);
-  }
-};
-
-template <>
-struct TypeDefinition<Pose>
-{
-  const char* typeName() const { return "Pose"; }
-  template <class AddFieldT> void typeDef(AddFieldT& addField)
-  {
-    addField("position", &Pose::pos);
-    addField("rotation", &Pose::rot);
-  }
-};
-
-} // namespace SerializeMe
 
 int main()
 {

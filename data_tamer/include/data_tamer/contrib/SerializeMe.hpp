@@ -238,9 +238,28 @@ struct TypeDefinition
 {
   TypeDefinition() = delete;
 
-  const char* typeName() const;
-  template <class AddFieldT> void typeDef(AddFieldT& addField);
+  std::string typeName() const;
+  template <class Function> void typeDef(Function& addField);
 };
+
+template <template <class, class> class Container, class T, class... TArgs>
+struct TypeDefinition<Container<T, TArgs...>>
+{
+  std::string typeName() const
+  {
+    return TypeDefinition<T>().typeName()/* + "[]"*/;
+  }
+};
+
+template<typename T, size_t N>
+struct TypeDefinition<std::array<T,N>>
+{
+  std::string typeName() const
+  {
+    return TypeDefinition<T>().typeName() /*+ "[" + std::to_string(N) +"]"*/;
+  }
+};
+
 
 template <typename T, class = void>
 struct is_serializer_specialized : std::false_type
@@ -264,24 +283,51 @@ inline constexpr bool is_arithmetic()
   return std::is_arithmetic_v<T> || std::is_same_v<T, std::byte>;
 }
 
+
+template<typename _Tp, bool _is_container, int _size>
+struct container_info_
+{
+  static constexpr bool is_container = _is_container;
+  static constexpr int size = _size;
+  typedef _Tp value_type;
+};
+
+template <typename>
+struct container_info : container_info_<void, false, -1>
+{
+};
+
+template <template <class, class> class Container, class T, class... TArgs>
+struct container_info<Container<T, TArgs...>> : container_info_<T, true, 0>
+{
+};
+
+template <typename T, size_t S>
+struct container_info<std::array<T, S>> : container_info_<T, true, S>
+{
+};
+
+
 template <typename>
 struct is_std_vector : std::false_type
 {
 };
 
-template <typename T, typename A>
-struct is_std_vector<std::vector<T, A>> : std::true_type
+template <typename T, typename... TArgs>
+struct is_std_vector<std::vector<T, TArgs...>> : std::true_type
 {
 };
 
 template <typename>
 struct is_std_array : std::false_type
 {
+  const static size_t Size = 0;
 };
 
 template <typename T, size_t S>
 struct is_std_array<std::array<T, S>> : std::true_type
 {
+  const static size_t Size = S;
 };
 
 template <typename T>
@@ -431,7 +477,7 @@ inline void DeserializeFromBuffer(SpanBytesConst& buffer, Container<T, TArgs...>
   // if the container offers contiguous memory, you can just use memcpy
   if constexpr (sizeof(T) == 1 && is_vector<Container<T, TArgs...>>())
   {
-    if constexpr (is_std_vector<Container<T, TArgs...>>::value)
+    if constexpr (container_info<Container<T, TArgs...>>::size == 0)
     {
       dest.resize(num_values);
     }

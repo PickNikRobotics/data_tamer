@@ -252,6 +252,13 @@ private:
   struct Pimpl;
   std::unique_ptr<Pimpl> _p;
 
+
+  TypesRegistry _type_registry;
+
+  template <typename T> void updateTypeRegistry();
+
+  void addFieldToSchema(const std::string& custom_type_name, const CustomType& custom);
+
   [[nodiscard]] RegistrationID registerValueImpl(const std::string& name,
                                                  ValuePtr&& value_ptr,
                                                  CustomSerializer::Ptr type_info);
@@ -261,6 +268,46 @@ private:
 //----------------------------------------------------------------------
 //----------------------------------------------------------------------
 
+template <typename T> inline void LogChannel::updateTypeRegistry()
+{
+  CustomType custom;
+  auto func = [this, &custom](const char* field_name, const auto& member)
+  {
+    using MemberType = decltype(getPointerType(member));
+    using SerializeMe::container_info;
+
+    TypeField field;
+    field.field_name = field_name;
+    field.type = GetBasicType<MemberType>();
+
+    if constexpr(GetBasicType<MemberType>() == BasicType::OTHER)
+    {
+      field.type_name = SerializeMe::TypeDefinition<MemberType>().typeName();
+
+      if constexpr(container_info<MemberType>::is_container)
+      {
+        field.is_vector = true;
+        field.array_size = container_info<MemberType>::size;
+        using Type = typename container_info<MemberType>::value_type;
+        updateTypeRegistry<Type>();
+      }
+      else
+      {
+        updateTypeRegistry<MemberType>();
+      }
+    }
+    custom.fields.push_back(field);
+  };
+
+  if constexpr(GetBasicType<T>() == BasicType::OTHER)
+  {
+    _type_registry.addType<T>();
+    SerializeMe::TypeDefinition<T>().typeDef(func);
+    const auto& type_name = SerializeMe::TypeDefinition<T>().typeName();
+    addFieldToSchema(type_name, custom);
+  }
+}
+
 template <typename T> inline
 RegistrationID LogChannel::registerValue(const std::string& name, const T *value_ptr) {
 
@@ -269,7 +316,8 @@ RegistrationID LogChannel::registerValue(const std::string& name, const T *value
     return registerValueImpl(name, ValuePtr(value_ptr), {});
   }
   else {
-    auto def = TypesRegistry::Global().getSerializer<T>();
+    updateTypeRegistry<T>();
+    auto def = _type_registry.getSerializer<T>();
     return registerValueImpl(name, ValuePtr(value_ptr, def), def);
   }
 }
@@ -294,7 +342,8 @@ inline RegistrationID LogChannel::registerValue(const std::string& prefix,
     return registerValueImpl(prefix, ValuePtr(vect), {});
   }
   else {
-    auto def = TypesRegistry::Global().getSerializer<T>();
+    auto def = _type_registry.getSerializer<T>();
+    updateTypeRegistry<T>();
     return registerValueImpl(prefix, ValuePtr(vect), def);
   }
 }
@@ -308,7 +357,8 @@ template <typename T, size_t N> inline
   }
   else
   {
-    auto def = TypesRegistry::Global().getSerializer<T>();
+    auto def = _type_registry.getSerializer<T>();
+    updateTypeRegistry<T>();
     return registerValueImpl(prefix, ValuePtr(vect, def), def);
   }
 }

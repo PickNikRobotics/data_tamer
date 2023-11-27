@@ -5,6 +5,7 @@
 #include <iostream>
 #include <limits>
 #include <map>
+#include <sstream>
 #include <unordered_map>
 
 namespace DataTamer {
@@ -134,9 +135,9 @@ std::ostream& operator<<(std::ostream &os, const TypeField &field)
 
 std::ostream& operator<<(std::ostream &os, const Schema &schema)
 {
-  os << "__version__: " << SCHEMA_VERSION << "\n";
-  os << "__hash__: " << schema.hash << "\n";
-  os << "__channel_name__: " << schema.channel_name << "\n";
+  os << "### version: " << SCHEMA_VERSION << "\n";
+  os << "### hash: " << schema.hash << "\n";
+  os << "### channel_name: " << schema.channel_name << "\n\n";
 
 //  std::map<std::string, CustomSerializer::Ptr> custom_types;
   for(const auto& field: schema.fields)
@@ -144,11 +145,14 @@ std::ostream& operator<<(std::ostream &os, const Schema &schema)
     os << field << "\n";
   }
 
-  for(const auto& [type_name, custom_schema]: TypesRegistry::Global().schemas())
+  for(const auto& [type_name, custom]: schema.custom_types)
   {
     os << "===========================================================\n"
-       << "MSG: " << type_name << "\n"
-       << custom_schema;
+       << "MSG: " << type_name << "\n";
+    for(const auto& field: custom.fields)
+    {
+      os << field << "\n";
+    }
   }
 
   return os;
@@ -166,6 +170,13 @@ bool TypeField::operator==(const TypeField &other) const
 bool TypeField::operator!=(const TypeField &other) const
 {
   return !(*this == other);
+}
+
+std::string ToStr(const Schema &schema)
+{
+  std::ostringstream ss;
+  ss << schema;
+  return ss.str();
 }
 
 

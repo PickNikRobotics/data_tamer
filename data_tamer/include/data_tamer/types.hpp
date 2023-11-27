@@ -10,12 +10,9 @@
 #include <variant>
 
 
-#include "data_tamer/contrib/SerializeMe.hpp"
-#include "data_tamer/details/mutex.hpp"
-
 namespace DataTamer {
 
-constexpr int SCHEMA_VERSION = 3;
+constexpr int SCHEMA_VERSION = 4;
 
 enum class BasicType
 {
@@ -95,11 +92,11 @@ struct RegistrationID
   }
 };
 
-
+//---------------------------------------------------------
 struct TypeField
 {
   std::string field_name;
-  BasicType type;
+  BasicType type = BasicType::OTHER;
   std::string type_name;
   bool is_vector = 0;
   uint32_t array_size = 0;
@@ -128,6 +125,8 @@ struct Schema
 
   friend std::ostream& operator<<(std::ostream& os, const Schema& schema);
 };
+
+std::string ToStr(const Schema& schema);
 
 
 [[nodiscard]]  uint64_t AddFieldToHash(const TypeField& field, uint64_t hash);

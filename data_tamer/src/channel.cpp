@@ -156,6 +156,11 @@ Schema LogChannel::getSchema() const
 
 Mutex &LogChannel::writeMutex() { return _p->mutex; }
 
+void LogChannel::addFieldToSchema(const std::string &custom_type_name, const CustomType &custom)
+{
+  _p->schema.custom_types[custom_type_name] = custom;
+}
+
 bool LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
 {
   {

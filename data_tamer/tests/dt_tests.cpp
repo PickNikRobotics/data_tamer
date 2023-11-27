@@ -1,6 +1,8 @@
 #include "data_tamer/data_tamer.hpp"
 #include "data_tamer/sinks/dummy_sink.hpp"
 
+#include "../examples/geometry_types.hpp"
+
 #include <gtest/gtest.h>
 
 #include <variant>
@@ -235,27 +237,30 @@ TEST(DataTamer, Disable)
 }
 
 
-struct Point3D
+struct TestType
 {
-  double x;
-  double y;
-  double z;
+  double timestamp;
+  int count;
+  std::vector<Point3D> positions;
+  std::array<Pose, 3> poses;
 };
 
 namespace SerializeMe
 {
 template <>
-struct TypeDefinition<Point3D>
+struct TypeDefinition<TestType>
 {
-  template <class AddFieldFunc> const char* typeDef(AddFieldFunc& addField)
+  std::string typeName() const { return "TestType"; }
+
+  template <class Function> void typeDef(Function& addField)
   {
-    addField("x", &Point3D::x);
-    addField("y", &Point3D::y);
-    addField("z", &Point3D::z);
-    return "Point3D";
+    addField("timestamp", &TestType::timestamp);
+    addField("count", &TestType::count);
+    addField("positions", &TestType::positions);
+    addField("poses", &TestType::poses);
   }
 };
-}
+} // namespace SerializeMe
 
 TEST(DataTamer, CustomType)
 {
@@ -264,15 +269,23 @@ TEST(DataTamer, CustomType)
   auto sink = std::make_shared<DummySink>();
   channel->addDataSink(sink);
 
-  auto point_info = std::make_shared<CustomSerializerT<Point3D>>("Point3D");
+  Pose pose = {{1, 2, 3}, {4, 5, 6, 7}};
+  channel->registerValue("pose", &pose);
 
-  Point3D point = {1, 2, 3};
-  channel->registerCustomValue("point", &point, point_info);
+  TestType my_test;
+  my_test.positions.resize(4);
+  channel->registerValue("test_value", &my_test);
 
   channel->takeSnapshot();
   std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
-  ASSERT_EQ(sink->latest_snapshot.payload.size(), sizeof(Point3D));
+  auto expected_size = sizeof(Pose) +
+                       sizeof(double) +
+                       sizeof(int32_t) +
+                       sizeof(uint32_t) + 4 * sizeof(Point3D) +
+                       3 * sizeof(Pose);
+
+  ASSERT_EQ(sink->latest_snapshot.payload.size(), expected_size);
 
   //-------------------------------------------------
   // check that the schema includes the Point3D definition
@@ -283,13 +296,45 @@ TEST(DataTamer, CustomType)
 
   std::cout << schema_txt << std::endl;
 
-  const auto posA = schema_txt.find("Point3D point\n");
-  const auto posB = schema_txt.find("---------\nPoint3D\n---------\n");
-  const auto posC = schema_txt.find(point_info->typeSchema());
+  ASSERT_EQ(schema.custom_types.count("Point3D"), 1);
+  ASSERT_EQ(schema.custom_types.count("Quaternion"), 1);
+  ASSERT_EQ(schema.custom_types.count("Pose"), 1);
+  ASSERT_EQ(schema.custom_types.count("TestType"), 1);
 
-  ASSERT_NE(std::string::npos, posA);
-  ASSERT_NE(std::string::npos, posB);
-  ASSERT_NE(std::string::npos, posC);
+  const auto posA = schema_txt.find("Pose pose\n");
+
+  const auto posB = schema_txt.find("===============\n"
+                                    "MSG: Point3D\n"
+                                    "float64 x\n"
+                                    "float64 y\n"
+                                    "float64 z\n");
+
+  const auto posC = schema_txt.find("===============\n"
+                                    "MSG: Quaternion\n"
+                                    "float64 w\n"
+                                    "float64 x\n"
+                                    "float64 y\n"
+                                    "float64 z\n");
+
+  const auto posD = schema_txt.find("===============\n"
+                                    "MSG: Pose\n"
+                                    "Point3D position\n"
+                                    "Quaternion rotation\n");
+
+  const auto posE = schema_txt.find("===============\n"
+                                    "MSG: TestType\n"
+                                    "float64 timestamp\n"
+                                    "int32 count\n"
+                                    "Point3D[] positions\n"
+                                    "Pose[3] poses\n");
+
+  ASSERT_TRUE(std::string::npos != posA);
+  ASSERT_TRUE(std::string::npos != posB);
+  ASSERT_TRUE(std::string::npos != posC);
+  ASSERT_TRUE(std::string::npos != posD);
+  ASSERT_TRUE(std::string::npos != posE);
   ASSERT_LT(posA, posB);
-  ASSERT_LT(posB, posC);
+  ASSERT_LT(posA, posC);
+  ASSERT_LT(posA, posD);
+  ASSERT_LT(posA, posE);
 }

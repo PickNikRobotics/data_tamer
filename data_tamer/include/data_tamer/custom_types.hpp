@@ -1,13 +1,14 @@
 #pragma once
 
-#include "data_tamer/types.hpp"
 
 #include <map>
 #include <mutex>
 #include <typeindex>
 #include <typeinfo>
 
-#include "data_tamer/details/mutex.hpp"
+#include "data_tamer/types.hpp"
+#include "data_tamer/contrib/SerializeMe.hpp"
+
 
 namespace DataTamer {
 
@@ -28,15 +29,14 @@ public:
   virtual void serialize(const void* src_instance, SerializeMe::SpanBytes&) const = 0;
 };
 
-
+template <class C, typename T>
+T getPointerType(T C::*v);
 
 template <typename T>
 class CustomSerializerT : public CustomSerializer
 {
 public:
-  CustomSerializerT(const std::string& type_name): _name(type_name)
-  {
-  }
+  CustomSerializerT(const std::string& type_name);
 
   const char* typeName() const override { return _name.c_str(); }
 
@@ -64,17 +64,18 @@ class TypesRegistry {
 public:
 
   // global instance (similar to singleton)
-  static TypesRegistry& Global()
-  {
-    static TypesRegistry global_object;
-    return global_object;
-  }
+//  static TypesRegistry& Global()
+//  {
+//    static TypesRegistry global_object;
+//    return global_object;
+//  }
 
-  template <typename T> CustomSerializer::Ptr addType(const std::string& type_name)
+  template <typename T> CustomSerializer::Ptr addType()
   {
     std::scoped_lock lk(_mutex);
+    auto type_name = SerializeMe::TypeDefinition<T>().typeName();
     CustomSerializer::Ptr serializer = std::make_shared<CustomSerializerT<T>>(type_name);
-    _schemas_by_name[serializer->typeName()] = serializer->typeSchema();
+    _schemas_by_name[type_name] = serializer->typeSchema();
     _types[typeid(T)] = serializer;
     return serializer;
   }
@@ -86,11 +87,7 @@ public:
 
     if(it == _types.end())
     {
-      auto type_name = SerializeMe::TypeDefinition<T>().typeName();
-      CustomSerializer::Ptr serializer = std::make_shared<CustomSerializerT<T>>(type_name);
-      _schemas_by_name[serializer->typeName()] = serializer->typeSchema();
-      _types[typeid(T)] = serializer;
-      return serializer;
+      return addType<T>();
     }
     return it->second;
   }
@@ -103,8 +100,30 @@ private:
 
   std::unordered_map<std::type_index, CustomSerializer::Ptr> _types;
   std::map<std::string, std::string> _schemas_by_name;
-  Mutex _mutex;
+  std::recursive_mutex _mutex;
 };
+
+
+template<typename T> inline
+    CustomSerializerT<T>::CustomSerializerT(const std::string &type_name): _name(type_name)
+{
+  auto func = [this](const char* field_name, const auto& member)
+  {
+    using MemberType = decltype(getPointerType(member));
+    if constexpr(GetBasicType<MemberType>() != BasicType::OTHER)
+    {
+      _schema += ToStr(GetBasicType<MemberType>());
+    }
+    else
+    {
+      _schema += SerializeMe::TypeDefinition<MemberType>().typeName();
+    }
+    _schema += std::string(" ") + field_name + '\n';
+  };
+
+  using namespace SerializeMe;
+  TypeDefinition<T>().typeDef(func);
+}
 
 
 }  // namespace DataTamer
