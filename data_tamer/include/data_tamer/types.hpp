@@ -80,13 +80,17 @@ inline constexpr BasicType GetBasicType()
   return BasicType::OTHER;
 }
 
+template <typename T> inline constexpr bool IsNumericType()
+{
+  return std::is_arithmetic_v<T> || std::is_same_v<T, bool> || std::is_same_v<T, char>;
+}
+
 struct RegistrationID
 {
   size_t first_index = 0;
   size_t fields_count = 0;
 
-  // sintactic sugar to be used to concatenate contiguous RegistrationID.
-  // See example custom_type.cpp
+  // syntactic sugar to be used to concatenate contiguous RegistrationID.
   void operator+=(const RegistrationID& other) {
     fields_count += other.fields_count;
   }

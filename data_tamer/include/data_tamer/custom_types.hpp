@@ -29,18 +29,34 @@ public:
   virtual void serialize(const void* src_instance, SerializeMe::SpanBytes&) const = 0;
 };
 
-template <class C, typename T>
-T getPointerType(T C::*v);
 
+class TypesRegistry {
+public:
+
+  template <typename T>
+  CustomSerializer::Ptr addType(const std::string& type_name,
+                                bool skip_if_present = false);
+
+  template <typename T>
+  [[nodiscard]] CustomSerializer::Ptr getSerializer();
+
+private:
+
+  std::unordered_map<std::string, CustomSerializer::Ptr> _types;
+  std::recursive_mutex _mutex;
+};
+//------------------------------------------------------------------
 template <typename T>
 class CustomSerializerT : public CustomSerializer
 {
 public:
-  CustomSerializerT(const std::string& type_name);
+  CustomSerializerT(const std::string& type_name): _name(type_name)
+  {}
 
-  const char* typeName() const override { return _name.c_str(); }
-
-  const char* typeSchema() const override { return _schema.c_str(); }
+  const char* typeName() const override
+  {
+    return _name.c_str();
+  }
 
   uint32_t serializedSize(const void* src_instance) const override
   {
@@ -57,72 +73,41 @@ public:
 
 private:
   std::string _name;
-  std::string _schema;
 };
 
-class TypesRegistry {
-public:
-
-  // global instance (similar to singleton)
-//  static TypesRegistry& Global()
-//  {
-//    static TypesRegistry global_object;
-//    return global_object;
-//  }
-
-  template <typename T> CustomSerializer::Ptr addType()
-  {
-    std::scoped_lock lk(_mutex);
-    auto type_name = SerializeMe::TypeDefinition<T>().typeName();
-    CustomSerializer::Ptr serializer = std::make_shared<CustomSerializerT<T>>(type_name);
-    _schemas_by_name[type_name] = serializer->typeSchema();
-    _types[typeid(T)] = serializer;
-    return serializer;
-  }
-
-  template <typename T> [[nodiscard]] CustomSerializer::Ptr getSerializer()
-  {
-    std::scoped_lock lk(_mutex);
-    auto it = _types.find(typeid(T));
-
-    if(it == _types.end())
-    {
-      return addType<T>();
-    }
-    return it->second;
-  }
-
-  const std::map<std::string, std::string>& schemas() const {
-    return _schemas_by_name;
-  }
-
-private:
-
-  std::unordered_map<std::type_index, CustomSerializer::Ptr> _types;
-  std::map<std::string, std::string> _schemas_by_name;
-  std::recursive_mutex _mutex;
-};
-
+//------------------------------------------------------------------
 
 template<typename T> inline
-    CustomSerializerT<T>::CustomSerializerT(const std::string &type_name): _name(type_name)
+CustomSerializer::Ptr TypesRegistry::getSerializer()
 {
-  auto func = [this](const char* field_name, const auto& member)
-  {
-    using MemberType = decltype(getPointerType(member));
-    if constexpr(GetBasicType<MemberType>() != BasicType::OTHER)
-    {
-      _schema += ToStr(GetBasicType<MemberType>());
-    }
-    else
-    {
-      _schema += SerializeMe::TypeDefinition<MemberType>().typeName();
-    }
-    _schema += std::string(" ") + field_name + '\n';
-  };
+  static_assert (!IsNumericType<T>(),
+                "You don't need to create a serializer for a numerical type. "
+                "There might be an error in your code.");
 
-  using namespace SerializeMe;
-  TypeDefinition<T>().typeDef(func);
+  std::scoped_lock lk(_mutex);
+  const auto type_name = SerializeMe::TypeDefinition<T>().typeName();
+  auto it = _types.find(type_name);
+
+  if(it == _types.end())
+  {
+    CustomSerializer::Ptr serializer = std::make_shared<CustomSerializerT<T>>(type_name);
+    _types[type_name] = serializer;
+    return serializer;
+  }
+  return it->second;
+}
+
+template<typename T> inline
+    CustomSerializer::Ptr TypesRegistry::addType(const std::string &type_name, bool skip_if_present)
+{
+  std::scoped_lock lk(_mutex);
+  if(skip_if_present && _types.count(type_name) != 0)
+  {
+    return {};
+  }
+  CustomSerializer::Ptr serializer = std::make_shared<CustomSerializerT<T>>(type_name);
+  _types[type_name] = serializer;
+  return serializer;
 }
 
 

@@ -77,19 +77,6 @@ private:
 //---------------------------------------------------------
 
 /**
- * @brief RegisterVariable must be specialized for user-defined types.
- * See examples/custom_type.cpp to learn more.
- *
- * @param channel  the channel to register to
- * @param name     name of the variable
- * @param value    pointer to the value to be registered.
- *
- * @return ID to be used to unregister the field(s)
- */
-//template <typename T>
-//RegistrationID RegisterVariable(LogChannel& channel, const std::string& name, const T* value);
-
-/**
  * @brief A LogChannel is a class used to record multiple values in a single
  * "snapshot". Taking a snapshot is usually done in a periodic loop.
  *
@@ -257,7 +244,7 @@ private:
 
   template <typename T> void updateTypeRegistry();
 
-  void addFieldToSchema(const std::string& custom_type_name, const FieldsVector& fields);
+  void addCustomType(const std::string& custom_type_name, const FieldsVector& fields);
 
   [[nodiscard]] RegistrationID registerValueImpl(const std::string& name,
                                                  ValuePtr&& value_ptr,
@@ -267,6 +254,9 @@ private:
 //----------------------------------------------------------------------
 //----------------------------------------------------------------------
 //----------------------------------------------------------------------
+
+// black magic from stack overflow
+template <class C, typename T> T getPointerType(T C::*v);
 
 template <typename T> inline void LogChannel::updateTypeRegistry()
 {
@@ -299,19 +289,22 @@ template <typename T> inline void LogChannel::updateTypeRegistry()
     fields.push_back(field);
   };
 
-  if constexpr(GetBasicType<T>() == BasicType::OTHER)
+  if constexpr(!IsNumericType<T>())
   {
-    _type_registry.addType<T>();
-    SerializeMe::TypeDefinition<T>().typeDef(func);
     const auto& type_name = SerializeMe::TypeDefinition<T>().typeName();
-    addFieldToSchema(type_name, fields);
+    auto added_serializer = _type_registry.addType<T>(type_name, true);
+    if(added_serializer)
+    {
+      SerializeMe::TypeDefinition<T>().typeDef(func);
+      addCustomType(type_name, fields);
+    }
   }
 }
 
 template <typename T> inline
 RegistrationID LogChannel::registerValue(const std::string& name, const T *value_ptr) {
 
-  if constexpr (GetBasicType<T>() != BasicType::OTHER )
+  if constexpr (IsNumericType<T>())
   {
     return registerValueImpl(name, ValuePtr(value_ptr), {});
   }
@@ -327,7 +320,7 @@ template <typename T> inline
 RegistrationID LogChannel::registerCustomValue(const std::string& name, const T *value_ptr,
                                                       CustomSerializer::Ptr serializer) {
 
-  static_assert(GetBasicType<T>() == BasicType::OTHER,
+  static_assert(!IsNumericType<T>(),
                 "This method should be used only for custom types");
 
   return registerValueImpl(name, ValuePtr(value_ptr, serializer), serializer);
@@ -337,7 +330,7 @@ template <template <class, class> class Container, class T, class... TArgs>
 inline RegistrationID LogChannel::registerValue(const std::string& prefix,
                                                 const Container<T, TArgs...>* vect)
 {
-  if constexpr (GetBasicType<T>() != BasicType::OTHER )
+  if constexpr (IsNumericType<T>())
   {
     return registerValueImpl(prefix, ValuePtr(vect), {});
   }
@@ -351,7 +344,7 @@ inline RegistrationID LogChannel::registerValue(const std::string& prefix,
 template <typename T, size_t N> inline
     RegistrationID LogChannel::registerValue(const std::string& prefix, const std::array<T, N>* vect)
 {
-  if constexpr (GetBasicType<T>() != BasicType::OTHER )
+  if constexpr (IsNumericType<T>())
   {
     return registerValueImpl(prefix, ValuePtr(vect), {});
   }
