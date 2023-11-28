@@ -39,39 +39,27 @@ public:
   virtual ~CustomSerializer() = default;
   // name of the type, to be written in the schema string.
   virtual const std::string& typeName() const = 0;
-  // optional custom schema of the type
 
+  // optional custom schema of the type
   virtual std::optional<CustomSchema> typeSchema() const
   {
     return std::nullopt;
   }
   // size in bytes of the serialized object.
   // Needed to pre-allocate memory in the buffer
-  virtual size_t serializedSize(const void* src_instance) const = 0;
+  virtual size_t serializedSize(const void* instance) const = 0;
 
-  // true if the serialized object will always have the same amount of bytes
+  // true if the method serializedSize will ALWAYS return the same value
   virtual bool isFixedSize() const = 0;
 
-  // serialize an object into a buffer. Return the size in bytes of the serialized data
-  virtual void serialize(const void* src_instance, SerializeMe::SpanBytes&) const = 0;
+  // serialize an object into a buffer.
+  virtual void serialize(const void* instance, SerializeMe::SpanBytes&) const = 0;
 };
 
-class TypesRegistry
-{
-public:
-  template <typename T>
-  CustomSerializer::Ptr addType(const std::string& type_name,
-                                bool skip_if_present = false);
-
-  template <typename T>
-  [[nodiscard]] CustomSerializer::Ptr getSerializer();
-
-private:
-  std::unordered_map<std::string, CustomSerializer::Ptr> _types;
-  std::recursive_mutex _mutex;
-};
 //------------------------------------------------------------------
 
+// This derived class is used automatically by all the types
+// that have a template specialization of TypeDefinition<T>
 template <typename T>
 class CustomSerializerT : public CustomSerializer
 {
@@ -91,6 +79,22 @@ public:
 private:
   std::string _name;
   size_t _fixed_size = 0;
+};
+
+
+class TypesRegistry
+{
+public:
+  template <typename T>
+  CustomSerializer::Ptr addType(const std::string& type_name,
+                                bool skip_if_present = false);
+
+  template <typename T>
+  [[nodiscard]] CustomSerializer::Ptr getSerializer();
+
+private:
+  std::unordered_map<std::string, CustomSerializer::Ptr> _types;
+  std::recursive_mutex _mutex;
 };
 
 //------------------------------------------------------------------
