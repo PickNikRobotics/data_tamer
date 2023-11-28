@@ -32,24 +32,6 @@ struct TypeDefinition
 template <class C, typename T>
 T getPointerType(T C::*v);
 
-template <template <class, class> class Container, class T, class... TArgs>
-struct TypeDefinition<Container<T, TArgs...>>
-{
-  std::string typeName() const
-  {
-    return TypeDefinition<T>().typeName();
-  }
-};
-
-template <typename T, size_t N>
-struct TypeDefinition<std::array<T, N>>
-{
-  std::string typeName() const
-  {
-    return TypeDefinition<T>().typeName();
-  }
-};
-
 class CustomSerializer
 {
 public:
@@ -85,36 +67,120 @@ private:
   std::recursive_mutex _mutex;
 };
 //------------------------------------------------------------------
+
 template <typename T>
 class CustomSerializerT : public CustomSerializer
 {
 public:
-  CustomSerializerT(const std::string& type_name) : _name(type_name)
-  {}
+  CustomSerializerT(const std::string& type_name);
 
-  const char* typeName() const override
-  {
-    return _name.c_str();
-  }
+  const char* typeName() const override;
 
-  uint32_t serializedSize(const void* src_instance) const override
-  {
-    const auto* obj = static_cast<const T*>(src_instance);
-    return uint32_t(SerializeMe::BufferSize(*obj));
-  }
+  uint32_t serializedSize(const void* src_instance) const override;
 
   void serialize(const void* src_instance,
-                 SerializeMe::SpanBytes& dst_buffer) const override
-  {
-    const auto* obj = static_cast<const T*>(src_instance);
-    SerializeMe::SerializeIntoBuffer(dst_buffer, *obj);
-  }
+                 SerializeMe::SpanBytes& dst_buffer) const override;
 
 private:
   std::string _name;
+  size_t _fixed_size = 0;
 };
 
 //------------------------------------------------------------------
+//------------------------------------------------------------------
+//------------------------------------------------------------------
+
+
+template <template <class, class> class Container, class T, class... TArgs>
+struct TypeDefinition<Container<T, TArgs...>>
+{
+  std::string typeName() const
+  {
+    return TypeDefinition<T>().typeName();
+  }
+};
+
+template <typename T, size_t N>
+struct TypeDefinition<std::array<T, N>>
+{
+  std::string typeName() const
+  {
+    return TypeDefinition<T>().typeName();
+  }
+};
+
+template <typename T>
+inline void GetFixedSize(bool& is_fixed_size, size_t &fixed_size)
+{
+  constexpr auto info = SerializeMe::container_info<T>();
+  if constexpr(IsNumericType<T>())
+  {
+    fixed_size += sizeof(T);
+    return;
+  }
+  else if constexpr(info.is_container && info.size == 0)
+  {
+    // vector
+    is_fixed_size = false;
+    return;
+  }
+  else if constexpr(info.is_container && info.size >= 0)
+  {
+    // array
+    size_t obj_size;
+    using Type = typename SerializeMe::container_info<T>::value_type;
+    GetFixedSize<Type>(is_fixed_size, obj_size);
+    fixed_size += info.size * obj_size;
+    return;
+  }
+  else
+  {
+    // type recursion
+    auto func = [&](const char*, auto const& member) {
+      using MemberType = decltype(getPointerType(member));
+      if(is_fixed_size)
+      {
+        GetFixedSize<MemberType>(is_fixed_size, fixed_size);
+      }
+    };
+    TypeDefinition<T>().typeDef(func);
+  }
+}
+
+template<typename T> inline
+    CustomSerializerT<T>::CustomSerializerT(const std::string &type_name) : _name(type_name)
+{
+  bool is_fixed_size = true;
+  GetFixedSize<T>(is_fixed_size, _fixed_size);
+  if(!is_fixed_size)
+  {
+    _fixed_size = 0;
+  }
+}
+
+template<typename T> inline
+const char *CustomSerializerT<T>::typeName() const
+{
+  return _name.c_str();
+}
+
+template<typename T> inline
+    uint32_t CustomSerializerT<T>::serializedSize(const void *src_instance) const
+{
+  if(_fixed_size != 0)
+  {
+    return uint32_t(_fixed_size);
+  }
+  const auto* obj = static_cast<const T*>(src_instance);
+  return uint32_t(SerializeMe::BufferSize(*obj));
+}
+
+template<typename T> inline
+void CustomSerializerT<T>::serialize(const void *src_instance, SerializeMe::SpanBytes &dst_buffer) const
+{
+  const auto* obj = static_cast<const T*>(src_instance);
+  SerializeMe::SerializeIntoBuffer(dst_buffer, *obj);
+}
 
 template <typename T>
 inline CustomSerializer::Ptr TypesRegistry::getSerializer()
