@@ -30,8 +30,8 @@ public:
    * @brief MCAPSink
    *
    * @param filepath   path of the file to be saved. Should have extension ".mcap"
-   * @param do_compression if true, compress the data on the fly. Note that in case of a crash/segfault
-   * some of the data may be lost; it is therefore more conservative to leave this to false.
+   * @param do_compression if true, compress the data on the fly. Note that, in case of a crash/segfault,
+   * some of the data may (will!) be lost; it is therefore more conservative to leave this to false.
    */
   explicit MCAPSink(std::string const& filepath, bool do_compression = false);
 
@@ -45,7 +45,7 @@ public:
   /// and overwritten. Default value is 600 seconds (10 minutes)
   void setMaxTimeBeforeReset(std::chrono::seconds reset_time);
 
-  // Stop recording (can't be restarted) and save the file
+  /// Stop recording (can't be restarted) and save the file
   void stopRecording();
 
 private:
