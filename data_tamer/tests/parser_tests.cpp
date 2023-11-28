@@ -229,13 +229,21 @@ TEST(DataTamerParser, VectorParsing)
   auto dummy_sink = std::make_shared<DataTamer::DummySink>();
   channel->addDataSink(dummy_sink);
 
-  std::vector<double> vals = {10, 11, 12};
-  std::array<Point3D, 2> points;
+  std::vector<double> valsA = {10, 11, 12};
+  std::array<int, 2> valsB = {13, 14};
+
+  std::array<Point3D, 3> points;
   points[0] = {1, 2, 3};
   points[1] = {4, 5, 6};
+  points[2] = {7, 8, 9};
+  std::vector<Quaternion> quats(2);
+  quats[0] = {20, 21, 22, 23};
+  quats[1] = {30, 31, 32, 33};
 
-  channel->registerValue("vals", &vals);
+  channel->registerValue("valsA", &valsA);
+  channel->registerValue("valsB", &valsB);
   channel->registerValue("points", &points);
+  channel->registerValue("quats", &quats);
 
   channel->takeSnapshot();
   std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -258,9 +266,12 @@ TEST(DataTamerParser, VectorParsing)
     std::cout << name << ": " << value << std::endl;
   }
 
-  ASSERT_EQ(parsed_values.at("vals[0]"), 10);
-  ASSERT_EQ(parsed_values.at("vals[1]"), 11);
-  ASSERT_EQ(parsed_values.at("vals[2]"), 12);
+  ASSERT_EQ(parsed_values.at("valsA[0]"), 10);
+  ASSERT_EQ(parsed_values.at("valsA[1]"), 11);
+  ASSERT_EQ(parsed_values.at("valsA[2]"), 12);
+
+  ASSERT_EQ(parsed_values.at("valsB[0]"), 13);
+  ASSERT_EQ(parsed_values.at("valsB[1]"), 14);
 
   ASSERT_EQ(parsed_values.at("points[0]/x"), 1);
   ASSERT_EQ(parsed_values.at("points[0]/y"), 2);
@@ -269,4 +280,18 @@ TEST(DataTamerParser, VectorParsing)
   ASSERT_EQ(parsed_values.at("points[1]/x"), 4);
   ASSERT_EQ(parsed_values.at("points[1]/y"), 5);
   ASSERT_EQ(parsed_values.at("points[1]/z"), 6);
+
+  ASSERT_EQ(parsed_values.at("points[2]/x"), 7);
+  ASSERT_EQ(parsed_values.at("points[2]/y"), 8);
+  ASSERT_EQ(parsed_values.at("points[2]/z"), 9);
+
+  ASSERT_EQ(parsed_values.at("quats[0]/w"), 20);
+  ASSERT_EQ(parsed_values.at("quats[0]/x"), 21);
+  ASSERT_EQ(parsed_values.at("quats[0]/y"), 22);
+  ASSERT_EQ(parsed_values.at("quats[0]/z"), 23);
+
+  ASSERT_EQ(parsed_values.at("quats[1]/w"), 30);
+  ASSERT_EQ(parsed_values.at("quats[1]/x"), 31);
+  ASSERT_EQ(parsed_values.at("quats[1]/y"), 32);
+  ASSERT_EQ(parsed_values.at("quats[1]/z"), 33);
 }
