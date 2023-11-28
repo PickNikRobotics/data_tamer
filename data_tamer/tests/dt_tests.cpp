@@ -338,3 +338,58 @@ TEST(DataTamer, CustomType)
   ASSERT_LT(posA, posD);
   ASSERT_LT(posA, posE);
 }
+
+
+TEST(DataTamer, CustomType2)
+{
+  ChannelsRegistry registry;
+  auto channel = registry.getChannel("chan");
+  auto sink = std::make_shared<DummySink>();
+  channel->addDataSink(sink);
+
+  std::array<Point3D, 2> points;
+  std::vector<Quaternion> quats(3);
+
+  channel->registerValue("points", &points);
+  channel->registerValue("quats", &quats);
+
+  channel->takeSnapshot();
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+  auto expected_size = 2 * sizeof(Point3D) +
+                       3 * sizeof(Quaternion) + sizeof(uint32_t);
+
+  //-------------------------------------------------
+  const auto schema = channel->getSchema();
+  std::ostringstream ss;
+  ss << schema;
+  const std::string schema_txt = ss.str();
+
+  std::cout << schema_txt << std::endl;
+
+  ASSERT_EQ(sink->latest_snapshot.payload.size(), expected_size);
+  ASSERT_EQ(schema.custom_types.count("Point3D"), 1);
+  ASSERT_EQ(schema.custom_types.count("Quaternion"), 1);
+
+  const auto posA = schema_txt.find("Point3D[2] points\n"
+                                    "Quaternion[] quats\n");
+
+  const auto posB = schema_txt.find("===============\n"
+                                    "MSG: Point3D\n"
+                                    "float64 x\n"
+                                    "float64 y\n"
+                                    "float64 z\n");
+
+  const auto posC = schema_txt.find("===============\n"
+                                    "MSG: Quaternion\n"
+                                    "float64 w\n"
+                                    "float64 x\n"
+                                    "float64 y\n"
+                                    "float64 z\n");
+
+  ASSERT_TRUE(std::string::npos != posA);
+  ASSERT_TRUE(std::string::npos != posB);
+  ASSERT_TRUE(std::string::npos != posC);
+  ASSERT_LT(posA, posB);
+  ASSERT_LT(posA, posC);
+}

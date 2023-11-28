@@ -326,12 +326,15 @@ inline Schema BuilSchemaFromText(const std::string& txt)
       }
     }
 
-    if (field.type == BasicType::OTHER)
+    auto offset = str_type->find_first_of(" [");
+    if (field.type != BasicType::OTHER)
     {
-      field.type_name = *str_type;
+      field.type_name = kNamesNew[static_cast<size_t>(field.type)];
+    }
+    else {
+      field.type_name = str_type->substr(0, offset);
     }
 
-    auto offset = str_type->find_first_of(" [");
     if (offset != std::string::npos && str_type->at(offset) == '[')
     {
       field.is_vector = true;
@@ -362,6 +365,55 @@ inline Schema BuilSchemaFromText(const std::string& txt)
   return schema;
 }
 
+template <typename NumberCallback>
+bool ParseSnapshotRecursive(const TypeField& field,
+                            const std::map<std::string, FieldsVector>& types_list,
+                            BufferSpan& buffer,
+                            const NumberCallback& callback_number,
+                            const std::string& prefix)
+{
+
+  [[maybe_unused]] uint32_t vect_size = field.array_size;
+  if (field.is_vector && field.array_size == 0)
+  {
+    // dynamic vector
+    vect_size = Deserialize<uint32_t>(buffer);
+  }
+
+  auto new_prefix = (prefix.empty()) ? field.field_name : (prefix + "/" + field.field_name);
+
+  auto doParse = [&](const std::string& var_name)
+  {
+    if(field.type != BasicType::OTHER)
+    {
+      const auto var = DeserializeToVarNumber(field.type, buffer);
+      callback_number(var_name, var);
+    }
+    else {
+      const FieldsVector& fields = types_list.at(field.type_name);
+      for(const auto& sub_field: fields)
+      {
+        ParseSnapshotRecursive(sub_field, types_list, buffer, callback_number, var_name);
+      }
+    }
+  };
+
+  if(!field.is_vector)
+  {
+    doParse(new_prefix);
+  }
+  else
+  {
+    for(uint32_t a=0; a < vect_size; a++)
+    {
+      const auto& name = new_prefix + "[" + std::to_string(a) + "]";
+      doParse(name);
+    }
+  }
+  return true;
+}
+
+
 template <typename NumberCallback, typename CustomCallback>
 inline bool ParseSnapshot(const Schema& schema, SnapshotView snapshot,
                           const NumberCallback& callback_number,
@@ -378,42 +430,7 @@ inline bool ParseSnapshot(const Schema& schema, SnapshotView snapshot,
     const auto& field = schema.fields[i];
     if (GetBit(snapshot.active_mask, i))
     {
-      if (!field.is_vector)
-      {
-        // regular field, not vector/array
-        if (field.type == BasicType::OTHER)
-        {
-          callback_custom(field.field_name, snapshot.payload, field.type_name);
-        }
-        else
-        {
-          const auto var = DeserializeToVarNumber(field.type, buffer);
-          callback_number(field.field_name, var);
-        }
-      }
-      else
-      {
-        uint32_t vect_size = field.array_size;
-        if (field.array_size == 0)   // dynamic vector
-        {
-          vect_size = Deserialize<uint32_t>(buffer);
-        }
-        for (size_t a = 0; a < vect_size; a++)
-        {
-          thread_local std::string tmp_name;
-          tmp_name = field.field_name + "[" + std::to_string(a) + "]";
-
-          if (field.type == BasicType::OTHER)
-          {
-            callback_custom(tmp_name, snapshot.payload, field.type_name);
-          }
-          else
-          {
-            const auto var = DeserializeToVarNumber(field.type, buffer);
-            callback_number(tmp_name, var);
-          }
-        }
-      }
+      ParseSnapshotRecursive(field, schema.custom_types, buffer, callback_number, "");
     }
   }
   return true;

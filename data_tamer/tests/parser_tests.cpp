@@ -1,8 +1,10 @@
 #include "data_tamer_parser/data_tamer_parser.hpp"
 #include "data_tamer/data_tamer.hpp"
+#include "data_tamer/sinks/dummy_sink.hpp"
 #include "../examples/geometry_types.hpp"
 
 #include <gtest/gtest.h>
+#include <thread>
 #include <variant>
 #include <string>
 
@@ -25,25 +27,25 @@ uint16  my/short
 
   ASSERT_EQ(schema.fields.size(), 7);
 
-  TypeField field0 = {"v1", BasicType::INT8, {}, false, 0};
+  TypeField field0 = {"v1", BasicType::INT8, "int8", false, 0};
   ASSERT_EQ(schema.fields[0], field0);
 
-  TypeField field1 = {"v2", BasicType::FLOAT64, {}, false, 0};
+  TypeField field1 = {"v2", BasicType::FLOAT64, "float64", false, 0};
   ASSERT_EQ(schema.fields[1], field1);
 
-  TypeField field2 = {"array", BasicType::FLOAT32, {}, true, 5};
+  TypeField field2 = {"array", BasicType::FLOAT32, "float32", true, 5};
   ASSERT_EQ(schema.fields[2], field2);
 
-  TypeField field3 = {"vect", BasicType::INT32, {}, true, 0};
+  TypeField field3 = {"vect", BasicType::INT32, "int32", true, 0};
   ASSERT_EQ(schema.fields[3], field3);
 
-  TypeField field4 = {"is_true", BasicType::BOOL, {}, false, 0};
+  TypeField field4 = {"is_true", BasicType::BOOL, "bool", false, 0};
   ASSERT_EQ(schema.fields[4], field4);
 
-  TypeField field5 = {"blob", BasicType::CHAR, {}, true, 256};
+  TypeField field5 = {"blob", BasicType::CHAR, "char", true, 256};
   ASSERT_EQ(schema.fields[5], field5);
 
-  TypeField field6 = {"my/short", BasicType::UINT16, {}, false, 0};
+  TypeField field6 = {"my/short", BasicType::UINT16, "uint16", false, 0};
   ASSERT_EQ(schema.fields[6], field6);
 }
 
@@ -123,4 +125,148 @@ TEST(DataTamerParser, CustomTypes)
       ASSERT_EQ(field_in.array_size, field_out.array_size);
     }
   }
+}
+
+SnapshotView ConvertSnapshot(const DataTamer::Snapshot& snapshot)
+{
+  return {snapshot.schema_hash,
+          uint64_t(snapshot.timestamp.count()),
+          {snapshot.active_mask.data(), snapshot.active_mask.size()},
+          {snapshot.payload.data(), snapshot.payload.size()}};
+}
+
+TEST(DataTamerParser, PlainParsing)
+{
+  DataTamer::ChannelsRegistry registry;
+  auto channel = registry.getChannel("channel");
+  auto dummy_sink = std::make_shared<DataTamer::DummySink>();
+  channel->addDataSink(dummy_sink);
+
+  int32_t v1 = 5;
+  uint16_t v2 = 6;
+  double v3 = 7;
+  uint16_t v4 = 8;
+
+  channel->registerValue("v1", &v1);
+  channel->registerValue("v2", &v2);
+  channel->registerValue("v3", &v3);
+  channel->registerValue("v4", &v4);
+
+  channel->takeSnapshot();
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+  const auto& schema_in = channel->getSchema();
+  const auto& schema_out = DataTamerParser::BuilSchemaFromText(ToStr(schema_in));
+  const auto snapshot_view = ConvertSnapshot(dummy_sink->latest_snapshot);
+
+  std::map<std::string, double> parsed_values;
+  auto callback = [&](const std::string& field_name, const DataTamerParser::VarNumber& number)
+  {
+    parsed_values[field_name] = std::visit([](const auto& var) { return double(var); }, number);
+  };
+
+  DataTamerParser::ParseSnapshot(schema_out, snapshot_view, callback);
+
+  for(const auto& [name, value]: parsed_values)
+  {
+    std::cout << name << ": " << value << std::endl;
+  }
+
+  ASSERT_EQ(parsed_values.at("v1"), 5);
+  ASSERT_EQ(parsed_values.at("v2"), 6);
+  ASSERT_EQ(parsed_values.at("v3"), 7);
+  ASSERT_EQ(parsed_values.at("v4"), 8);
+}
+
+TEST(DataTamerParser, CustomParsing)
+{
+  DataTamer::ChannelsRegistry registry;
+  auto channel = registry.getChannel("channel");
+  auto dummy_sink = std::make_shared<DataTamer::DummySink>();
+  channel->addDataSink(dummy_sink);
+
+  Pose pose;
+  pose.pos = {1, 2, 3};
+  pose.rot = {4, 5, 6, 7};
+  channel->registerValue("pose", &pose);
+
+  channel->takeSnapshot();
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+  const auto& schema_in = channel->getSchema();
+  const auto& schema_out = DataTamerParser::BuilSchemaFromText(ToStr(schema_in));
+  const auto snapshot_view = ConvertSnapshot(dummy_sink->latest_snapshot);
+
+  std::map<std::string, double> parsed_values;
+  auto callback = [&](const std::string& field_name, const DataTamerParser::VarNumber& number)
+  {
+    const double value = std::visit([](const auto& var) { return double(var); }, number);
+    parsed_values[field_name] = value;
+  };
+
+  DataTamerParser::ParseSnapshot(schema_out, snapshot_view, callback);
+
+  for(const auto& [name, value]: parsed_values)
+  {
+    std::cout << name << ": " << value << std::endl;
+  }
+
+  ASSERT_EQ(parsed_values.at("pose/position/x"), 1);
+  ASSERT_EQ(parsed_values.at("pose/position/y"), 2);
+  ASSERT_EQ(parsed_values.at("pose/position/z"), 3);
+
+  ASSERT_EQ(parsed_values.at("pose/rotation/w"), 4);
+  ASSERT_EQ(parsed_values.at("pose/rotation/x"), 5);
+  ASSERT_EQ(parsed_values.at("pose/rotation/y"), 6);
+  ASSERT_EQ(parsed_values.at("pose/rotation/z"), 7);
+}
+
+
+TEST(DataTamerParser, VectorParsing)
+{
+  DataTamer::ChannelsRegistry registry;
+  auto channel = registry.getChannel("channel");
+  auto dummy_sink = std::make_shared<DataTamer::DummySink>();
+  channel->addDataSink(dummy_sink);
+
+  std::vector<double> vals = {10, 11, 12};
+  std::array<Point3D, 2> points;
+  points[0] = {1, 2, 3};
+  points[1] = {4, 5, 6};
+
+  channel->registerValue("vals", &vals);
+  channel->registerValue("points", &points);
+
+  channel->takeSnapshot();
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+  const auto& schema_in = channel->getSchema();
+  const auto& schema_out = DataTamerParser::BuilSchemaFromText(ToStr(schema_in));
+  const auto snapshot_view = ConvertSnapshot(dummy_sink->latest_snapshot);
+
+  std::map<std::string, double> parsed_values;
+  auto callback = [&](const std::string& field_name, const DataTamerParser::VarNumber& number)
+  {
+    const double value = std::visit([](const auto& var) { return double(var); }, number);
+    parsed_values[field_name] = value;
+  };
+
+  DataTamerParser::ParseSnapshot(schema_out, snapshot_view, callback);
+
+  for(const auto& [name, value]: parsed_values)
+  {
+    std::cout << name << ": " << value << std::endl;
+  }
+
+  ASSERT_EQ(parsed_values.at("vals[0]"), 10);
+  ASSERT_EQ(parsed_values.at("vals[1]"), 11);
+  ASSERT_EQ(parsed_values.at("vals[2]"), 12);
+
+  ASSERT_EQ(parsed_values.at("points[0]/x"), 1);
+  ASSERT_EQ(parsed_values.at("points[0]/y"), 2);
+  ASSERT_EQ(parsed_values.at("points[0]/z"), 3);
+
+  ASSERT_EQ(parsed_values.at("points[1]/x"), 4);
+  ASSERT_EQ(parsed_values.at("points[1]/y"), 5);
+  ASSERT_EQ(parsed_values.at("points[1]/z"), 6);
 }

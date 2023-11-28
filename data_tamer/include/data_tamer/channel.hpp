@@ -340,8 +340,8 @@ inline RegistrationID LogChannel::registerValue(const std::string& prefix,
   }
   else
   {
-    auto def = _type_registry.getSerializer<T>();
     updateTypeRegistry<T>();
+    auto def = _type_registry.getSerializer<T>();
     return registerValueImpl(prefix, ValuePtr(vect), def);
   }
 }
@@ -356,8 +356,8 @@ inline RegistrationID LogChannel::registerValue(const std::string& prefix,
   }
   else
   {
-    auto def = _type_registry.getSerializer<T>();
     updateTypeRegistry<T>();
+    auto def = _type_registry.getSerializer<T>();
     return registerValueImpl(prefix, ValuePtr(vect, def), def);
   }
 }

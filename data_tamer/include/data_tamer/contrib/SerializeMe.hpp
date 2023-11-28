@@ -264,8 +264,8 @@ struct container_info_
   typedef _Tp value_type;
 };
 
-template <typename>
-struct container_info : container_info_<void, false, -1>
+template <typename T>
+struct container_info : container_info_<T, false, -1>
 {
 };
 
