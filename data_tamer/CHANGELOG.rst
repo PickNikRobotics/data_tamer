@@ -2,8 +2,8 @@
 Changelog for package data_tamer
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.7.0 (2023-11-28)
+------------------
 * recursive_mutex and call it a day
 * add MCAP option
 * add MCAPSink::stopRecording
