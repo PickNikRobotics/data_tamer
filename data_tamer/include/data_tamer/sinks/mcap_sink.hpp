@@ -6,6 +6,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <deque>
+#include <mutex>
 #include <thread>
 #include <unordered_map>
 
@@ -37,6 +38,9 @@ public:
   /// and overwritten. Default value is 600 seconds (10 minutes)
   void setMaxTimeBeforeReset(std::chrono::seconds reset_time);
 
+  // Stop recording (can't be restarted) and save the file
+  void stopRecording();
+
 private:
   std::string filepath_;
   std::unique_ptr<mcap::McapWriter> writer_;
@@ -47,7 +51,9 @@ private:
   std::chrono::seconds reset_time_ = std::chrono::seconds(60 * 10);
   std::chrono::system_clock::time_point start_time_;
 
+  bool forced_stop_recording_ = false;
   Mutex schema_mutex_;
+  std::recursive_mutex writer_mutex_;
 
   void openFile(std::string const& filepath);
 };

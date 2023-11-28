@@ -40,6 +40,7 @@ MCAPSink::MCAPSink(const std::string& filepath) : filepath_(filepath)
 
 void DataTamer::MCAPSink::openFile(std::string const& filepath)
 {
+  std::scoped_lock wlk(writer_mutex_);
   writer_ = std::make_unique<mcap::McapWriter>();
   mcap::McapWriterOptions options(kDataTamer);
   options.compression = mcap::Compression::Zstd;
@@ -56,7 +57,11 @@ void DataTamer::MCAPSink::openFile(std::string const& filepath)
 MCAPSink::~MCAPSink()
 {
   stopThread();
-  writer_->close();
+  std::scoped_lock wlk(writer_mutex_);
+  if(forced_stop_recording_)
+  {
+    writer_->close();
+  }
 }
 
 void MCAPSink::addChannel(std::string const& channel_name, Schema const& schema)
@@ -74,20 +79,26 @@ void MCAPSink::addChannel(std::string const& channel_name, Schema const& schema)
   std::string schema_str = ss.str();
 
   auto const schema_name = channel_name + "::" + std::to_string(schema.hash);
+  {
+    std::scoped_lock wlk(writer_mutex_);
+    // Register a Schema
+    mcap::Schema mcap_schema(schema_name, kDataTamer, schema_str);
+    writer_->addSchema(mcap_schema);
 
-  // Register a Schema
-  mcap::Schema mcap_schema(schema_name, kDataTamer, schema_str);
-  writer_->addSchema(mcap_schema);
-
-  // Register a Channel
-  mcap::Channel publisher(channel_name, kDataTamer, mcap_schema.id);
-  writer_->addChannel(publisher);
-
-  hash_to_channel_id_[schema.hash] = publisher.id;
+    // Register a Channel
+    mcap::Channel publisher(channel_name, kDataTamer, mcap_schema.id);
+    writer_->addChannel(publisher);
+    hash_to_channel_id_[schema.hash] = publisher.id;
+  }
 }
 
 bool MCAPSink::storeSnapshot(const Snapshot& snapshot)
 {
+  std::scoped_lock wlk(writer_mutex_);
+  if(forced_stop_recording_)
+  {
+    return false;
+  }
   // the payload must contain both the ActiveMask and the other data
   thread_local std::vector<uint8_t> merged_payload;
   const auto size_mask = snapshot.active_mask.size();
@@ -134,6 +145,13 @@ bool MCAPSink::storeSnapshot(const Snapshot& snapshot)
 void MCAPSink::setMaxTimeBeforeReset(std::chrono::seconds reset_time)
 {
   reset_time_ = reset_time;
+}
+
+void MCAPSink::stopRecording()
+{
+  std::scoped_lock wlk(writer_mutex_);
+  forced_stop_recording_ = true;
+  writer_->close();
 }
 
 }   // namespace DataTamer
