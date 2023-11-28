@@ -112,38 +112,38 @@ struct TypeDefinition<std::array<T, N>>
 template <typename T>
 inline void GetFixedSize(bool& is_fixed_size, size_t &fixed_size)
 {
-  constexpr auto info = SerializeMe::container_info<T>();
   if constexpr(IsNumericType<T>())
   {
     fixed_size += sizeof(T);
-    return;
-  }
-  else if constexpr(info.is_container && info.size == 0)
-  {
-    // vector
-    is_fixed_size = false;
-    return;
-  }
-  else if constexpr(info.is_container && info.size >= 0)
-  {
-    // array
-    size_t obj_size;
-    using Type = typename SerializeMe::container_info<T>::value_type;
-    GetFixedSize<Type>(is_fixed_size, obj_size);
-    fixed_size += info.size * obj_size;
-    return;
   }
   else
   {
-    // type recursion
-    auto func = [&](const char*, auto const& member) {
-      using MemberType = decltype(getPointerType(member));
-      if(is_fixed_size)
-      {
-        GetFixedSize<MemberType>(is_fixed_size, fixed_size);
-      }
-    };
-    TypeDefinition<T>().typeDef(func);
+    constexpr auto info = SerializeMe::container_info<T>();
+    if constexpr(info.is_container && info.size == 0)
+    {
+      // vector
+      is_fixed_size = false;
+    }
+    else if constexpr(info.is_container && info.size >= 0)
+    {
+      // array
+      size_t obj_size;
+      using Type = typename SerializeMe::container_info<T>::value_type;
+      GetFixedSize<Type>(is_fixed_size, obj_size);
+      fixed_size += info.size * obj_size;
+    }
+    else
+    {
+      // type recursion
+      auto func = [&](const char*, auto const& member) {
+        using MemberType = decltype(getPointerType(member));
+        if(is_fixed_size)
+        {
+          GetFixedSize<MemberType>(is_fixed_size, fixed_size);
+        }
+      };
+      TypeDefinition<T>().typeDef(func);
+    }
   }
 }
 
