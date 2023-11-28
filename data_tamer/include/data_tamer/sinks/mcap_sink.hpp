@@ -1,7 +1,6 @@
 #pragma once
 
 #include "data_tamer/data_sink.hpp"
-#include "data_tamer/details/mutex.hpp"
 
 #include <atomic>
 #include <condition_variable>
@@ -27,11 +26,12 @@ class MCAPSink : public DataSinkBase
 {
 public:
   /**
-   * @brief MCAPSink
+   * @brief MCAPSink.
+   * IMPORTANT: if you want the recorder to be more robust to crash/segfault,
+   * set `do_compression` to false
    *
    * @param filepath   path of the file to be saved. Should have extension ".mcap"
-   * @param do_compression if true, compress the data on the fly. Note that, in case of a crash/segfault,
-   * some of the data may (will!) be lost; it is therefore more conservative to leave this to false.
+   * @param do_compression if true, compress the data on the fly.
    */
   explicit MCAPSink(std::string const& filepath, bool do_compression = false);
 
@@ -45,8 +45,18 @@ public:
   /// and overwritten. Default value is 600 seconds (10 minutes)
   void setMaxTimeBeforeReset(std::chrono::seconds reset_time);
 
-  /// Stop recording (can't be restarted) and save the file
+  /// Stop recording and save the file
   void stopRecording();
+
+  /**
+   * @brief restartRecording saves the current file (unless we did it already,
+   * calling stopRecording) and start recording into a new one.
+   * Note that all the registered channels and their schemas will be copied into the new file.
+   *
+   * @param filepath   file path of the new file (should be ".mcap" extension)
+   * @param do_compression if true, compress the data on the fly.
+   */
+  void restartRecording(std::string const& filepath, bool do_compression = false);
 
 private:
   std::string filepath_;
@@ -60,8 +70,7 @@ private:
   std::chrono::system_clock::time_point start_time_;
 
   bool forced_stop_recording_ = false;
-  Mutex schema_mutex_;
-  std::recursive_mutex writer_mutex_;
+  std::recursive_mutex mutex_;
 
   void openFile(std::string const& filepath);
 };

@@ -40,7 +40,7 @@ MCAPSink::MCAPSink(const std::string& filepath, bool do_compression) : filepath_
 
 void DataTamer::MCAPSink::openFile(std::string const& filepath)
 {
-  std::scoped_lock wlk(writer_mutex_);
+  std::scoped_lock lk(mutex_);
   writer_ = std::make_unique<mcap::McapWriter>();
   mcap::McapWriterOptions options(kDataTamer);
   options.compression = compression_ ? mcap::Compression::Zstd : mcap::Compression::None;
@@ -57,16 +57,12 @@ void DataTamer::MCAPSink::openFile(std::string const& filepath)
 MCAPSink::~MCAPSink()
 {
   stopThread();
-  std::scoped_lock wlk(writer_mutex_);
-  if(forced_stop_recording_)
-  {
-    writer_->close();
-  }
+  std::scoped_lock lk(mutex_);
 }
 
 void MCAPSink::addChannel(std::string const& channel_name, Schema const& schema)
 {
-  std::scoped_lock lk(schema_mutex_);
+  std::scoped_lock lk(mutex_);
   schemas_[channel_name] = schema;
   auto it = hash_to_channel_id_.find(schema.hash);
   if (it != hash_to_channel_id_.end())
@@ -79,22 +75,20 @@ void MCAPSink::addChannel(std::string const& channel_name, Schema const& schema)
   std::string schema_str = ss.str();
 
   auto const schema_name = channel_name + "::" + std::to_string(schema.hash);
-  {
-    std::scoped_lock wlk(writer_mutex_);
-    // Register a Schema
-    mcap::Schema mcap_schema(schema_name, kDataTamer, schema_str);
-    writer_->addSchema(mcap_schema);
 
-    // Register a Channel
-    mcap::Channel publisher(channel_name, kDataTamer, mcap_schema.id);
-    writer_->addChannel(publisher);
-    hash_to_channel_id_[schema.hash] = publisher.id;
-  }
+  // Register a Schema
+  mcap::Schema mcap_schema(schema_name, kDataTamer, schema_str);
+  writer_->addSchema(mcap_schema);
+
+  // Register a Channel
+  mcap::Channel publisher(channel_name, kDataTamer, mcap_schema.id);
+  writer_->addChannel(publisher);
+  hash_to_channel_id_[schema.hash] = publisher.id;
 }
 
 bool MCAPSink::storeSnapshot(const Snapshot& snapshot)
 {
-  std::scoped_lock wlk(writer_mutex_);
+  std::scoped_lock lk(mutex_);
   if(forced_stop_recording_)
   {
     return false;
@@ -111,10 +105,7 @@ bool MCAPSink::storeSnapshot(const Snapshot& snapshot)
 
   // Write our message
   mcap::Message msg;
-  {
-    std::scoped_lock lk(schema_mutex_);
-    msg.channelId = hash_to_channel_id_.at(snapshot.schema_hash);
-  }
+  msg.channelId = hash_to_channel_id_.at(snapshot.schema_hash);
   msg.sequence = 1;   // Optional
   // Timestamp requires nanosecond
   msg.logTime = mcap::Timestamp(snapshot.timestamp.count());
@@ -128,16 +119,7 @@ bool MCAPSink::storeSnapshot(const Snapshot& snapshot)
   auto const now = std::chrono::system_clock::now();
   if (now - start_time_ > reset_time_)
   {
-    // close current file
-    writer_->close();
-    // reopen the same path (overwrite)
-    openFile(filepath_);
-
-    // rebuild the channels
-    for (auto const& [name, schema] : schemas_)
-    {
-      addChannel(name, schema);
-    }
+    restartRecording(filepath_, compression_);
   }
   return true;
 }
@@ -149,9 +131,24 @@ void MCAPSink::setMaxTimeBeforeReset(std::chrono::seconds reset_time)
 
 void MCAPSink::stopRecording()
 {
-  std::scoped_lock wlk(writer_mutex_);
+  std::scoped_lock lk(mutex_);
   forced_stop_recording_ = true;
   writer_->close();
+  writer_.reset();
+}
+
+void MCAPSink::restartRecording(const std::string &filepath, bool do_compression)
+{
+  std::scoped_lock lk(mutex_);
+  filepath_ = filepath;
+  compression_ = do_compression;
+  openFile(filepath_);
+
+  // rebuild the channels
+  for (auto const& [name, schema] : schemas_)
+  {
+    addChannel(name, schema);
+  }
 }
 
 }   // namespace DataTamer
