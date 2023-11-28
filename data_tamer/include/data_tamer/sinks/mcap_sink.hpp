@@ -26,7 +26,14 @@ namespace DataTamer
 class MCAPSink : public DataSinkBase
 {
 public:
-  explicit MCAPSink(std::string const& filepath);
+  /**
+   * @brief MCAPSink
+   *
+   * @param filepath   path of the file to be saved. Should have extension ".mcap"
+   * @param do_compression if true, compress the data on the fly. Note that in case of a crash/segfault
+   * some of the data may be lost; it is therefore more conservative to leave this to false.
+   */
+  explicit MCAPSink(std::string const& filepath, bool do_compression = false);
 
   ~MCAPSink() override;
 
@@ -43,6 +50,7 @@ public:
 
 private:
   std::string filepath_;
+  bool compression_ = false;
   std::unique_ptr<mcap::McapWriter> writer_;
 
   std::unordered_map<uint64_t, uint16_t> hash_to_channel_id_;

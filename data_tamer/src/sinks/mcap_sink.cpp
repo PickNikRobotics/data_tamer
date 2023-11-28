@@ -33,7 +33,7 @@ namespace DataTamer
 
 static constexpr char const* kDataTamer = "data_tamer";
 
-MCAPSink::MCAPSink(const std::string& filepath) : filepath_(filepath)
+MCAPSink::MCAPSink(const std::string& filepath, bool do_compression) : filepath_(filepath), compression_(do_compression)
 {
   openFile(filepath_);
 }
@@ -43,7 +43,7 @@ void DataTamer::MCAPSink::openFile(std::string const& filepath)
   std::scoped_lock wlk(writer_mutex_);
   writer_ = std::make_unique<mcap::McapWriter>();
   mcap::McapWriterOptions options(kDataTamer);
-  options.compression = mcap::Compression::Zstd;
+  options.compression = compression_ ? mcap::Compression::Zstd : mcap::Compression::None;
   auto status = writer_->open(filepath, options);
   if (!status.ok())
   {
