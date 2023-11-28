@@ -13,18 +13,20 @@ namespace DataTamer
  * you must destroy this object as soon as the pointer was used.
  */
 template <typename T, class Mutex>
-class LockedRef {
-  public:
-
+class LockedRef
+{
+public:
   LockedRef() = default;
 
-  LockedRef(T* obj, Mutex* obj_mutex):
-        ref_(obj), mutex_(obj_mutex) {
+  LockedRef(T* obj, Mutex* obj_mutex) : ref_(obj), mutex_(obj_mutex)
+  {
     mutex_->lock();
   }
 
-  ~LockedRef() {
-    if(mutex_) {
+  ~LockedRef()
+  {
+    if (mutex_)
+    {
       mutex_->unlock();
     }
   }
@@ -32,48 +34,57 @@ class LockedRef {
   LockedRef(LockedRef const&) = delete;
   LockedRef& operator=(LockedRef const&) = delete;
 
-  LockedRef(LockedRef && other) {
+  LockedRef(LockedRef&& other)
+  {
     std::swap(ref_, other.ref_);
     std::swap(mutex_, other.mutex_);
   }
 
-  LockedRef& operator=(LockedRef&& other) {
+  LockedRef& operator=(LockedRef&& other)
+  {
     std::swap(ref_, other.ref_);
     std::swap(mutex_, other.mutex_);
   }
 
-  operator bool() const {
+  operator bool() const
+  {
     return ref_ != nullptr;
   }
 
-  void lock() {
-    if(mutex_) {
+  void lock()
+  {
+    if (mutex_)
+    {
       mutex_->lock();
     }
   }
 
-  void unlock() {
-    if(mutex_) {
+  void unlock()
+  {
+    if (mutex_)
+    {
       mutex_->unlock();
     }
   }
 
-  bool empty() const {
+  bool empty() const
+  {
     return ref_ == nullptr;
   }
 
-  const T& operator()() const{
+  const T& operator()() const
+  {
     return *ref_;
   }
 
-  T& operator()() {
+  T& operator()()
+  {
     return *ref_;
   }
 
-  private:
+private:
   T* ref_ = nullptr;
   Mutex* mutex_ = nullptr;
 };
 
-
-}
+}   // namespace DataTamer

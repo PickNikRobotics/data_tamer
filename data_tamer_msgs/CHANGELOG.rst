@@ -2,6 +2,9 @@
 Changelog for package data_tamer_msgs
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.7.0 (2023-11-28)
+------------------
+
 0.6.0 (2023-11-23)
 ------------------
 * works correctly with plotjuggler

@@ -1,6 +1,8 @@
 #include "data_tamer/data_tamer.hpp"
 #include "data_tamer/sinks/dummy_sink.hpp"
 
+#include "../examples/geometry_types.hpp"
+
 #include <gtest/gtest.h>
 
 #include <variant>
@@ -60,7 +62,6 @@ TEST(DataTamer, SerializeVariant)
   {
     std::cout << std::to_string(arg) << std::endl;
   };
-
 
   auto serializeAndBack = [&](auto const& value)
   {
@@ -236,37 +237,30 @@ TEST(DataTamer, Disable)
 }
 
 
-struct Point3D
+struct TestType
 {
-  double x;
-  double y;
-  double z;
+  double timestamp;
+  int count;
+  std::vector<Point3D> positions;
+  std::array<Pose, 3> poses;
 };
 
-struct PointTypeInfo: public CustomTypeInfo
+namespace DataTamer
 {
-  ~PointTypeInfo() override = default;
+template <>
+struct TypeDefinition<TestType>
+{
+  std::string typeName() const { return "TestType"; }
 
-  const char* typeName() override {
-    return "Point3D";
-  }
-
-  const char* typeSchema() override {
-    return "float32 x\n"
-           "float32 y\n"
-           "float32 z\n";
-  }
-
-  uint32_t serializedSize(const void* src_instance)  override {
-    return sizeof(Point3D);
-  }
-  uint32_t serialize(const void* src_instance, uint8_t* dst_buffer) override
+  template <class Function> void typeDef(Function& addField)
   {
-    auto* p = static_cast<const Point3D*>(src_instance);
-    std::memcpy(dst_buffer, p, sizeof(Point3D));
-    return sizeof(Point3D);
+    addField("timestamp", &TestType::timestamp);
+    addField("count", &TestType::count);
+    addField("positions", &TestType::positions);
+    addField("poses", &TestType::poses);
   }
 };
+} // namespace DataTamer
 
 TEST(DataTamer, CustomType)
 {
@@ -275,16 +269,23 @@ TEST(DataTamer, CustomType)
   auto sink = std::make_shared<DummySink>();
   channel->addDataSink(sink);
 
-  auto point_info = std::make_shared<PointTypeInfo>();
+  Pose pose = {{1, 2, 3}, {4, 5, 6, 7}};
+  channel->registerValue("pose", &pose);
 
-  Point3D point = {1, 2, 3};
-  channel->registerCustomValue("point", &point, point_info);
+  TestType my_test;
+  my_test.positions.resize(4);
+  channel->registerValue("test_value", &my_test);
 
   channel->takeSnapshot();
   std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
-  size_t expected = sizeof(uint32_t) + sizeof(Point3D);
-  ASSERT_EQ(sink->latest_snapshot.payload.size(), expected);
+  auto expected_size = sizeof(Pose) +
+                       sizeof(double) +
+                       sizeof(int32_t) +
+                       sizeof(uint32_t) + 4 * sizeof(Point3D) +
+                       3 * sizeof(Pose);
+
+  ASSERT_EQ(sink->latest_snapshot.payload.size(), expected_size);
 
   //-------------------------------------------------
   // check that the schema includes the Point3D definition
@@ -295,13 +296,100 @@ TEST(DataTamer, CustomType)
 
   std::cout << schema_txt << std::endl;
 
-  const auto posA = schema_txt.find("Point3D point\n");
-  const auto posB = schema_txt.find("---------\nPoint3D\n---------\n");
-  const auto posC = schema_txt.find(point_info->typeSchema());
+  ASSERT_EQ(schema.custom_types.count("Point3D"), 1);
+  ASSERT_EQ(schema.custom_types.count("Quaternion"), 1);
+  ASSERT_EQ(schema.custom_types.count("Pose"), 1);
+  ASSERT_EQ(schema.custom_types.count("TestType"), 1);
 
-  ASSERT_NE(std::string::npos, posA);
-  ASSERT_NE(std::string::npos, posB);
-  ASSERT_NE(std::string::npos, posC);
+  const auto posA = schema_txt.find("Pose pose\n");
+
+  const auto posB = schema_txt.find("===============\n"
+                                    "MSG: Point3D\n"
+                                    "float64 x\n"
+                                    "float64 y\n"
+                                    "float64 z\n");
+
+  const auto posC = schema_txt.find("===============\n"
+                                    "MSG: Quaternion\n"
+                                    "float64 w\n"
+                                    "float64 x\n"
+                                    "float64 y\n"
+                                    "float64 z\n");
+
+  const auto posD = schema_txt.find("===============\n"
+                                    "MSG: Pose\n"
+                                    "Point3D position\n"
+                                    "Quaternion rotation\n");
+
+  const auto posE = schema_txt.find("===============\n"
+                                    "MSG: TestType\n"
+                                    "float64 timestamp\n"
+                                    "int32 count\n"
+                                    "Point3D[] positions\n"
+                                    "Pose[3] poses\n");
+
+  ASSERT_TRUE(std::string::npos != posA);
+  ASSERT_TRUE(std::string::npos != posB);
+  ASSERT_TRUE(std::string::npos != posC);
+  ASSERT_TRUE(std::string::npos != posD);
+  ASSERT_TRUE(std::string::npos != posE);
   ASSERT_LT(posA, posB);
-  ASSERT_LT(posB, posC);
+  ASSERT_LT(posA, posC);
+  ASSERT_LT(posA, posD);
+  ASSERT_LT(posA, posE);
+}
+
+
+TEST(DataTamer, CustomType2)
+{
+  ChannelsRegistry registry;
+  auto channel = registry.getChannel("chan");
+  auto sink = std::make_shared<DummySink>();
+  channel->addDataSink(sink);
+
+  std::array<Point3D, 2> points;
+  std::vector<Quaternion> quats(3);
+
+  channel->registerValue("points", &points);
+  channel->registerValue("quats", &quats);
+
+  channel->takeSnapshot();
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+  auto expected_size = 2 * sizeof(Point3D) +
+                       3 * sizeof(Quaternion) + sizeof(uint32_t);
+
+  //-------------------------------------------------
+  const auto schema = channel->getSchema();
+  std::ostringstream ss;
+  ss << schema;
+  const std::string schema_txt = ss.str();
+
+  std::cout << schema_txt << std::endl;
+
+  ASSERT_EQ(sink->latest_snapshot.payload.size(), expected_size);
+  ASSERT_EQ(schema.custom_types.count("Point3D"), 1);
+  ASSERT_EQ(schema.custom_types.count("Quaternion"), 1);
+
+  const auto posA = schema_txt.find("Point3D[2] points\n"
+                                    "Quaternion[] quats\n");
+
+  const auto posB = schema_txt.find("===============\n"
+                                    "MSG: Point3D\n"
+                                    "float64 x\n"
+                                    "float64 y\n"
+                                    "float64 z\n");
+
+  const auto posC = schema_txt.find("===============\n"
+                                    "MSG: Quaternion\n"
+                                    "float64 w\n"
+                                    "float64 x\n"
+                                    "float64 y\n"
+                                    "float64 z\n");
+
+  ASSERT_TRUE(std::string::npos != posA);
+  ASSERT_TRUE(std::string::npos != posB);
+  ASSERT_TRUE(std::string::npos != posC);
+  ASSERT_LT(posA, posB);
+  ASSERT_LT(posA, posC);
 }

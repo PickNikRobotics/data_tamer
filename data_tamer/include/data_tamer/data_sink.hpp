@@ -10,7 +10,8 @@
 #include <string_view>
 #include <vector>
 
-namespace DataTamer {
+namespace DataTamer
+{
 
 using ActiveMask = std::vector<uint8_t>;
 using PayloadVector = std::vector<uint8_t>;
@@ -18,8 +19,8 @@ using PayloadVector = std::vector<uint8_t>;
 bool GetBit(const ActiveMask& mask, size_t index);
 void SetBit(ActiveMask& mask, size_t index, bool val);
 
-struct Snapshot {
-
+struct Snapshot
+{
   std::string_view channel_name;
 
   /// Unique identifier of the schema
@@ -48,20 +49,20 @@ struct Snapshot {
  */
 using DataSnapshot = std::vector<uint8_t>;
 
-
 /**
  * @brief The DataSinkBase is the base class to use to create
  * your own DataSink
  */
-class DataSinkBase {
- public:
+class DataSinkBase
+{
+public:
   DataSinkBase();
 
   DataSinkBase(const DataSinkBase& other) = delete;
-  DataSinkBase& operator = (const DataSinkBase& other) = delete;
+  DataSinkBase& operator=(const DataSinkBase& other) = delete;
 
   DataSinkBase(DataSinkBase&& other) = delete;
-  DataSinkBase& operator = (DataSinkBase&& other) = delete;
+  DataSinkBase& operator=(DataSinkBase&& other) = delete;
 
   virtual ~DataSinkBase();
 
@@ -72,8 +73,7 @@ class DataSinkBase {
    * @param name    name of the channel
    * @param schema  a schema, suaully obtained from LogChannel::getSchema()
    */
-  virtual void addChannel(const std::string& name,
-                          const Schema& schema) = 0;
+  virtual void addChannel(const std::string& name, const Schema& schema) = 0;
 
   /**
    * @brief pushSnapshot will push the data into a concurrent queue,
@@ -104,22 +104,22 @@ private:
 
 //--------------------------------------------------
 
-inline bool GetBit(const ActiveMask &mask, size_t index)
+inline bool GetBit(const ActiveMask& mask, size_t index)
 {
   const uint8_t& byte = mask[index >> 3];
   return 0 != (byte & uint8_t(1 << (index % 8)));
 }
 
-inline void SetBit(ActiveMask &mask, size_t index, bool value)
+inline void SetBit(ActiveMask& mask, size_t index, bool value)
 {
-  if(!value)
+  if (!value)
   {
     mask[index >> 3] &= uint8_t(~(1 << (index % 8)));
   }
-  else {
+  else
+  {
     mask[index >> 3] |= uint8_t(1 << (index % 8));
   }
 }
 
-}  // namespace DataTamer
-
+}   // namespace DataTamer

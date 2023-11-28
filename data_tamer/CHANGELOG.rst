@@ -2,6 +2,22 @@
 Changelog for package data_tamer
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+0.7.0 (2023-11-28)
+------------------
+* recursive_mutex and call it a day
+* add MCAP option
+* add MCAPSink::stopRecording
+* add more types to mcap example
+* add ChannelsRegistry::clear()
+* extended tests
+* bug fixes and more tests
+* fix warning
+* compute fixed size at compilation time
+* new wrappying of TypeDefinition
+* refactoring type registry
+* major refactoring of custom types
+* Contributors: Davide Faconti
+
 0.6.0 (2023-11-23)
 ------------------
 @ add back compatibility to data_tamer_parser

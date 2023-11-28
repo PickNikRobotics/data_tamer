@@ -1,7 +1,10 @@
 #include "data_tamer_parser/data_tamer_parser.hpp"
 #include "data_tamer/data_tamer.hpp"
+#include "data_tamer/sinks/dummy_sink.hpp"
+#include "../examples/geometry_types.hpp"
 
 #include <gtest/gtest.h>
+#include <thread>
 #include <variant>
 #include <string>
 
@@ -24,32 +27,33 @@ uint16  my/short
 
   ASSERT_EQ(schema.fields.size(), 7);
 
-  Schema::Field field0 = {"v1", BasicType::INT8, false, 0, {}};
+  TypeField field0 = {"v1", BasicType::INT8, "int8", false, 0};
   ASSERT_EQ(schema.fields[0], field0);
 
-  Schema::Field field1 = {"v2", BasicType::FLOAT64, false, 0, {}};
+  TypeField field1 = {"v2", BasicType::FLOAT64, "float64", false, 0};
   ASSERT_EQ(schema.fields[1], field1);
 
-  Schema::Field field2 = {"array", BasicType::FLOAT32, true, 5, {}};
+  TypeField field2 = {"array", BasicType::FLOAT32, "float32", true, 5};
   ASSERT_EQ(schema.fields[2], field2);
 
-  Schema::Field field3 = {"vect", BasicType::INT32, true, 0, {}};
+  TypeField field3 = {"vect", BasicType::INT32, "int32", true, 0};
   ASSERT_EQ(schema.fields[3], field3);
 
-  Schema::Field field4 = {"is_true", BasicType::BOOL, false, 0, {}};
+  TypeField field4 = {"is_true", BasicType::BOOL, "bool", false, 0};
   ASSERT_EQ(schema.fields[4], field4);
 
-  Schema::Field field5 = {"blob", BasicType::CHAR, true, 256, {}};
+  TypeField field5 = {"blob", BasicType::CHAR, "char", true, 256};
   ASSERT_EQ(schema.fields[5], field5);
 
-  Schema::Field field6 = {"my/short", BasicType::UINT16, false, 0, {}};
+  TypeField field6 = {"my/short", BasicType::UINT16, "uint16", false, 0};
   ASSERT_EQ(schema.fields[6], field6);
 }
 
 TEST(DataTamerParser, SchemaHash)
 {
   // Create (or get) a channel using the global registry (singleton)
-  auto channel = DataTamer::ChannelsRegistry::Global().getChannel("channel");
+  DataTamer::ChannelsRegistry registry;
+  auto channel = registry.getChannel("channel");
 
   // logs in channelA
   std::vector<double> v1(10, 0);
@@ -76,12 +80,218 @@ TEST(DataTamerParser, SchemaHash)
 
   const auto& schema_out = BuilSchemaFromText(ss.str());
 
-  ASSERT_EQ(schema_out.fields[0].name, "vector_10");
-  ASSERT_EQ(schema_out.fields[1].name, "array_4");
-  ASSERT_EQ(schema_out.fields[2].name, "val_int32");
-  ASSERT_EQ(schema_out.fields[3].name, "val_int16");
-  ASSERT_EQ(schema_out.fields[4].name, "real_value");
-  ASSERT_EQ(schema_out.fields[5].name, "short_int");
-  ASSERT_EQ(schema_out.fields[6].name, "vector_4");
-  ASSERT_EQ(schema_out.fields[7].name, "array_3");
+  ASSERT_EQ(schema_out.fields[0].field_name, "vector_10");
+  ASSERT_EQ(schema_out.fields[1].field_name, "array_4");
+  ASSERT_EQ(schema_out.fields[2].field_name, "val_int32");
+  ASSERT_EQ(schema_out.fields[3].field_name, "val_int16");
+  ASSERT_EQ(schema_out.fields[4].field_name, "real_value");
+  ASSERT_EQ(schema_out.fields[5].field_name, "short_int");
+  ASSERT_EQ(schema_out.fields[6].field_name, "vector_4");
+  ASSERT_EQ(schema_out.fields[7].field_name, "array_3");
+}
+
+TEST(DataTamerParser, CustomTypes)
+{
+  DataTamer::ChannelsRegistry registry;
+  auto channel = registry.getChannel("channel");
+
+  Pose pose;
+  channel->registerValue("pose", &pose);
+
+  const auto& schema_in = channel->getSchema();
+  const std::string schema_txt = ToStr(schema_in);
+  const auto& schema_out = DataTamerParser::BuilSchemaFromText(schema_txt);
+
+  std::cout << schema_txt << std::endl;
+
+  ASSERT_EQ(schema_in.hash, schema_out.hash);
+  ASSERT_EQ(schema_in.channel_name, schema_out.channel_name);
+  ASSERT_EQ(schema_in.fields.size(), schema_out.fields.size());
+  ASSERT_EQ(schema_in.custom_types.size(), schema_out.custom_types.size());
+
+  for(const auto& [type_name, custom_in]: schema_in.custom_types)
+  {
+    const auto& custom_out = schema_out.custom_types.at(type_name);
+    ASSERT_EQ(custom_in.size(), custom_out.size());
+
+    for(size_t i=0; i<custom_in.size(); i++)
+    {
+      const auto& field_in = custom_in[i];
+      const auto& field_out = custom_out[i];
+
+      ASSERT_EQ(field_in.field_name, field_out.field_name);
+      ASSERT_EQ(static_cast<int>(field_in.type), static_cast<int>(field_out.type));
+      ASSERT_EQ(field_in.is_vector, field_out.is_vector);
+      ASSERT_EQ(field_in.array_size, field_out.array_size);
+    }
+  }
+}
+
+SnapshotView ConvertSnapshot(const DataTamer::Snapshot& snapshot)
+{
+  return {snapshot.schema_hash,
+          uint64_t(snapshot.timestamp.count()),
+          {snapshot.active_mask.data(), snapshot.active_mask.size()},
+          {snapshot.payload.data(), snapshot.payload.size()}};
+}
+
+TEST(DataTamerParser, PlainParsing)
+{
+  DataTamer::ChannelsRegistry registry;
+  auto channel = registry.getChannel("channel");
+  auto dummy_sink = std::make_shared<DataTamer::DummySink>();
+  channel->addDataSink(dummy_sink);
+
+  int32_t v1 = 5;
+  uint16_t v2 = 6;
+  double v3 = 7;
+  uint16_t v4 = 8;
+
+  channel->registerValue("v1", &v1);
+  channel->registerValue("v2", &v2);
+  channel->registerValue("v3", &v3);
+  channel->registerValue("v4", &v4);
+
+  channel->takeSnapshot();
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+  const auto& schema_in = channel->getSchema();
+  const auto& schema_out = DataTamerParser::BuilSchemaFromText(ToStr(schema_in));
+  const auto snapshot_view = ConvertSnapshot(dummy_sink->latest_snapshot);
+
+  std::map<std::string, double> parsed_values;
+  auto callback = [&](const std::string& field_name, const DataTamerParser::VarNumber& number)
+  {
+    parsed_values[field_name] = std::visit([](const auto& var) { return double(var); }, number);
+  };
+
+  DataTamerParser::ParseSnapshot(schema_out, snapshot_view, callback);
+
+  for(const auto& [name, value]: parsed_values)
+  {
+    std::cout << name << ": " << value << std::endl;
+  }
+
+  ASSERT_EQ(parsed_values.at("v1"), 5);
+  ASSERT_EQ(parsed_values.at("v2"), 6);
+  ASSERT_EQ(parsed_values.at("v3"), 7);
+  ASSERT_EQ(parsed_values.at("v4"), 8);
+}
+
+TEST(DataTamerParser, CustomParsing)
+{
+  DataTamer::ChannelsRegistry registry;
+  auto channel = registry.getChannel("channel");
+  auto dummy_sink = std::make_shared<DataTamer::DummySink>();
+  channel->addDataSink(dummy_sink);
+
+  Pose pose;
+  pose.pos = {1, 2, 3};
+  pose.rot = {4, 5, 6, 7};
+  channel->registerValue("pose", &pose);
+
+  channel->takeSnapshot();
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+  const auto& schema_in = channel->getSchema();
+  const auto& schema_out = DataTamerParser::BuilSchemaFromText(ToStr(schema_in));
+  const auto snapshot_view = ConvertSnapshot(dummy_sink->latest_snapshot);
+
+  std::map<std::string, double> parsed_values;
+  auto callback = [&](const std::string& field_name, const DataTamerParser::VarNumber& number)
+  {
+    const double value = std::visit([](const auto& var) { return double(var); }, number);
+    parsed_values[field_name] = value;
+  };
+
+  DataTamerParser::ParseSnapshot(schema_out, snapshot_view, callback);
+
+  for(const auto& [name, value]: parsed_values)
+  {
+    std::cout << name << ": " << value << std::endl;
+  }
+
+  ASSERT_EQ(parsed_values.at("pose/position/x"), 1);
+  ASSERT_EQ(parsed_values.at("pose/position/y"), 2);
+  ASSERT_EQ(parsed_values.at("pose/position/z"), 3);
+
+  ASSERT_EQ(parsed_values.at("pose/rotation/w"), 4);
+  ASSERT_EQ(parsed_values.at("pose/rotation/x"), 5);
+  ASSERT_EQ(parsed_values.at("pose/rotation/y"), 6);
+  ASSERT_EQ(parsed_values.at("pose/rotation/z"), 7);
+}
+
+
+TEST(DataTamerParser, VectorParsing)
+{
+  DataTamer::ChannelsRegistry registry;
+  auto channel = registry.getChannel("channel");
+  auto dummy_sink = std::make_shared<DataTamer::DummySink>();
+  channel->addDataSink(dummy_sink);
+
+  std::vector<double> valsA = {10, 11, 12};
+  std::array<int, 2> valsB = {13, 14};
+
+  std::array<Point3D, 3> points;
+  points[0] = {1, 2, 3};
+  points[1] = {4, 5, 6};
+  points[2] = {7, 8, 9};
+  std::vector<Quaternion> quats(2);
+  quats[0] = {20, 21, 22, 23};
+  quats[1] = {30, 31, 32, 33};
+
+  channel->registerValue("valsA", &valsA);
+  channel->registerValue("valsB", &valsB);
+  channel->registerValue("points", &points);
+  channel->registerValue("quats", &quats);
+
+  channel->takeSnapshot();
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+  const auto& schema_in = channel->getSchema();
+  const auto& schema_out = DataTamerParser::BuilSchemaFromText(ToStr(schema_in));
+  const auto snapshot_view = ConvertSnapshot(dummy_sink->latest_snapshot);
+
+  std::map<std::string, double> parsed_values;
+  auto callback = [&](const std::string& field_name, const DataTamerParser::VarNumber& number)
+  {
+    const double value = std::visit([](const auto& var) { return double(var); }, number);
+    parsed_values[field_name] = value;
+  };
+
+  DataTamerParser::ParseSnapshot(schema_out, snapshot_view, callback);
+
+  for(const auto& [name, value]: parsed_values)
+  {
+    std::cout << name << ": " << value << std::endl;
+  }
+
+  ASSERT_EQ(parsed_values.at("valsA[0]"), 10);
+  ASSERT_EQ(parsed_values.at("valsA[1]"), 11);
+  ASSERT_EQ(parsed_values.at("valsA[2]"), 12);
+
+  ASSERT_EQ(parsed_values.at("valsB[0]"), 13);
+  ASSERT_EQ(parsed_values.at("valsB[1]"), 14);
+
+  ASSERT_EQ(parsed_values.at("points[0]/x"), 1);
+  ASSERT_EQ(parsed_values.at("points[0]/y"), 2);
+  ASSERT_EQ(parsed_values.at("points[0]/z"), 3);
+
+  ASSERT_EQ(parsed_values.at("points[1]/x"), 4);
+  ASSERT_EQ(parsed_values.at("points[1]/y"), 5);
+  ASSERT_EQ(parsed_values.at("points[1]/z"), 6);
+
+  ASSERT_EQ(parsed_values.at("points[2]/x"), 7);
+  ASSERT_EQ(parsed_values.at("points[2]/y"), 8);
+  ASSERT_EQ(parsed_values.at("points[2]/z"), 9);
+
+  ASSERT_EQ(parsed_values.at("quats[0]/w"), 20);
+  ASSERT_EQ(parsed_values.at("quats[0]/x"), 21);
+  ASSERT_EQ(parsed_values.at("quats[0]/y"), 22);
+  ASSERT_EQ(parsed_values.at("quats[0]/z"), 23);
+
+  ASSERT_EQ(parsed_values.at("quats[1]/w"), 30);
+  ASSERT_EQ(parsed_values.at("quats[1]/x"), 31);
+  ASSERT_EQ(parsed_values.at("quats[1]/y"), 32);
+  ASSERT_EQ(parsed_values.at("quats[1]/z"), 33);
 }

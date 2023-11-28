@@ -2,15 +2,19 @@
 
 #include <cstdint>
 #include <memory>
+
 #include <ostream>
 #include <string>
+#include <unordered_map>
 #include <vector>
 #include <variant>
 
-namespace DataTamer {
+namespace DataTamer
+{
 
-constexpr int SCHEMA_VERSION = 3;
+constexpr int SCHEMA_VERSION = 4;
 
+// clang-format off
 enum class BasicType
 {
   BOOL,
@@ -34,6 +38,7 @@ enum class BasicType
 
 constexpr size_t TypesCount = 13;
 
+
 using VarNumber = std::variant<
     bool, char,
     int8_t, uint8_t,
@@ -41,6 +46,7 @@ using VarNumber = std::variant<
     int32_t, uint32_t,
     int64_t, uint64_t,
     float, double >;
+// clang-format on
 
 /// Reverse operation of ValuePtr::serialize
 [[nodiscard]] VarNumber DeserializeAsVarType(const BasicType& type, const void* data);
@@ -49,14 +55,15 @@ using VarNumber = std::variant<
 [[nodiscard]] size_t SizeOf(const BasicType& type);
 
 /// Return the name of the type
-[[nodiscard]] const std::string &ToStr(const BasicType& type);
+[[nodiscard]] const std::string& ToStr(const BasicType& type);
 
 /// Convert string to its type
-[[nodiscard]] BasicType FromStr(const std::string &str);
+[[nodiscard]] BasicType FromStr(const std::string& str);
 
 template <typename T>
 inline constexpr BasicType GetBasicType()
 {
+  // clang-format off
   if constexpr (std::is_same_v<T, bool>) return BasicType::BOOL;
   if constexpr (std::is_same_v<T, char>) return BasicType::CHAR;
   if constexpr (std::is_same_v<T, std::int8_t>) return BasicType::INT8;
@@ -73,8 +80,14 @@ inline constexpr BasicType GetBasicType()
 
   if constexpr (std::is_same_v<T, float>) return BasicType::FLOAT32;
   if constexpr (std::is_same_v<T, double>) return BasicType::FLOAT64;
-
+  // clang-format on
   return BasicType::OTHER;
+}
+
+template <typename T>
+inline constexpr bool IsNumericType()
+{
+  return std::is_arithmetic_v<T> || std::is_same_v<T, bool> || std::is_same_v<T, char>;
 }
 
 struct RegistrationID
@@ -82,56 +95,46 @@ struct RegistrationID
   size_t first_index = 0;
   size_t fields_count = 0;
 
-  // sintactic sugar to be used to concatenate contiguous RegistrationID.
-  // See example custom_type.cpp
-  void operator+=(const RegistrationID& other) {
+  // syntactic sugar to be used to concatenate contiguous RegistrationID.
+  void operator+=(const RegistrationID& other)
+  {
     fields_count += other.fields_count;
   }
 };
 
-// TODO: allow fields with unknown type, that DataTamer doesn't know how to serialize
-struct CustomTypeInfo
+//---------------------------------------------------------
+struct TypeField
 {
-  using Ptr = std::shared_ptr<CustomTypeInfo>;
+  std::string field_name;
+  BasicType type = BasicType::OTHER;
+  std::string type_name;
+  bool is_vector = 0;
+  uint32_t array_size = 0;
 
-  virtual ~CustomTypeInfo() = default;
-  // name of the type, to be written in the schema string.
-  virtual const char* typeName() = 0;
-  // optional custom schema of the type
-  virtual const char* typeSchema() { return nullptr; }
-  // size in bytes of the serialized object.
-  // Needed to pre-allocate memory in the buffer
-  virtual uint32_t serializedSize(const void* src_instance) = 0;
-  // serialize an object into a buffer. Return the size in bytes of the serialized data
-  virtual uint32_t serialize(const void* src_instance, uint8_t* dst_buffer) = 0;
+  bool operator==(const TypeField& other) const;
+  bool operator!=(const TypeField& other) const;
+
+  friend std::ostream& operator<<(std::ostream& os, const TypeField& field);
 };
+
+using FieldsVector = std::vector<TypeField>;
 
 /**
  * @brief DataTamer uses a simple "flat" schema of key/value pairs (each pair is a "field").
  */
 struct Schema
 {
-  struct Field
-  {
-    std::string name;
-    BasicType type;
-    bool is_vector = 0;
-    uint16_t array_size = 0;
-    std::shared_ptr<CustomTypeInfo> custom_type;
-
-    bool operator==(const Field& other) const;
-    bool operator!=(const Field& other) const;
-
-    friend std::ostream& operator<<(std::ostream& os, const Field& field);
-  };
-  std::vector<Field> fields;
   uint64_t hash = 0;
+  FieldsVector fields;
   std::string channel_name;
+
+  std::unordered_map<std::string, FieldsVector> custom_types;
 
   friend std::ostream& operator<<(std::ostream& os, const Schema& schema);
 };
 
+std::string ToStr(const Schema& schema);
 
-[[nodiscard]]  uint64_t AddFieldToHash(const Schema::Field& field, uint64_t hash);
+[[nodiscard]] uint64_t AddFieldToHash(const TypeField& field, uint64_t hash);
 
-}  // namespace DataTamer
+}   // namespace DataTamer

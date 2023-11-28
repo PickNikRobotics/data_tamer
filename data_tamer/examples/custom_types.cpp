@@ -1,59 +1,16 @@
 #include "data_tamer/data_tamer.hpp"
 #include "data_tamer/sinks/dummy_sink.hpp"
 #include <iostream>
+#include <thread>
 
 
-struct Point3D
-{
-  double x;
-  double y;
-  double z;
-};
+// check the custom type in the following file,  that defines:
+//
+// - Point3D
+// - Quaternion
+// - Pose
 
-struct Quaternion
-{
-  double w;
-  double x;
-  double y;
-  double z;
-};
-
-struct Pose
-{
-  Point3D pos;
-  Quaternion rot;
-};
-
-// You need to add a template specialization of RegisterVariable<> for the new types
-namespace DataTamer
-{
-template <> RegistrationID
-RegisterVariable<Point3D>(LogChannel& channel, const std::string& prefix, const Point3D* v)
-{
-  auto id = channel.registerValue(prefix + "/x", &v->x);
-  id += channel.registerValue(prefix + "/y", &v->y);
-  id += channel.registerValue(prefix + "/z", &v->z);
-  return id;
-}
-
-template <> RegistrationID
-RegisterVariable<Quaternion>(LogChannel& channel, const std::string& prefix, const Quaternion* v)
-{
-  auto id = channel.registerValue(prefix + "/x", &v->x);
-  id += channel.registerValue(prefix + "/y", &v->y);
-  id += channel.registerValue(prefix + "/z", &v->z);
-  id += channel.registerValue(prefix + "/w", &v->w);
-  return id;
-}
-
-template <> RegistrationID
-RegisterVariable<Pose>(LogChannel& channel, const std::string& prefix, const Pose* v)
-{
-  auto id = channel.registerValue(prefix + "/position", &v->pos);
-  id += channel.registerValue(prefix + "/rotation", &v->rot);
-  return id;
-}
-} // namespace DataTamer
+#include "geometry_types.hpp"
 
 
 int main()
@@ -79,9 +36,22 @@ int main()
   channel->registerValue("points", &points_vect);
 
   // std::array is also supported (safer than std::vector due to constant size)
-  std::array<int, 3> value_array;
+  std::array<int32_t, 3> value_array;
   channel->registerValue("value_array", &value_array);
 
   // Print the schema to understand how they are serialized
   std::cout << channel->getSchema() << std::endl;
+
+  size_t expected_size = sizeof(double) * 3 + // pointA
+                         sizeof(double) * 3 + // pointB
+                         sizeof(double) * 7 + // my_pose
+                         sizeof(uint32_t) + 5 * (sizeof(double) * 3) + //points_vect
+                         sizeof(int32_t) * 3;
+
+  channel->takeSnapshot();
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+  std::cout << "\nMessage size: " << dummy_sink->latest_snapshot.payload.size()
+            << " exepcted: " << expected_size << std::endl;
+
 }

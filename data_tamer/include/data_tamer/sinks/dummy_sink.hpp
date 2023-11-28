@@ -26,7 +26,7 @@ public:
   {
     stopThread();
   }
-  
+
   void addChannel(std::string const& name, Schema const& schema) override
   {
     std::scoped_lock lk(schema_mutex_);
@@ -41,7 +41,7 @@ public:
     latest_snapshot = snapshot;
 
     auto it = snapshots_count.find(snapshot.schema_hash);
-    if( it != snapshots_count.end())
+    if (it != snapshots_count.end())
     {
       it->second++;
     }
@@ -49,6 +49,4 @@ public:
   }
 };
 
-
-
-}  // namespace DataTamer
+}   // namespace DataTamer

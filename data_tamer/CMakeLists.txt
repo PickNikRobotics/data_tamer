@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.14)
 
-project(data_tamer VERSION 0.6.0)
+project(data_tamer VERSION 0.7.0)
 
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -33,6 +33,7 @@ endif()
 
 add_library(data_tamer STATIC
     include/data_tamer/channel.hpp
+    include/data_tamer/custom_types.hpp
     include/data_tamer/data_tamer.hpp
     include/data_tamer/types.hpp
     include/data_tamer/values.hpp
@@ -126,7 +127,12 @@ endif()
 
 if(DATA_TAMER_BUILD_TESTS)
     include(CTest)
-    enable_testing()
+
+target_sources(Continuous
+  PRIVATE
+    include/data_tamer/custom_types.hpp
+)
+enable_testing()
     add_subdirectory(tests)
 endif()
 
