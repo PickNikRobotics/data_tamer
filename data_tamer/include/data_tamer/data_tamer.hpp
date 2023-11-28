@@ -24,6 +24,9 @@ public:
   /// Create a new channel or get a previously create one.
   [[nodiscard]] std::shared_ptr<LogChannel> getChannel(std::string const& channel_name);
 
+  /// remove all channels and stored sinks
+  void clear();
+
 private:
   struct Pimpl;
   std::unique_ptr<Pimpl> _p;

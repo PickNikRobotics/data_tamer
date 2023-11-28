@@ -50,4 +50,11 @@ std::shared_ptr<LogChannel> ChannelsRegistry::getChannel(std::string const& chan
   return it->second;
 }
 
+void ChannelsRegistry::clear()
+{
+  std::scoped_lock lk(_p->mutex);
+  _p->channels.clear();
+  _p->default_sinks.clear();
+}
+
 }   // namespace DataTamer
