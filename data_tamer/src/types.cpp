@@ -160,6 +160,13 @@ std::ostream& operator<<(std::ostream& os, const Schema& schema)
       os << field << "\n";
     }
   }
+  for (const auto& [type_name, custom_schema] : schema.custom_schemas)
+  {
+    os << "===========================================================\n"
+       << "MSG: " << type_name << "\n"
+       << "ENCODING: " << custom_schema.encoding << "\n"
+       << custom_schema.schema << "\n";
+  }
 
   return os;
 }

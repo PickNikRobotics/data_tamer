@@ -73,6 +73,16 @@ RegistrationID LogChannel::registerValueImpl(const std::string& name,
     _p->schema.hash = AddFieldToHash(field, _p->schema.hash);
     _p->schema.fields.emplace_back(std::move(field));
 
+    // if this was a special serializer with its own schema, save it instead in custom_schemas
+    if(type_info)
+    {
+      auto custom_schema = type_info->typeSchema();
+      if(custom_schema && _p->schema.custom_types.count(type_info->typeName()) == 0)
+      {
+        _p->schema.custom_schemas.insert( {type_info->typeName(), *custom_schema});
+      }
+    }
+
     return {index, 1};
   }
 

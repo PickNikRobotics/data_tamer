@@ -2,8 +2,7 @@
 
 #include <map>
 #include <mutex>
-#include <typeindex>
-#include <typeinfo>
+#include <optional>
 
 #include "data_tamer/types.hpp"
 #include "data_tamer/contrib/SerializeMe.hpp"
@@ -39,16 +38,18 @@ public:
 
   virtual ~CustomSerializer() = default;
   // name of the type, to be written in the schema string.
-  virtual const char* typeName() const = 0;
+  virtual const std::string& typeName() const = 0;
   // optional custom schema of the type
-  virtual const char* typeSchema() const
+
+  virtual std::optional<CustomSchema> typeSchema() const
   {
-    return nullptr;
+    return std::nullopt;
   }
   // size in bytes of the serialized object.
   // Needed to pre-allocate memory in the buffer
   virtual size_t serializedSize(const void* src_instance) const = 0;
 
+  // true if the serialized object will always have the same amount of bytes
   virtual bool isFixedSize() const = 0;
 
   // serialize an object into a buffer. Return the size in bytes of the serialized data
@@ -75,9 +76,10 @@ template <typename T>
 class CustomSerializerT : public CustomSerializer
 {
 public:
-  CustomSerializerT(const std::string& type_name);
 
-  const char* typeName() const override;
+  CustomSerializerT(const std::string& type_name = TypeDefinition<T>().typeName());
+
+  const std::string& typeName() const override;
 
   size_t serializedSize(const void* src_instance) const override;
 
@@ -169,9 +171,9 @@ template<typename T> inline
 }
 
 template<typename T> inline
-const char *CustomSerializerT<T>::typeName() const
+    const std::string& CustomSerializerT<T>::typeName() const
 {
-  return _name.c_str();
+  return _name;
 }
 
 template<typename T> inline
@@ -207,7 +209,7 @@ inline CustomSerializer::Ptr TypesRegistry::getSerializer()
                 "Don't pass containers as template type");
 
   std::scoped_lock lk(_mutex);
-  const auto type_name = SerializeMe::TypeDefinition<T>().typeName();
+  const auto type_name = TypeDefinition<T>().typeName();
   auto it = _types.find(type_name);
 
   if (it == _types.end())

@@ -11,7 +11,7 @@
 
 using namespace DataTamer;
 
-TEST(DataTamer, BasicTypes)
+TEST(DataTamerBasic, BasicTypes)
 {
   for(size_t i=0; i<TypesCount; i++)
   {
@@ -20,7 +20,7 @@ TEST(DataTamer, BasicTypes)
   }
 }
 
-TEST(DataTamer, SinkAdd)
+TEST(DataTamerBasic, SinkAdd)
 {
   auto dummy_sink_A = std::make_shared<DummySink>();
   auto dummy_sink_B = std::make_shared<DummySink>();
@@ -56,7 +56,7 @@ TEST(DataTamer, SinkAdd)
   ASSERT_EQ(dummy_sink_B->snapshots_count[hash], shapshot_count);
 }
 
-TEST(DataTamer, SerializeVariant)
+TEST(DataTamerBasic, SerializeVariant)
 {
   [[maybe_unused]] auto to_str = [](auto&& arg) -> void
   {
@@ -87,7 +87,7 @@ TEST(DataTamer, SerializeVariant)
   ASSERT_EQ(v3, std::get<uint8_t>(n3));
 }
 
-TEST(DataTamer, TestRegistration)
+TEST(DataTamerBasic, TestRegistration)
 {
   ChannelsRegistry registry;
   auto channel = registry.getChannel("chan");
@@ -152,7 +152,7 @@ TEST(DataTamer, TestRegistration)
   ASSERT_EQ(sink->latest_snapshot.payload.size(), expected_size);
 }
 
-TEST(DataTamer, Vector)
+TEST(DataTamerBasic, Vector)
 {
   ChannelsRegistry registry;
   auto channel = registry.getChannel("chan");
@@ -170,7 +170,7 @@ TEST(DataTamer, Vector)
   ASSERT_EQ(sink->latest_snapshot.payload.size(), expected_size);
 }
 
-TEST(DataTamer, Disable)
+TEST(DataTamerBasic, Disable)
 {
   ChannelsRegistry registry;
   auto channel = registry.getChannel("chan");
@@ -234,162 +234,4 @@ TEST(DataTamer, Disable)
 
   checkSize(id_v7, 4 * sizeof(float) + sizeof(uint32_t));
   ASSERT_EQ(sink->latest_snapshot.active_mask[0], 0b10111111);
-}
-
-
-struct TestType
-{
-  double timestamp;
-  int count;
-  std::vector<Point3D> positions;
-  std::array<Pose, 3> poses;
-};
-
-namespace DataTamer
-{
-template <>
-struct TypeDefinition<TestType>
-{
-  std::string typeName() const { return "TestType"; }
-
-  template <class Function> void typeDef(Function& addField)
-  {
-    addField("timestamp", &TestType::timestamp);
-    addField("count", &TestType::count);
-    addField("positions", &TestType::positions);
-    addField("poses", &TestType::poses);
-  }
-};
-} // namespace DataTamer
-
-TEST(DataTamer, CustomType)
-{
-  ChannelsRegistry registry;
-  auto channel = registry.getChannel("chan");
-  auto sink = std::make_shared<DummySink>();
-  channel->addDataSink(sink);
-
-  Pose pose = {{1, 2, 3}, {4, 5, 6, 7}};
-  channel->registerValue("pose", &pose);
-
-  TestType my_test;
-  my_test.positions.resize(4);
-  channel->registerValue("test_value", &my_test);
-
-  channel->takeSnapshot();
-  std::this_thread::sleep_for(std::chrono::milliseconds(10));
-
-  auto expected_size = sizeof(Pose) +
-                       sizeof(double) +
-                       sizeof(int32_t) +
-                       sizeof(uint32_t) + 4 * sizeof(Point3D) +
-                       3 * sizeof(Pose);
-
-  ASSERT_EQ(sink->latest_snapshot.payload.size(), expected_size);
-
-  //-------------------------------------------------
-  // check that the schema includes the Point3D definition
-  const auto schema = channel->getSchema();
-  std::ostringstream ss;
-  ss << schema;
-  const std::string schema_txt = ss.str();
-
-  std::cout << schema_txt << std::endl;
-
-  ASSERT_EQ(schema.custom_types.count("Point3D"), 1);
-  ASSERT_EQ(schema.custom_types.count("Quaternion"), 1);
-  ASSERT_EQ(schema.custom_types.count("Pose"), 1);
-  ASSERT_EQ(schema.custom_types.count("TestType"), 1);
-
-  const auto posA = schema_txt.find("Pose pose\n");
-
-  const auto posB = schema_txt.find("===============\n"
-                                    "MSG: Point3D\n"
-                                    "float64 x\n"
-                                    "float64 y\n"
-                                    "float64 z\n");
-
-  const auto posC = schema_txt.find("===============\n"
-                                    "MSG: Quaternion\n"
-                                    "float64 w\n"
-                                    "float64 x\n"
-                                    "float64 y\n"
-                                    "float64 z\n");
-
-  const auto posD = schema_txt.find("===============\n"
-                                    "MSG: Pose\n"
-                                    "Point3D position\n"
-                                    "Quaternion rotation\n");
-
-  const auto posE = schema_txt.find("===============\n"
-                                    "MSG: TestType\n"
-                                    "float64 timestamp\n"
-                                    "int32 count\n"
-                                    "Point3D[] positions\n"
-                                    "Pose[3] poses\n");
-
-  ASSERT_TRUE(std::string::npos != posA);
-  ASSERT_TRUE(std::string::npos != posB);
-  ASSERT_TRUE(std::string::npos != posC);
-  ASSERT_TRUE(std::string::npos != posD);
-  ASSERT_TRUE(std::string::npos != posE);
-  ASSERT_LT(posA, posB);
-  ASSERT_LT(posA, posC);
-  ASSERT_LT(posA, posD);
-  ASSERT_LT(posA, posE);
-}
-
-
-TEST(DataTamer, CustomType2)
-{
-  ChannelsRegistry registry;
-  auto channel = registry.getChannel("chan");
-  auto sink = std::make_shared<DummySink>();
-  channel->addDataSink(sink);
-
-  std::array<Point3D, 2> points;
-  std::vector<Quaternion> quats(3);
-
-  channel->registerValue("points", &points);
-  channel->registerValue("quats", &quats);
-
-  channel->takeSnapshot();
-  std::this_thread::sleep_for(std::chrono::milliseconds(10));
-
-  auto expected_size = 2 * sizeof(Point3D) +
-                       3 * sizeof(Quaternion) + sizeof(uint32_t);
-
-  //-------------------------------------------------
-  const auto schema = channel->getSchema();
-  std::ostringstream ss;
-  ss << schema;
-  const std::string schema_txt = ss.str();
-
-  std::cout << schema_txt << std::endl;
-
-  ASSERT_EQ(sink->latest_snapshot.payload.size(), expected_size);
-  ASSERT_EQ(schema.custom_types.count("Point3D"), 1);
-  ASSERT_EQ(schema.custom_types.count("Quaternion"), 1);
-
-  const auto posA = schema_txt.find("Point3D[2] points\n"
-                                    "Quaternion[] quats\n");
-
-  const auto posB = schema_txt.find("===============\n"
-                                    "MSG: Point3D\n"
-                                    "float64 x\n"
-                                    "float64 y\n"
-                                    "float64 z\n");
-
-  const auto posC = schema_txt.find("===============\n"
-                                    "MSG: Quaternion\n"
-                                    "float64 w\n"
-                                    "float64 x\n"
-                                    "float64 y\n"
-                                    "float64 z\n");
-
-  ASSERT_TRUE(std::string::npos != posA);
-  ASSERT_TRUE(std::string::npos != posB);
-  ASSERT_TRUE(std::string::npos != posC);
-  ASSERT_LT(posA, posB);
-  ASSERT_LT(posA, posC);
 }

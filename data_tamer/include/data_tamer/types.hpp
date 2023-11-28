@@ -118,6 +118,13 @@ struct TypeField
 };
 
 using FieldsVector = std::vector<TypeField>;
+class CustomSerializer;
+
+struct CustomSchema
+{
+  std::string encoding;
+  std::string schema;
+};
 
 /**
  * @brief DataTamer uses a simple "flat" schema of key/value pairs (each pair is a "field").
@@ -129,6 +136,7 @@ struct Schema
   std::string channel_name;
 
   std::unordered_map<std::string, FieldsVector> custom_types;
+  std::unordered_map<std::string, CustomSchema> custom_schemas;
 
   friend std::ostream& operator<<(std::ostream& os, const Schema& schema);
 };
