@@ -9,7 +9,7 @@
 #include <thread>
 #include <unordered_map>
 
-// Forward declaration. Header will be added in the cpp file
+// Forward declaration
 namespace mcap
 {
 class McapWriter;
@@ -28,7 +28,8 @@ public:
   /**
    * @brief MCAPSink.
    * IMPORTANT: if you want the recorder to be more robust to crash/segfault,
-   * set `do_compression` to false
+   * set `do_compression` to false.
+   * Compression is dafe if your application is closing cleanly.
    *
    * @param filepath   path of the file to be saved. Should have extension ".mcap"
    * @param do_compression if true, compress the data on the fly.
