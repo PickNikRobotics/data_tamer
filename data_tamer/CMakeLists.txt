@@ -50,8 +50,6 @@ add_library(data_tamer STATIC
     include/data_tamer/details/mutex.hpp
 )
 
-set(CMAKE_CXX_FLAGS "-g -O0 -Wall -fprofile-arcs -ftest-coverage")
-
 target_compile_features(data_tamer PUBLIC cxx_std_17)
 target_include_directories(data_tamer
  PUBLIC
