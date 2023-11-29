@@ -38,8 +38,7 @@ struct TypeDefinition<TestType>
 
 TEST(DataTamerCustom, CustomType1)
 {
-  ChannelsRegistry registry;
-  auto channel = registry.getChannel("chan");
+  auto channel = LogChannel::create("chan");
   auto sink = std::make_shared<DummySink>();
   channel->addDataSink(sink);
 
@@ -116,8 +115,7 @@ TEST(DataTamerCustom, CustomType1)
 
 TEST(DataTamerCustom, CustomType2)
 {
-  ChannelsRegistry registry;
-  auto channel = registry.getChannel("chan");
+  auto channel = LogChannel::create("chan");
   auto sink = std::make_shared<DummySink>();
   channel->addDataSink(sink);
 
@@ -211,8 +209,7 @@ public:
 
 TEST(DataTamerCustom, CustomType3)
 {
-  ChannelsRegistry registry;
-  auto channel = registry.getChannel("chan");
+  auto channel = LogChannel::create("chan");
   auto sink = std::make_shared<DummySink>();
   channel->addDataSink(sink);
 

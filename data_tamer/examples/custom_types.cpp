@@ -42,16 +42,16 @@ int main()
   // Print the schema to understand how they are serialized
   std::cout << channel->getSchema() << std::endl;
 
+  // Note has the size of the message is almost the same as the raw data
   size_t expected_size = sizeof(double) * 3 + // pointA
                          sizeof(double) * 3 + // pointB
                          sizeof(double) * 7 + // my_pose
                          sizeof(uint32_t) + 5 * (sizeof(double) * 3) + //points_vect
-                         sizeof(int32_t) * 3;
+                         sizeof(int32_t) * 3; // value_array
 
   channel->takeSnapshot();
   std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
   std::cout << "\nMessage size: " << dummy_sink->latest_snapshot.payload.size()
             << " exepcted: " << expected_size << std::endl;
-
 }

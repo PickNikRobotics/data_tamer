@@ -89,8 +89,7 @@ TEST(DataTamerBasic, SerializeVariant)
 
 TEST(DataTamerBasic, TestRegistration)
 {
-  ChannelsRegistry registry;
-  auto channel = registry.getChannel("chan");
+  auto channel = LogChannel::create("chan");
   auto sink = std::make_shared<DummySink>();
   channel->addDataSink(sink);
 
@@ -154,8 +153,7 @@ TEST(DataTamerBasic, TestRegistration)
 
 TEST(DataTamerBasic, Vector)
 {
-  ChannelsRegistry registry;
-  auto channel = registry.getChannel("chan");
+  auto channel = LogChannel::create("chan");
   auto sink = std::make_shared<DummySink>();
   channel->addDataSink(sink);
 
@@ -172,8 +170,7 @@ TEST(DataTamerBasic, Vector)
 
 TEST(DataTamerBasic, Disable)
 {
-  ChannelsRegistry registry;
-  auto channel = registry.getChannel("chan");
+  auto channel = LogChannel::create("chan");
   auto sink = std::make_shared<DummySink>();
   channel->addDataSink(sink);
 

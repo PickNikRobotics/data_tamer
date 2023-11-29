@@ -51,9 +51,7 @@ uint16  my/short
 
 TEST(DataTamerParser, SchemaHash)
 {
-  // Create (or get) a channel using the global registry (singleton)
-  DataTamer::ChannelsRegistry registry;
-  auto channel = registry.getChannel("channel");
+  auto channel = DataTamer::LogChannel::create("chan");
 
   // logs in channelA
   std::vector<double> v1(10, 0);
@@ -92,8 +90,7 @@ TEST(DataTamerParser, SchemaHash)
 
 TEST(DataTamerParser, CustomTypes)
 {
-  DataTamer::ChannelsRegistry registry;
-  auto channel = registry.getChannel("channel");
+  auto channel = DataTamer::LogChannel::create("chan");
 
   Pose pose;
   channel->registerValue("pose", &pose);
@@ -137,8 +134,7 @@ SnapshotView ConvertSnapshot(const DataTamer::Snapshot& snapshot)
 
 TEST(DataTamerParser, PlainParsing)
 {
-  DataTamer::ChannelsRegistry registry;
-  auto channel = registry.getChannel("channel");
+  auto channel = DataTamer::LogChannel::create("channel");
   auto dummy_sink = std::make_shared<DataTamer::DummySink>();
   channel->addDataSink(dummy_sink);
 
