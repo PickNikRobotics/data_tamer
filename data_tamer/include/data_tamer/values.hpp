@@ -196,24 +196,8 @@ inline void ValuePtr::serialize(SerializeMe::SpanBytes& dest) const
     serialize_impl_(dest);
     return;
   }
-  // slightly faster than memcpy
-  switch (memory_size_)
-  {
-    case 8:
-      *reinterpret_cast<uint64_t*>(dest.data()) = *static_cast<const uint64_t*>(v_ptr_);
-      break;
-    case 4:
-      *reinterpret_cast<uint32_t*>(dest.data()) = *static_cast<const uint32_t*>(v_ptr_);
-      break;
-    case 2:
-      *reinterpret_cast<uint16_t*>(dest.data()) = *static_cast<const uint16_t*>(v_ptr_);
-      break;
-    case 1:
-      *(dest.data()) = *static_cast<const uint8_t*>(v_ptr_);
-      break;
-    default:
-      std::memcpy(dest.data(), v_ptr_, memory_size_);
-  }
+
+  std::memcpy(dest.data(), v_ptr_, memory_size_);
   dest.trimFront(memory_size_);
 }
 

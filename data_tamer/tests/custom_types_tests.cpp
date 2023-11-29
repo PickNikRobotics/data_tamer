@@ -222,7 +222,7 @@ TEST(DataTamerCustom, CustomType3)
   std::array<Pos2D, 3> v3;
   v3[0] = {7, 8};
   v3[1] = {9, 10};
-  v3[3] = {11, 12};
+  v3[2] = {11, 12};
 
   channel->registerCustomValue("v1", &v1, serializer);
   channel->registerCustomValue("v2", &v2, serializer);
