@@ -2,8 +2,8 @@
 Changelog for package data_tamer
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.8.0 (2023-11-30)
+------------------
 * API change related to CustomSerializers
 * Contributors: Davide Faconti
 
