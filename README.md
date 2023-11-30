@@ -4,19 +4,17 @@
 [![codecov](https://codecov.io/gh/facontidavide/data_tamer/graph/badge.svg?token=D0wtsntWds)](https://codecov.io/gh/facontidavide/data_tamer)
 
 When we talk about "logging", most of the time we refer to human-readable
-messages (strings) with different severity levels (INFO, ERROR, DEBUG, etc.), being displayed in console or saved in a file.
+messages (strings) with different severity levels (INFO, ERROR, DEBUG, etc.), being displayed in 
+the console or saved into a file.
  
 **DataTamer** solves a different problem: it logs/traces numerical values over time and
-takes periodically "snapshots" of these values, to later visualize them as timeseries.
+takes periodic "snapshots" of these values, to later visualize them as **timeseries**.
 
-As such, it is a great complement of [PlotJuggler](https://github.com/facontidavide/PlotJuggler),
+As such, it is a great complement to [PlotJuggler](https://github.com/facontidavide/PlotJuggler),
 the timeseries visualization tool (note: you will need PlotJuggler **3.8.2** or later).
 
-**DataTamer** is your "fearless" C++ library to log numerical data because:
-
-- You can track hundreds or thousands of variables: even 1 million points per second 
-should have a negligible CPU overhead.
-- It can be used in real-time applications, since the code in the "hot" thread has very low latency, no matter how the data is saved.
+**DataTamer** is your "fearless" C++ library to log numerical data because you can easily track 
+hundreds or **thousands of variables**: even 1 million points per second should have a negligible CPU overhead.
 
 Since all the values are aggregated in a single "snapshot", it is particularly 
 suited to record data in a periodic loop (a very frequent use case in robotics applications).
@@ -29,17 +27,17 @@ Kudos to [pal_statistics](https://github.com/pal-robotics/pal_statistics), for i
 
 DataTamer can be used to monitor multiple variables in your applications.
 
-**Channels** are used to take a "snapshots of a subset of variables at a given time.
+**Channels** are used to take "snapshots" of a subset of variables at a given time.
 If you want to record at different frequencies, you should use  different channels.
 
 DataTamer will forward this data to 1 or multiple **Sinks**; 
 a sink may save the information in a file (currently, we support [MCAP](https://mcap.dev/))
-or publish it using an inter-process communication (for instance, a ROS2 publishers).
+or publish it using an inter-process communication (for instance, a ROS2 publisher).
 
 You can create your own sinks, if you want.
 
 You can use [PlotJuggler](https://github.com/facontidavide/PlotJuggler) to
-visualize your logs or see it in real-time.  
+visualize your logs offline or in real-time.  
 
 
 ## Features
