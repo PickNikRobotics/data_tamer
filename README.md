@@ -72,7 +72,7 @@ int main()
 
   // Create a channel
   auto channel = LogChannel::create("my_channel");
-  channel->addDataSink(dummy_sink);
+  channel->addDataSink(mcap_sink);
 
   // You can register any arithmetic value. You are responsible for their lifetime
   double value_real = 3.14;
@@ -82,7 +82,7 @@ int main()
 
   // If you prefer to use RAII, use this method instead
   // logged_real will disable itself when it goes out of scope.
-  auto logged_float = channel->createLoggedValue<float>("my_real");
+  auto logged_real= channel->createLoggedValue<float>("my_real");
 
   // This is the way you store the current snapshot of the values
   channel->takeSnapshot();
@@ -90,7 +90,7 @@ int main()
   // You can disable (i.e., stop recording) a value
   channel->setEnabled(id1, false);
   // or
-  logged_float->setEnabled(false);
+  logged_real->setEnabled(false);
 
   // The serialized data of the next snapshot will contain
   // only [value_int], i.e. [id2], since the other two were disabled
@@ -100,13 +100,13 @@ int main()
 
 # Compilation
 
-### Compiling with ROS2
+## Compiling with ROS2
 
 Just use colcon :)
 
 ## Compiling with Conan (not ROS2 support)
 
-Note that th ROS2 publisher will **NOT** be built when using this method.
+Note that the ROS2 publisher will **NOT** be built when using this method.
 
 Assuming conan 2.x installed. From the source directory.
 
