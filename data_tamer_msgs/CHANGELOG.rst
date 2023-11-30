@@ -2,6 +2,11 @@
 Changelog for package data_tamer_msgs
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Forthcoming
+-----------
+* Merge branch 'dev'
+* Contributors: Davide Faconti
+
 0.7.0 (2023-11-28)
 ------------------
 

@@ -2,6 +2,11 @@
 Changelog for package data_tamer
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Forthcoming
+-----------
+* API change related to CustomSerializers
+* Contributors: Davide Faconti
+
 0.7.0 (2023-11-28)
 ------------------
 * recursive_mutex and call it a day
