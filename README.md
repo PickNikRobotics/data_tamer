@@ -2,22 +2,18 @@
 
 [![cmake Ubuntu](https://github.com/facontidavide/data_tamer/actions/workflows/cmake_ubuntu.yml/badge.svg)](https://github.com/facontidavide/data_tamer/actions/workflows/cmake_ubuntu.yml)
 [![codecov](https://codecov.io/gh/facontidavide/data_tamer/graph/badge.svg?token=D0wtsntWds)](https://codecov.io/gh/facontidavide/data_tamer)
-
-When we talk about "logging", most of the time we refer to human-readable
-messages (strings) with different severity levels (INFO, ERROR, DEBUG, etc.), being displayed in 
-the console or saved into a file.
  
-**DataTamer** solves a different problem: it logs/traces numerical values over time and
-takes periodic "snapshots" of these values, to later visualize them as **timeseries**.
+**DataTamer** is a library to log/trace numerical variables over time and
+takes periodic "snapshots" of their values, to later visualize them as **timeseries**.
 
-As such, it is a great complement to [PlotJuggler](https://github.com/facontidavide/PlotJuggler),
+It works great with [PlotJuggler](https://github.com/facontidavide/PlotJuggler),
 the timeseries visualization tool (note: you will need PlotJuggler **3.8.2** or later).
 
-**DataTamer** is your "fearless" C++ library to log numerical data because you can easily track 
-hundreds or **thousands of variables**: even 1 million points per second should have a negligible CPU overhead.
+**DataTamer** is "fearless data logger" because you can record hundreds or **thousands of variables**: 
+even 1 million points per second should have a fairly small CPU overhead.
 
-Since all the values are aggregated in a single "snapshot", it is particularly 
-suited to record data in a periodic loop (a very frequent use case in robotics applications).
+Since all the values are aggregated in a single "snapshot", it is usually meant to 
+record data in a periodic loop (a very frequent use case, in robotics applications).
 
 Kudos to [pal_statistics](https://github.com/pal-robotics/pal_statistics), for inspiring this project.
 
@@ -28,17 +24,16 @@ Kudos to [pal_statistics](https://github.com/pal-robotics/pal_statistics), for i
 DataTamer can be used to monitor multiple variables in your applications.
 
 **Channels** are used to take "snapshots" of a subset of variables at a given time.
-If you want to record at different frequencies, you should use  different channels.
+If you want to record at different frequencies, you can use different channels.
 
-DataTamer will forward this data to 1 or multiple **Sinks**; 
-a sink may save the information in a file (currently, we support [MCAP](https://mcap.dev/))
-or publish it using an inter-process communication (for instance, a ROS2 publisher).
+DataTamer will forward the collected data to 1 or multiple **sinks**; 
+a sink may save the information immediately in a file (currently, we support [MCAP](https://mcap.dev/))
+or publish it using an inter-process communication, for instance, a ROS2 publisher.
 
-You can create your own sinks, if you want.
+You can easily create your own, specialized sinks.
 
-You can use [PlotJuggler](https://github.com/facontidavide/PlotJuggler) to
+Use [PlotJuggler](https://github.com/facontidavide/PlotJuggler) to
 visualize your logs offline or in real-time.  
-
 
 ## Features
 
@@ -48,15 +43,16 @@ visualize your logs offline or in real-time.
 - **Very low serialization overhead**, in the order of 1 bit per traced value.
 - The user can enable/disable traced variables at run-time.
 
-
 ## Limitations
 
-- Traced variables can not be added (registered) once the recording starts.
+- Traced variables can not be added (registered) once the recording starts (first `takeSnapshot`).
 - Focused on periodic recording. Not the best option for sporadic, asynchronous events.
 - If you use `DataTamer::registerValue` you must be careful about the lifetime of the
 object. If you prefer a safer RAII interface, use `DataTamer::createLoggedValue` instead.
 
-# Example
+# Examples
+
+## Basic example
 
 ```cpp
 #include "data_tamer/data_tamer.hpp"
@@ -64,36 +60,84 @@ object. If you prefer a safer RAII interface, use `DataTamer::createLoggedValue`
 
 int main()
 {
-  using namespace DataTamer;
+  // Multiple channels can use this sink. Data will be saved in mylog.mcap
+  auto mcap_sink = std::make_shared<DataTamer::MCAPSink>("mylog.mcap");
 
-  // Multiple channels can use this sink. 
-  // Data will be saved in mylog.mcap
-  auto mcap_sink = std::make_shared<MCAP>("mylog.mcap");
-
-  // Create a channel
-  auto channel = LogChannel::create("my_channel");
+  // Create a channel and attach a sink. A channel can have multiple sinks
+  auto channel = DataTamer::LogChannel::create("my_channel");
   channel->addDataSink(mcap_sink);
 
-  // You can register any arithmetic value. You are responsible for their lifetime
+  // You can register any arithmetic value. You are responsible for their lifetime!
   double value_real = 3.14;
   int value_int = 42;
   auto id1 = channel->registerValue("value_real", &value_real);
   auto id2 = channel->registerValue("value_int", &value_int);
 
   // If you prefer to use RAII, use this method instead
-  // logged_real will disable itself when it goes out of scope.
-  auto logged_real= channel->createLoggedValue<float>("my_real");
+  // logged_real will unregister itself when it goes out of scope.
+  auto logged_real = channel->createLoggedValue<float>("my_real");
 
-  // This is the way you store the current snapshot of the values
+  // Store the current value of all the registered values
   channel->takeSnapshot();
 
-  // You can disable (i.e., stop recording) a value
+  // You can disable (i.e., stop recording) a value like this
   channel->setEnabled(id1, false);
-  // or
+  // or, in the case of a LoggedValue
   logged_real->setEnabled(false);
 
-  // The serialized data of the next snapshot will contain
-  // only [value_int], i.e. [id2], since the other two were disabled
+  // The next snapshot will contain only [value_int], i.e. [id2],
+  // since the other two were disabled
+  channel->takeSnapshot();
+}
+```
+## How to register custom types
+
+Containers such as `std::vector` and `std::array` are supported out of the box.
+You can also register a custom type, as shown in the example below.
+
+```cpp
+#include "data_tamer/data_tamer.hpp"
+#include "data_tamer/sinks/mcap_sink.hpp"
+#include "data_tamer/custom_types.hpp"
+
+// a custom type
+struct Point3D
+{
+  double x;
+  double y;
+  double z;
+};
+
+namespace DataTamer
+{
+template <> struct TypeDefinition<Point3D>
+{
+  // Provide the name of the type
+  std::string typeName() const { return "Point3D"; }
+  // List all the member variables that you want to be saved (including their name)
+  template <class Function> void typeDef(Function& addField)
+  {
+    addField("x", &Point3D::x);
+    addField("y", &Point3D::y);
+    addField("z", &Point3D::z);
+  }
+}
+} // end namespace DataTamer
+
+int main()
+{
+  auto channel = DataTamer::LogChannel::create("my_channel");
+  channel->addDataSink(std::make_shared<DataTamer::MCAPSink>("mylog.mcap"));
+
+  // Array/vectors are supported natively
+  std::vector<double> values = {1, 2, 3, 4};
+  channel->registerValue("values", &values);
+
+  // Requires the implementation of DataTamer::TypeDefinition<Point3D>
+  Point3D position = {0.1, -0.2, 0.3};
+  channel->registerValue("position", &position);
+
+  // save the data as usual ...
   channel->takeSnapshot();
 }
 ```
