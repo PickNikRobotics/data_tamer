@@ -109,7 +109,7 @@ struct has_typedef_with_object : std::false_type
 {
 };
 
-inline void DummyAddField(const char*, const void*){};
+inline void DummyAddField(const char*, const void*){}
 using EmptyFunc = decltype(DummyAddField);
 
 template <class T>
