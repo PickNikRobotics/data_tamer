@@ -157,23 +157,21 @@ inline void GetFixedSize(bool& is_fixed_size, size_t& fixed_size)
       fixed_size += info.size * obj_size;
     }
     else if (is_fixed_size)
-    {
-      // type recursion
-      auto funcA = [&](const char*, auto const* member) {
-        using MemberType = std::remove_cv_t<std::remove_reference_t<decltype(*member)>>;
-        GetFixedSize<MemberType>(is_fixed_size, fixed_size);
-      };
-      auto funcB = [&](const char*, auto const& member) {
-        using MemberType = decltype(getPointerType(member));
-        GetFixedSize<MemberType>(is_fixed_size, fixed_size);
-      };
-
+    { 
       if constexpr (has_typedef_with_object<T>())
       {
+        auto funcA = [&](const char*, auto const* member) {
+          using MemberType = std::remove_cv_t<std::remove_reference_t<decltype(*member)>>;
+          GetFixedSize<MemberType>(is_fixed_size, fixed_size);
+        };
         TypeDefinition<T>().typeDef({}, funcA);
       }
       else
       {
+        auto funcB = [&](const char*, auto const& member) {
+          using MemberType = decltype(getPointerType(member));
+          GetFixedSize<MemberType>(is_fixed_size, fixed_size);
+        };
         TypeDefinition<T>().typeDef(funcB);
       }
     }

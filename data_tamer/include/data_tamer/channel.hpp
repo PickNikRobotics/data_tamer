@@ -290,29 +290,27 @@ inline void LogChannel::updateTypeRegistry()
   FieldsVector fields;
 
   if constexpr (!IsNumericType<T>())
-  {
-    auto funcPointer = [this, &fields](const char* field_name, const auto* member) {
-      using MemberType =
-          typename std::remove_cv_t<std::remove_reference_t<decltype(*member)>>;
-      updateTypeRegistryImpl<MemberType>(fields, field_name);
-    };
-
-    auto funcMember = [this, &fields](const char* field_name, const auto& member) {
-      using MemberType = decltype(getPointerType(member));
-      updateTypeRegistryImpl<MemberType>(fields, field_name);
-    };
-
+  {   
     const auto& type_name = DataTamer::TypeDefinition<T>().typeName();
     auto added_serializer = _type_registry.addType<T>(type_name, true);
     if (added_serializer)
     {
       if constexpr (has_typedef_with_object<T>())
       {
-        TypeDefinition<T>().typeDef({}, funcPointer);
+        auto func = [this, &fields](const char* field_name, const auto* member) {
+          using MemberType =
+              typename std::remove_cv_t<std::remove_reference_t<decltype(*member)>>;
+          updateTypeRegistryImpl<MemberType>(fields, field_name);
+        };
+        TypeDefinition<T>().typeDef({}, func);
       }
       else
       {
-        TypeDefinition<T>().typeDef(funcMember);
+        auto func = [this, &fields](const char* field_name, const auto& member) {
+          using MemberType = decltype(getPointerType(member));
+          updateTypeRegistryImpl<MemberType>(fields, field_name);
+        };
+        TypeDefinition<T>().typeDef(func);
       }
       // DataTamer::TypeDefinition<T>().typeDef({}, func);
       addCustomType(type_name, fields);
