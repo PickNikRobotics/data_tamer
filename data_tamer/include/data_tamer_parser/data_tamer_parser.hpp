@@ -331,7 +331,8 @@ inline Schema BuilSchemaFromText(const std::string& txt)
     {
       field.type_name = kNamesNew[static_cast<size_t>(field.type)];
     }
-    else {
+    else
+    {
       field.type_name = str_type->substr(0, offset);
     }
 
@@ -368,11 +369,9 @@ inline Schema BuilSchemaFromText(const std::string& txt)
 template <typename NumberCallback>
 bool ParseSnapshotRecursive(const TypeField& field,
                             const std::map<std::string, FieldsVector>& types_list,
-                            BufferSpan& buffer,
-                            const NumberCallback& callback_number,
+                            BufferSpan& buffer, const NumberCallback& callback_number,
                             const std::string& prefix)
 {
-
   [[maybe_unused]] uint32_t vect_size = field.array_size;
   if (field.is_vector && field.array_size == 0)
   {
@@ -380,31 +379,32 @@ bool ParseSnapshotRecursive(const TypeField& field,
     vect_size = Deserialize<uint32_t>(buffer);
   }
 
-  auto new_prefix = (prefix.empty()) ? field.field_name : (prefix + "/" + field.field_name);
+  auto new_prefix =
+      (prefix.empty()) ? field.field_name : (prefix + "/" + field.field_name);
 
-  auto doParse = [&](const std::string& var_name)
-  {
-    if(field.type != BasicType::OTHER)
+  auto doParse = [&](const std::string& var_name) {
+    if (field.type != BasicType::OTHER)
     {
       const auto var = DeserializeToVarNumber(field.type, buffer);
       callback_number(var_name, var);
     }
-    else {
+    else
+    {
       const FieldsVector& fields = types_list.at(field.type_name);
-      for(const auto& sub_field: fields)
+      for (const auto& sub_field : fields)
       {
         ParseSnapshotRecursive(sub_field, types_list, buffer, callback_number, var_name);
       }
     }
   };
 
-  if(!field.is_vector)
+  if (!field.is_vector)
   {
     doParse(new_prefix);
   }
   else
   {
-    for(uint32_t a=0; a < vect_size; a++)
+    for (uint32_t a = 0; a < vect_size; a++)
     {
       const auto& name = new_prefix + "[" + std::to_string(a) + "]";
       doParse(name);
@@ -412,7 +412,6 @@ bool ParseSnapshotRecursive(const TypeField& field,
   }
   return true;
 }
-
 
 template <typename NumberCallback, typename CustomCallback>
 inline bool ParseSnapshot(const Schema& schema, SnapshotView snapshot,

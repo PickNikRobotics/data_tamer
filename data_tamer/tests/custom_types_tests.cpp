@@ -5,7 +5,6 @@
 
 #include <gtest/gtest.h>
 
-#include <variant>
 #include <string>
 #include <thread>
 
@@ -19,21 +18,22 @@ struct TestType
   std::array<Pose, 3> poses;
 };
 
+
 namespace DataTamer
 {
-template <>
-struct TypeDefinition<TestType>
+template <> struct TypeDefinition<TestType>
 {
   std::string typeName() const { return "TestType"; }
 
-  template <class Function> void typeDef(Function& addField)
+  template <class Function> void typeDef(const TestType& obj, Function& addField)
   {
-    addField("timestamp", &TestType::timestamp);
-    addField("count", &TestType::count);
-    addField("positions", &TestType::positions);
-    addField("poses", &TestType::poses);
+    addField("timestamp", &obj.timestamp);
+    addField("count", &obj.count);
+    addField("positions", &obj.positions);
+    addField("poses", &obj.poses);
   }
 };
+
 } // namespace DataTamer
 
 TEST(DataTamerCustom, CustomType1)
@@ -63,9 +63,7 @@ TEST(DataTamerCustom, CustomType1)
   //-------------------------------------------------
   // check that the schema includes the Point3D definition
   const auto schema = channel->getSchema();
-  std::ostringstream ss;
-  ss << schema;
-  const std::string schema_txt = ss.str();
+  const std::string schema_txt = ToStr(schema);
 
   std::cout << schema_txt << std::endl;
 
@@ -133,9 +131,7 @@ TEST(DataTamerCustom, CustomType2)
 
   //-------------------------------------------------
   const auto schema = channel->getSchema();
-  std::ostringstream ss;
-  ss << schema;
-  const std::string schema_txt = ss.str();
+  const std::string schema_txt = ToStr(schema);
 
   std::cout << schema_txt << std::endl;
 
@@ -235,9 +231,7 @@ TEST(DataTamerCustom, CustomType3)
 
   //-------------------------------------------------
   const auto schema = channel->getSchema();
-  std::ostringstream ss;
-  ss << schema;
-  const std::string schema_txt = ss.str();
+  const std::string schema_txt = ToStr(schema);
 
   std::cout << schema_txt << std::endl;
 
@@ -258,4 +252,41 @@ TEST(DataTamerCustom, CustomType3)
   ASSERT_TRUE(std::string::npos != posA);
   ASSERT_TRUE(std::string::npos != posB);
   ASSERT_LT(posA, posB);
+}
+
+
+TEST(DataTamerCustom, RegisterConstMethods)
+{
+   auto channel = LogChannel::create("chan");
+    auto sink = std::make_shared<DummySink>();
+    channel->addDataSink(sink);
+
+    Vector2d vect = {1, 2};
+    channel->registerValue("vect", &vect);
+
+    channel->takeSnapshot();
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+    const auto expected_size = 2 * sizeof(double);
+
+    // //-------------------------------------------------
+    const auto schema = channel->getSchema();
+    const std::string schema_txt = ToStr(schema);
+
+    std::cout << schema_txt << std::endl;
+
+    ASSERT_EQ(sink->latest_snapshot.payload.size(), expected_size);
+    ASSERT_EQ(schema.custom_types.size(), 1);
+    ASSERT_EQ(schema.custom_schemas.size(), 0);
+
+    const auto posA = schema_txt.find("Vector2d vect\n");
+
+    const auto posB = schema_txt.find("===============\n"
+                                      "MSG: Vector2d\n"
+                                      "float64 x\n"
+                                      "float64 y\n");
+
+    ASSERT_TRUE(std::string::npos != posA);
+    ASSERT_TRUE(std::string::npos != posB);
+    ASSERT_LT(posA, posB);
 }

@@ -4,6 +4,7 @@
 #include <memory>
 #include <mutex>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace DataTamer
 {
@@ -15,11 +16,9 @@ struct ChannelsRegistry::Pimpl
   Mutex mutex;
 };
 
-ChannelsRegistry::ChannelsRegistry() : _p(new Pimpl)
-{}
+ChannelsRegistry::ChannelsRegistry() : _p(new Pimpl) {}
 
-ChannelsRegistry::~ChannelsRegistry()
-{}
+ChannelsRegistry::~ChannelsRegistry() {}
 
 ChannelsRegistry& ChannelsRegistry::Global()
 {

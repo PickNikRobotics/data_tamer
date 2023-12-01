@@ -2,9 +2,6 @@
 #include "data_tamer/sinks/dummy_sink.hpp"
 #include <iostream>
 
-
-
-
 int main()
 {
   using namespace DataTamer;

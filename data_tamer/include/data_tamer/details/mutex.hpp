@@ -95,10 +95,8 @@ inline bool Mutex::try_lock() noexcept
 }
 #else
 
-inline Mutex::Mutex()
-{}
-inline Mutex::~Mutex()
-{}
+inline Mutex::Mutex() {}
+inline Mutex::~Mutex() {}
 
 inline void Mutex::lock()
 {

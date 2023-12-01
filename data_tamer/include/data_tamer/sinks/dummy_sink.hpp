@@ -22,10 +22,7 @@ public:
   Snapshot latest_snapshot;
   Mutex schema_mutex_;
 
-  ~DummySink() override
-  {
-    stopThread();
-  }
+  ~DummySink() override { stopThread(); }
 
   void addChannel(std::string const& name, Schema const& schema) override
   {

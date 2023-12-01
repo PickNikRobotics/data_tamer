@@ -42,30 +42,18 @@ public:
 
   [[nodiscard]] bool operator==(const ValuePtr& other) const;
 
-  [[nodiscard]] bool operator!=(const ValuePtr& other) const
-  {
-    return !(*this == other);
-  }
+  [[nodiscard]] bool operator!=(const ValuePtr& other) const { return !(*this == other); }
 
   void serialize(SerializeMe::SpanBytes& dest) const;
 
   [[nodiscard]] size_t getSerializedSize() const;
 
   /// Get the type of the stored variable pointer
-  [[nodiscard]] BasicType type() const
-  {
-    return type_;
-  }
+  [[nodiscard]] BasicType type() const { return type_; }
 
-  [[nodiscard]] bool isVector() const
-  {
-    return is_vector_;
-  }
+  [[nodiscard]] bool isVector() const { return is_vector_; }
 
-  [[nodiscard]] uint16_t vectorSize() const
-  {
-    return array_size_;
-  }
+  [[nodiscard]] uint16_t vectorSize() const { return array_size_; }
 
 private:
   const void* v_ptr_ = nullptr;
@@ -87,12 +75,10 @@ inline ValuePtr::ValuePtr(const T* pointer, CustomSerializer::Ptr type_info) :
 {
   if (type_info)
   {
-    serialize_impl_ = [type_info, pointer](SerializeMe::SpanBytes& buffer) -> void
-    {
+    serialize_impl_ = [type_info, pointer](SerializeMe::SpanBytes& buffer) -> void {
       type_info->serialize(pointer, buffer);
     };
-    get_size_impl_ = [type_info, pointer]() -> size_t
-    {
+    get_size_impl_ = [type_info, pointer]() -> size_t {
       return type_info->serializedSize(pointer);
     };
   }
@@ -105,9 +91,7 @@ inline ValuePtr::ValuePtr(const Container<T, TArgs...>* vect) :
   serialize_impl_ = [vect](SerializeMe::SpanBytes& buffer) -> void {
     SerializeMe::SerializeIntoBuffer(buffer, *vect);
   };
-  get_size_impl_ = [vect]() -> size_t {
-    return SerializeMe::BufferSize(*vect);
-  };
+  get_size_impl_ = [vect]() -> size_t { return SerializeMe::BufferSize(*vect); };
 }
 
 template <template <class, class> class Container, class T, class... TArgs>
@@ -115,25 +99,24 @@ inline ValuePtr::ValuePtr(const Container<T, TArgs...>* vect,
                           CustomSerializer::Ptr type_info) :
   v_ptr_(vect), type_(GetBasicType<T>()), memory_size_(sizeof(T)), is_vector_(true)
 {
-  serialize_impl_ = [type_info, vect](SerializeMe::SpanBytes& buffer) -> void
-  {
+  serialize_impl_ = [type_info, vect](SerializeMe::SpanBytes& buffer) -> void {
     SerializeMe::SerializeIntoBuffer(buffer, uint32_t(vect->size()));
-    for(const auto& value: (*vect))
+    for (const auto& value : (*vect))
     {
       type_info->serialize(&value, buffer);
     }
   };
   get_size_impl_ = [type_info, vect]() -> size_t {
-    if(vect->empty())
+    if (vect->empty())
     {
       return sizeof(uint32_t);
     }
-    if(type_info->isFixedSize())
+    if (type_info->isFixedSize())
     {
       return sizeof(uint32_t) + vect->size() * type_info->serializedSize(&vect->front());
     }
     size_t tot_size = sizeof(uint32_t);
-    for(const auto& value: (*vect))
+    for (const auto& value : (*vect))
     {
       tot_size += type_info->serializedSize(&value);
     }
@@ -143,10 +126,7 @@ inline ValuePtr::ValuePtr(const Container<T, TArgs...>* vect,
 
 template <typename T, size_t N>
 inline ValuePtr::ValuePtr(const std::array<T, N>* array) :
-  v_ptr_(array),
-  type_(GetBasicType<T>()),
-  is_vector_(true),
-  array_size_(N)
+  v_ptr_(array), type_(GetBasicType<T>()), is_vector_(true), array_size_(N)
 {
   serialize_impl_ = [array](SerializeMe::SpanBytes& buffer) -> void {
     SerializeMe::SerializeIntoBuffer(buffer, *array);
@@ -157,25 +137,21 @@ inline ValuePtr::ValuePtr(const std::array<T, N>* array) :
 template <typename T, size_t N>
 inline ValuePtr::ValuePtr(const std::array<T, N>* array,
                           CustomSerializer::Ptr type_info) :
-  v_ptr_(array),
-  type_(GetBasicType<T>()),
-  is_vector_(true),
-  array_size_(N)
+  v_ptr_(array), type_(GetBasicType<T>()), is_vector_(true), array_size_(N)
 {
-  serialize_impl_ = [type_info, array](SerializeMe::SpanBytes& buffer) -> void
-  {
-    for(const auto& value: (*array))
+  serialize_impl_ = [type_info, array](SerializeMe::SpanBytes& buffer) -> void {
+    for (const auto& value : (*array))
     {
       type_info->serialize(&value, buffer);
     }
   };
   get_size_impl_ = [type_info, array]() {
     size_t tot_size = 0;
-    if(type_info->isFixedSize())
+    if (type_info->isFixedSize())
     {
       return N * type_info->serializedSize(&array->front());
     }
-    for(const auto& value: (*array))
+    for (const auto& value : (*array))
     {
       tot_size += type_info->serializedSize(&value);
     }
@@ -196,18 +172,13 @@ inline void ValuePtr::serialize(SerializeMe::SpanBytes& dest) const
     serialize_impl_(dest);
     return;
   }
-
   std::memcpy(dest.data(), v_ptr_, memory_size_);
   dest.trimFront(memory_size_);
 }
 
 inline size_t ValuePtr::getSerializedSize() const
 {
-  if (!get_size_impl_)
-  {
-    return memory_size_;
-  }
-  return get_size_impl_();
+  return (get_size_impl_) ? get_size_impl_() : memory_size_;
 }
 
 }   // namespace DataTamer

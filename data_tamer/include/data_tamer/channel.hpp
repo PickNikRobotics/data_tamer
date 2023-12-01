@@ -5,10 +5,8 @@
 #include "data_tamer/details/mutex.hpp"
 #include "data_tamer/details/locked_reference.hpp"
 
-#include <atomic>
 #include <chrono>
 #include <memory>
-#include <unordered_set>
 
 namespace DataTamer
 {
@@ -40,8 +38,7 @@ protected:
   friend LogChannel;
 
 public:
-  LoggedValue()
-  {}
+  LoggedValue() {}
 
   ~LoggedValue();
 
@@ -67,10 +64,7 @@ public:
   /// @brief Disabling a LoggedValue means that we will not record it in the snapshot
   void setEnabled(bool enabled);
 
-  [[nodiscard]] bool isEnabled() const
-  {
-    return enabled_;
-  }
+  [[nodiscard]] bool isEnabled() const { return enabled_; }
 
 private:
   std::weak_ptr<LogChannel> channel_;
@@ -250,6 +244,9 @@ private:
   template <typename T>
   void updateTypeRegistry();
 
+  template <typename T>
+  void updateTypeRegistryImpl(FieldsVector& fields, const char* name);
+
   void addCustomType(const std::string& custom_type_name, const FieldsVector& fields);
 
   [[nodiscard]] RegistrationID registerValueImpl(const std::string& name,
@@ -260,45 +257,64 @@ private:
 //----------------------------------------------------------------------
 //----------------------------------------------------------------------
 //----------------------------------------------------------------------
+template <typename T>
+void LogChannel::updateTypeRegistryImpl(FieldsVector& fields, const char* field_name)
+{
+  using SerializeMe::container_info;
+  TypeField field;
+  field.field_name = field_name;
+  field.type = GetBasicType<T>();
+
+  if constexpr (GetBasicType<T>() == BasicType::OTHER)
+  {
+    field.type_name = TypeDefinition<T>().typeName();
+
+    if constexpr (container_info<T>::is_container)
+    {
+      field.is_vector = true;
+      field.array_size = container_info<T>::size;
+      using Type = typename container_info<T>::value_type;
+      updateTypeRegistry<Type>();
+    }
+    else
+    {
+      updateTypeRegistry<T>();
+    }
+  }
+  fields.push_back(field);
+}
 
 template <typename T>
 inline void LogChannel::updateTypeRegistry()
 {
   FieldsVector fields;
-  auto func = [this, &fields](const char* field_name, const auto& member) {
-    using MemberType = decltype(getPointerType(member));
-    using SerializeMe::container_info;
-
-    TypeField field;
-    field.field_name = field_name;
-    field.type = GetBasicType<MemberType>();
-
-    if constexpr (GetBasicType<MemberType>() == BasicType::OTHER)
-    {
-      field.type_name = TypeDefinition<MemberType>().typeName();
-
-      if constexpr (container_info<MemberType>::is_container)
-      {
-        field.is_vector = true;
-        field.array_size = container_info<MemberType>::size;
-        using Type = typename container_info<MemberType>::value_type;
-        updateTypeRegistry<Type>();
-      }
-      else
-      {
-        updateTypeRegistry<MemberType>();
-      }
-    }
-    fields.push_back(field);
-  };
 
   if constexpr (!IsNumericType<T>())
   {
-    const auto& type_name = TypeDefinition<T>().typeName();
+    auto funcPointer = [this, &fields](const char* field_name, const auto* member) {
+      using MemberType =
+          typename std::remove_cv_t<std::remove_reference_t<decltype(*member)>>;
+      updateTypeRegistryImpl<MemberType>(fields, field_name);
+    };
+
+    auto funcMember = [this, &fields](const char* field_name, const auto& member) {
+      using MemberType = decltype(getPointerType(member));
+      updateTypeRegistryImpl<MemberType>(fields, field_name);
+    };
+
+    const auto& type_name = DataTamer::TypeDefinition<T>().typeName();
     auto added_serializer = _type_registry.addType<T>(type_name, true);
     if (added_serializer)
     {
-      TypeDefinition<T>().typeDef(func);
+      if constexpr (has_typedef_with_object<T>())
+      {
+        TypeDefinition<T>().typeDef({}, funcPointer);
+      }
+      else
+      {
+        TypeDefinition<T>().typeDef(funcMember);
+      }
+      // DataTamer::TypeDefinition<T>().typeDef({}, func);
       addCustomType(type_name, fields);
     }
   }

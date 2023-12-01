@@ -33,7 +33,8 @@ namespace DataTamer
 
 static constexpr char const* kDataTamer = "data_tamer";
 
-MCAPSink::MCAPSink(const std::string& filepath, bool do_compression) : filepath_(filepath), compression_(do_compression)
+MCAPSink::MCAPSink(const std::string& filepath, bool do_compression) :
+  filepath_(filepath), compression_(do_compression)
 {
   openFile(filepath_);
 }
@@ -89,7 +90,7 @@ void MCAPSink::addChannel(std::string const& channel_name, Schema const& schema)
 bool MCAPSink::storeSnapshot(const Snapshot& snapshot)
 {
   std::scoped_lock lk(mutex_);
-  if(forced_stop_recording_)
+  if (forced_stop_recording_)
   {
     return false;
   }
@@ -137,7 +138,7 @@ void MCAPSink::stopRecording()
   writer_.reset();
 }
 
-void MCAPSink::restartRecording(const std::string &filepath, bool do_compression)
+void MCAPSink::restartRecording(const std::string& filepath, bool do_compression)
 {
   std::scoped_lock lk(mutex_);
   filepath_ = filepath;

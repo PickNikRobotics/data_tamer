@@ -43,15 +43,13 @@ class Span
 public:
   Span() = default;
 
-  Span(T* ptr, size_t size) : data_(ptr), size_(size)
-  {}
+  Span(T* ptr, size_t size) : data_(ptr), size_(size) {}
 
   template <size_t N>
   Span(std::array<T, N>& v) : data_(v.data()), size_(N)
   {}
 
-  Span(std::vector<T>& v) : data_(v.data()), size_(v.size())
-  {}
+  Span(std::vector<T>& v) : data_(v.data()), size_(v.size()) {}
 
   T const* data() const;
 
@@ -236,7 +234,7 @@ struct TypeDefinition
 {
   std::string typeName() const;
   template <class Function>
-  void typeDef(Function& addField);
+  void typeDef(const Type& obj, Function& addField);
 };
 
 template <typename T, class = void>
@@ -321,11 +319,11 @@ inline size_t BufferSize(const T& val)
   else
   {
     size_t total_size = 0;
-    auto func = [&val, &total_size](const char*, auto const& field) {
-      total_size += BufferSize(val.*field);
+    auto func = [&total_size](const char*, auto const* field) {
+      total_size += BufferSize(*field);
     };
 
-    TypeDefinition<T>().typeDef(func);
+    TypeDefinition<T>().typeDef(val, func);
     return total_size;
   }
 }
@@ -383,10 +381,10 @@ inline void DeserializeFromBuffer(SpanBytesConst& buffer, T& dest)
   }
   else
   {
-    auto func = [&dest, &buffer](const char*, const auto& field) {
-      DeserializeFromBuffer(buffer, dest.*field);
+    auto func = [&buffer](const char*, const auto* field) {
+      DeserializeFromBuffer(buffer, *field);
     };
-    TypeDefinition<T>().typeDef(func);
+    TypeDefinition<T>().typeDef(dest, func);
   }
 }
 
@@ -487,10 +485,10 @@ inline void SerializeIntoBuffer(SpanBytes& buffer, T const& value)
   }
   else
   {
-    auto func = [&value, &buffer](const char*, auto const& field) {
-      SerializeIntoBuffer(buffer, value.*field);
+    auto func = [&buffer](const char*, const auto* field) {
+      SerializeIntoBuffer(buffer, *field);
     };
-    TypeDefinition<T>().typeDef(func);
+    TypeDefinition<T>().typeDef(value, func);
   }
 }
 

@@ -3,7 +3,6 @@
 #include <iostream>
 #include <thread>
 
-
 // check the custom type in the following file,  that defines:
 //
 // - Point3D
@@ -11,7 +10,6 @@
 // - Pose
 
 #include "geometry_types.hpp"
-
 
 int main()
 {
@@ -43,11 +41,11 @@ int main()
   std::cout << channel->getSchema() << std::endl;
 
   // Note has the size of the message is almost the same as the raw data
-  size_t expected_size = sizeof(double) * 3 + // pointA
-                         sizeof(double) * 3 + // pointB
-                         sizeof(double) * 7 + // my_pose
-                         sizeof(uint32_t) + 5 * (sizeof(double) * 3) + //points_vect
-                         sizeof(int32_t) * 3; // value_array
+  size_t expected_size = sizeof(double) * 3 +                            // pointA
+                         sizeof(double) * 3 +                            // pointB
+                         sizeof(double) * 7 +                            // my_pose
+                         sizeof(uint32_t) + 5 * (sizeof(double) * 3) +   //points_vect
+                         sizeof(int32_t) * 3;                            // value_array
 
   channel->takeSnapshot();
   std::this_thread::sleep_for(std::chrono::milliseconds(10));

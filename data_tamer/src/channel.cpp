@@ -2,8 +2,8 @@
 #include "data_tamer/data_sink.hpp"
 #include "data_tamer/contrib/SerializeMe.hpp"
 
-#include <iostream>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace DataTamer
 {
@@ -74,12 +74,12 @@ RegistrationID LogChannel::registerValueImpl(const std::string& name,
     _p->schema.fields.emplace_back(std::move(field));
 
     // if this was a special serializer with its own schema, save it instead in custom_schemas
-    if(type_info)
+    if (type_info)
     {
       auto custom_schema = type_info->typeSchema();
-      if(custom_schema && _p->schema.custom_types.count(type_info->typeName()) == 0)
+      if (custom_schema && _p->schema.custom_types.count(type_info->typeName()) == 0)
       {
-        _p->schema.custom_schemas.insert( {type_info->typeName(), *custom_schema});
+        _p->schema.custom_schemas.insert({type_info->typeName(), *custom_schema});
       }
     }
 
@@ -125,8 +125,7 @@ const std::string& LogChannel::channelName() const
   return _p->channel_name;
 }
 
-LogChannel::~LogChannel()
-{}
+LogChannel::~LogChannel() {}
 
 void LogChannel::setEnabled(const RegistrationID& id, bool enable)
 {

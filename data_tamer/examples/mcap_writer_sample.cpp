@@ -6,7 +6,6 @@
 
 using namespace DataTamer;
 
-
 int main()
 {
   auto mcap_sink = std::make_shared<MCAPSink>("test_sample.mcap");
@@ -46,10 +45,10 @@ int main()
   channelB->registerValue("array_3", &v8);
   channelB->registerValue("points", &points);
 
-  for(size_t i=0; i<1000; i++)
+  for (size_t i = 0; i < 1000; i++)
   {
     channelA->takeSnapshot();
-    if(i%2 == 0)
+    if (i % 2 == 0)
     {
       channelB->takeSnapshot();
     }
@@ -58,5 +57,3 @@ int main()
   std::this_thread::sleep_for(std::chrono::milliseconds(10));
   std::cout << "DONE" << std::endl;
 }
-
-
