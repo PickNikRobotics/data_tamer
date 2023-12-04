@@ -21,6 +21,7 @@ else()
         -Wnon-virtual-dtor -Wno-unused-variable -Wnull-dereference -Wold-style-cast
         -Woverloaded-virtual -Wshadow -Wsign-conversion
         -Werror -Wpedantic)
+    add_compile_options(-fPIC)
 endif()
 
 
