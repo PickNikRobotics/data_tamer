@@ -40,7 +40,7 @@ else()
 endif()
 
 if(ament_cmake_FOUND AND NOT BUILD_SHARED_LIBS)
-    message("BUILD_SHARED_LIBS forced to OFF in ROS2")
+    message("BUILD_SHARED_LIBS forced to ON (i.e. SHARED) in ROS2")
 endif()
 
 add_library(data_tamer ${LIB_TYPE}
@@ -105,7 +105,6 @@ install(
   LIBRARY DESTINATION lib
   ARCHIVE DESTINATION lib
   RUNTIME DESTINATION bin
-  INCLUDES DESTINATION include
 )
 
 if (NOT ament_cmake_FOUND )
