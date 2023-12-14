@@ -13,6 +13,8 @@ else()
     option(DATA_TAMER_BUILD_EXAMPLES "Build examples" OFF)
 endif()
 
+option(BUILD_SHARED_LIBS "Build using shared libraries" ON)
+
 if (MSVC)
     add_compile_options(/W4 /WX)
 else()
@@ -31,7 +33,17 @@ if ( ament_cmake_FOUND )
         src/sinks/ros2_publisher_sink.cpp)
 endif()
 
-add_library(data_tamer STATIC
+if(BUILD_SHARED_LIBS OR ament_cmake_FOUND)
+    set(LIB_TYPE SHARED)
+else()
+    set(LIB_TYPE STATIC)
+endif()
+
+if(ament_cmake_FOUND AND NOT BUILD_SHARED_LIBS)
+    message("BUILD_SHARED_LIBS forced to OFF in ROS2")
+endif()
+
+add_library(data_tamer ${LIB_TYPE}
     include/data_tamer/channel.hpp
     include/data_tamer/custom_types.hpp
     include/data_tamer/data_tamer.hpp
