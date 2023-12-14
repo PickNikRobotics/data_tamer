@@ -21,8 +21,10 @@ struct Pose
   Quaternion rot;
 };
 
-// This case is also supported, but must be registered differently (se below)
-// Class of this type are commonly found in library like Eigen
+// Sometimes a field of a type is hidden as a private member and can be
+// accesses only by const reference.
+// This case is also supported but must be registered differently (see below).
+// Classese of this type are commonly found in libraries like Eigen
 class Vector2d
 {
   double _x = 0;
