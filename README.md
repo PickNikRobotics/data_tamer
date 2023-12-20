@@ -172,7 +172,7 @@ cmake -S . -DCMAKE_BUILD_TYPE=Debug \
 cmake --build build/Debug/ --parallel
 ```
 
-# How to parse messages serialized with DataTamer
+# How to deserialize data recorded with DataTamer
 
 I will write more extensively about the serialization format used by DataTamer, but for the time being I
 created a single header file without external dependencies that you can just copy into your project: 
