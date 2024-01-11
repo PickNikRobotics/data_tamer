@@ -16,6 +16,9 @@ struct TestType
   int count;
   std::vector<Point3D> positions;
   std::array<Pose, 3> poses;
+
+  enum Color: uint8_t { RED, GREEN, BLUE };
+  Color color;
 };
 
 
@@ -31,6 +34,7 @@ template <> struct TypeDefinition<TestType>
     addField("count", &obj.count);
     addField("positions", &obj.positions);
     addField("poses", &obj.poses);
+    addField("color", &obj.color);
   }
 };
 
@@ -56,6 +60,7 @@ TEST(DataTamerCustom, CustomType1)
                        sizeof(double) +
                        sizeof(int32_t) +
                        sizeof(uint32_t) + 4 * sizeof(Point3D) +
+                       sizeof(TestType::Color) +
                        3 * sizeof(Pose);
 
   ASSERT_EQ(sink->latest_snapshot.payload.size(), expected_size);
@@ -97,7 +102,8 @@ TEST(DataTamerCustom, CustomType1)
                                     "float64 timestamp\n"
                                     "int32 count\n"
                                     "Point3D[] positions\n"
-                                    "Pose[3] poses\n");
+                                    "Pose[3] poses\n"
+                                    "uint8 color\n");
 
   ASSERT_TRUE(std::string::npos != posA);
   ASSERT_TRUE(std::string::npos != posB);

@@ -1,9 +1,7 @@
 #pragma once
 
 #include <functional>
-#include <atomic>
 #include <cstring>
-#include <iostream>
 #include "data_tamer/custom_types.hpp"
 #include "data_tamer/contrib/SerializeMe.hpp"
 

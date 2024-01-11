@@ -249,9 +249,9 @@ struct is_serializer_specialized<T, decltype(TypeDefinition<T>(), void())>
 };
 
 template <typename T>
-inline constexpr bool is_arithmetic()
+inline constexpr bool is_number()
 {
-  return std::is_arithmetic_v<T> || std::is_same_v<T, std::byte>;
+  return std::is_arithmetic_v<T> || std::is_same_v<T, std::byte> || std::is_enum_v<T>;
 }
 
 template <typename _Tp, bool _is_container, int _size>
@@ -312,7 +312,7 @@ inline constexpr bool is_vector()
 template <typename T>
 inline size_t BufferSize(const T& val)
 {
-  if constexpr (is_arithmetic<T>())
+  if constexpr (is_number<T>())
   {
     return sizeof(T);
   }
@@ -469,7 +469,7 @@ inline void DeserializeFromBuffer(SpanBytesConst& buffer, Container<T, TArgs...>
 template <typename T>
 inline void SerializeIntoBuffer(SpanBytes& buffer, T const& value)
 {
-  if constexpr (is_arithmetic<T>())
+  if constexpr (is_number<T>())
   {
     const size_t S = sizeof(T);
     if (S > buffer.size())

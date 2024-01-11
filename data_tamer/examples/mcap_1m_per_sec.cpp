@@ -18,9 +18,18 @@ void WritingThread(const std::string& channel_name)
   std::vector<float> real32(vect_size);
   std::vector<int16_t> int16(vect_size);
 
+  enum Color: uint8_t {
+    RED = 0,
+    GREEN = 1,
+    BLUE = 2
+  };
+  Color color;
+
   channel->registerValue("real64", &real64);
   channel->registerValue("real32", &real32);
   channel->registerValue("int16", &int16);
+  channel->registerValue("color", &color);
+
 
   int count = 0;
   double t = 0;
@@ -34,6 +43,7 @@ void WritingThread(const std::string& channel_name)
       real32[i] = float(value);
       int16[i] = int16_t(10 * value);
     }
+    color = static_cast<Color>(count % 3);
 
     if (count++ % 1000 == 0)
     {

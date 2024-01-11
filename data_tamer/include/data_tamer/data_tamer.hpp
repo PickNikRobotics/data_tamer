@@ -1,7 +1,6 @@
 #pragma once
 
 #include "data_tamer/channel.hpp"
-#include "data_tamer/details/mutex.hpp"
 
 namespace DataTamer
 {

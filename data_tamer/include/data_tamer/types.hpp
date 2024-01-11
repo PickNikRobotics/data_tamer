@@ -63,6 +63,10 @@ using VarNumber = std::variant<
 template <typename T>
 inline constexpr BasicType GetBasicType()
 {
+  if constexpr(std::is_enum_v<T>) {
+    return GetBasicType<std::underlying_type_t<T>>();
+  }
+
   // clang-format off
   if constexpr (std::is_same_v<T, bool>) return BasicType::BOOL;
   if constexpr (std::is_same_v<T, char>) return BasicType::CHAR;
@@ -87,7 +91,8 @@ inline constexpr BasicType GetBasicType()
 template <typename T>
 inline constexpr bool IsNumericType()
 {
-  return std::is_arithmetic_v<T> || std::is_same_v<T, bool> || std::is_same_v<T, char>;
+  return std::is_arithmetic_v<T> || std::is_same_v<T, bool> || std::is_same_v<T, char>
+         || std::is_enum_v<T>;
 }
 
 struct RegistrationID
