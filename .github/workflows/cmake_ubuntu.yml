@@ -37,12 +37,12 @@ jobs:
 
     - name: Install conan dependencies
       working-directory: ${{github.workspace}}/build
-      run: conan install ${{github.workspace}}/data_tamer/conanfile.py -s build_type=Debug --build=missing -s compiler.cppstd=gnu17 -of .
+      run: conan install ${{github.workspace}}/data_tamer_cpp/conanfile.py -s build_type=Debug --build=missing -s compiler.cppstd=gnu17 -of .
 
     - name: Configure CMake
       shell: bash
       working-directory: ${{github.workspace}}/build
-      run: cmake ${{github.workspace}}/data_tamer -DCMAKE_BUILD_TYPE=Debug -DCMAKE_TOOLCHAIN_FILE="./build/Debug/generators/conan_toolchain.cmake" -DCMAKE_CXX_FLAGS_DEBUG="-g -fprofile-arcs -ftest-coverage"
+      run: cmake ${{github.workspace}}/data_tamer_cpp -DCMAKE_BUILD_TYPE=Debug -DCMAKE_TOOLCHAIN_FILE="./build/Debug/generators/conan_toolchain.cmake" -DCMAKE_CXX_FLAGS_DEBUG="-g -fprofile-arcs -ftest-coverage"
 
     - name: Build
       shell: bash
