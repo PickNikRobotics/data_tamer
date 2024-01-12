@@ -2,6 +2,9 @@
 Changelog for package data_tamer_msgs
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Forthcoming
+-----------
+
 0.8.0 (2023-11-30)
 ------------------
 * Merge branch 'dev'

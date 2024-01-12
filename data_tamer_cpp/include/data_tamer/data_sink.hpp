@@ -3,7 +3,6 @@
 #include "data_tamer/types.hpp"
 
 #include <chrono>
-#include <condition_variable>
 #include <cstdint>
 #include <memory>
 #include <string>

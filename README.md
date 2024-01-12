@@ -158,18 +158,18 @@ Assuming conan 2.x installed. From the source directory.
 
 ```
 conan install . -s compiler.cppstd=gnu17 --build=missing -s build_type=Release
-cmake -S . -DCMAKE_BUILD_TYPE=Release \
+cmake -S . -B build/Release -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_TOOLCHAIN_FILE="build/Release/generators/conan_toolchain.cmake"
-cmake --build build/Release/ --parallel
+cmake --build build/Release --parallel
 ```
 
 **Debug**:
 
 ```
 conan install . -s compiler.cppstd=gnu17 --build=missing -s build_type=Debug
-cmake -S . -DCMAKE_BUILD_TYPE=Debug \
+cmake -S . -B build/Debug -DCMAKE_BUILD_TYPE=Debug \
       -DCMAKE_TOOLCHAIN_FILE="build/Debug/generators/conan_toolchain.cmake"
-cmake --build build/Debug/ --parallel
+cmake --build build/Debug --parallel
 ```
 
 # How to deserialize data recorded with DataTamer
