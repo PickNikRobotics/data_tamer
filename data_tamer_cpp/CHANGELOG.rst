@@ -2,8 +2,8 @@
 Changelog for package data_tamer
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.9.1 (2024-01-12)
+------------------
 * add support for enums
 * renamed folder to data_tamer_cpp
 * Contributors: Davide Faconti
