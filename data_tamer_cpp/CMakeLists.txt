@@ -1,9 +1,10 @@
 cmake_minimum_required(VERSION 3.14)
 
-project(data_tamer VERSION 0.9.1)
+project(data_tamer_cpp VERSION 0.9.1)
 
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(CMAKE_CXX_STANDARD 17)
 
 if(${CMAKE_PROJECT_NAME} STREQUAL ${PROJECT_NAME})
     option(DATA_TAMER_BUILD_TESTS "Build tests" ON)
