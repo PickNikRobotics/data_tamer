@@ -306,13 +306,12 @@ inline void LogChannel::updateTypeRegistry()
       }
       else
       {
-        auto func = [this, &fields](const char* field_name, const auto& member) {
+        auto func = [&fields](const char* field_name, const auto& member) {
           using MemberType = decltype(getPointerType(member));
           updateTypeRegistryImpl<MemberType>(fields, field_name);
         };
         TypeDefinition<T>().typeDef(func);
       }
-      // DataTamer::TypeDefinition<T>().typeDef({}, func);
       addCustomType(type_name, fields);
     }
   }
