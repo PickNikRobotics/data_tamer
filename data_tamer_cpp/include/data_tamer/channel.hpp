@@ -306,9 +306,9 @@ inline void LogChannel::updateTypeRegistry()
       }
       else
       {
-        auto func = [&fields](const char* field_name, const auto& member) {
+        auto func = [this, &fields](const char* field_name, const auto& member) {
           using MemberType = decltype(getPointerType(member));
-          updateTypeRegistryImpl<MemberType>(fields, field_name);
+          this->updateTypeRegistryImpl<MemberType>(fields, field_name);
         };
         TypeDefinition<T>().typeDef(func);
       }
