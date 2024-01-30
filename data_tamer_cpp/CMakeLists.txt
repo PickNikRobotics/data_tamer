@@ -137,12 +137,7 @@ endif()
 
 if(DATA_TAMER_BUILD_TESTS)
     include(CTest)
-
-target_sources(Continuous
-  PRIVATE
-    include/data_tamer/custom_types.hpp
-)
-enable_testing()
+    enable_testing() 
     add_subdirectory(tests)
 endif()
 
