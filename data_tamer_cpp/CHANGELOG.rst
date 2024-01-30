@@ -2,6 +2,12 @@
 Changelog for package data_tamer
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Forthcoming
+-----------
+* fix compilation in ament
+* Update CMakeLists.txt. Fix `#11 <https://github.com/facontidavide/data_tamer/issues/11>`_
+* Contributors: Davide Faconti
+
 0.9.1 (2024-01-12)
 ------------------
 * add support for enums
