@@ -2,8 +2,8 @@
 Changelog for package data_tamer
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.9.2 (2024-01-30)
+------------------
 * fix compilation in ament
 * Update CMakeLists.txt. Fix `#11 <https://github.com/facontidavide/data_tamer/issues/11>`_
 * Contributors: Davide Faconti
