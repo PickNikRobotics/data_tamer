@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.14)
 
-project(data_tamer_cpp VERSION 0.9.2)
+project(data_tamer_cpp VERSION 0.9.3)
 
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)

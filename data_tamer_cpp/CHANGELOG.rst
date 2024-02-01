@@ -2,6 +2,12 @@
 Changelog for package data_tamer
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Forthcoming
+-----------
+* add std::hash<DataTamer::RegistrationID>
+* fix dead-lock
+* Contributors: Davide Faconti
+
 0.9.2 (2024-01-30)
 ------------------
 * fix compilation in ament
