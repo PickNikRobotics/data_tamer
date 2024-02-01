@@ -54,7 +54,7 @@ public:
    * @param value   new value
    * @param auto_enable  if true and the current instance is disabled, call setEnabled(true)
    */
-  void set(const T& value, bool auto_enable = false);
+  void set(const T& value, bool auto_enable = true);
 
   /// @brief get the stored value.
   [[nodiscard]] T get();
@@ -416,7 +416,7 @@ inline void LoggedValue<T>::set(const T& val, bool auto_enable)
   if (auto channel = channel_.lock())
   {
     value_ = val;
-    if (auto_enable)
+    if (!enabled_ && auto_enable)
     {
       channel->setEnabled(id_, true);
       enabled_ = true;
@@ -425,10 +425,7 @@ inline void LoggedValue<T>::set(const T& val, bool auto_enable)
   else
   {
     value_ = val;
-    if (!enabled_ && auto_enable)
-    {
-      enabled_ = true;
-    }
+    enabled_ |= auto_enable;
   }
 }
 

@@ -219,11 +219,11 @@ bool TypeField::operator==(const TypeField& other) const
 inline Schema BuilSchemaFromText(const std::string& txt)
 {
   auto trimString = [](std::string& str) {
-    while (str.back() == ' ' || str.back() == '\r')
+    while (!str.empty() && (str.back() == ' ' || str.back() == '\r'))
     {
       str.pop_back();
     }
-    while (str.front() == ' ' || str.front() == '\r')
+    while (!str.empty() && (str.front() == ' ' || str.front() == '\r'))
     {
       str.erase(0, 1);
     }
