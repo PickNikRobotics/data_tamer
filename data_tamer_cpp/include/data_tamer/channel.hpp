@@ -415,9 +415,8 @@ inline void LoggedValue<T>::set(const T& val, bool auto_enable)
 {
   if (auto channel = channel_.lock())
   {
-    std::lock_guard const lock(channel->writeMutex());
     value_ = val;
-    if (!enabled_ && auto_enable)
+    if (auto_enable)
     {
       channel->setEnabled(id_, true);
       enabled_ = true;
