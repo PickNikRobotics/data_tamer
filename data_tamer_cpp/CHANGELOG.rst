@@ -2,8 +2,8 @@
 Changelog for package data_tamer
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.9.4 (2024-02-02)
+------------------
 * changed the way registerValue throws if you try registering the same address again
 * add unit tests to verify that vectors with changing size are OK
 * Contributors: Davide Faconti

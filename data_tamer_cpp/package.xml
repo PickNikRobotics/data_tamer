@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <package format="3">
   <name>data_tamer_cpp</name>
-  <version>0.9.3</version>
+  <version>0.9.4</version>
   <description>
   DataTamer data logging library
   </description>
