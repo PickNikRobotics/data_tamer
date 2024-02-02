@@ -2,6 +2,13 @@
 Changelog for package data_tamer
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Forthcoming
+-----------
+* changed the way registerValue throws if you try registering the same address again
+* add unit tests to verify that vectors with changing size are OK
+* change name of the library/target to data_tamer_cpp
+* Contributors: Davide Faconti
+
 0.9.3 (2024-02-01)
 ------------------
 * add std::hash<DataTamer::RegistrationID>
