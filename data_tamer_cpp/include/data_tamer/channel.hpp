@@ -117,6 +117,9 @@ public:
    * @brief registerValue add a value to be monitored.
    * You must guaranty that the pointer to the value is still valid,
    * when calling takeSnapshot.
+   * If you want to change the pointer T* to a new one,
+   * you must first call unregister(), otherwise this method will throw
+   * an exception.
    *
    * @param name   name of the value
    * @param value  pointer to the value
@@ -129,10 +132,6 @@ public:
    * @brief registerValue add a vectors of values.
    * You must guaranty that the pointer to each value is still valid,
    * when calling takeSnapshot.
-   *
-   * IMPORTANT / DANGER: do NOT resize the vector, once it is registered!
-   * Increasing the size of a vector may cause elements to be reallocated,
-   * and this will create dangling pointers.
    *
    * @param name   name of the vector
    * @param value  pointer to the vectors of values.

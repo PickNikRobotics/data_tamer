@@ -40,6 +40,28 @@ template <> struct TypeDefinition<TestType>
 
 } // namespace DataTamer
 
+TEST(DataTamerCustom, Registration)
+{
+  auto channel = LogChannel::create("chan");
+  auto sink = std::make_shared<DummySink>();
+  channel->addDataSink(sink);
+
+  Pose poseA;
+  Pose poseB;
+  auto id = channel->registerValue("value", &poseA);
+  // unless we unregister it first, it should fail
+  ASSERT_ANY_THROW(channel->registerValue("value", &poseB));
+
+  channel->unregister(id);
+  // now it should work
+  id = channel->registerValue("value", &poseB);
+
+  // changing type is never allowed, not even if we unregister
+  Point3D point;
+  channel->unregister(id);
+  ASSERT_ANY_THROW(channel->registerValue("value", &point));
+}
+
 TEST(DataTamerCustom, CustomType1)
 {
   auto channel = LogChannel::create("chan");

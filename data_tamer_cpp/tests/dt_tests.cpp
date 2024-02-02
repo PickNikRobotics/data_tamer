@@ -103,22 +103,25 @@ TEST(DataTamerBasic, TestRegistration)
   int32_t i3 = 11;
 
   auto id_v1 = channel->registerValue("v1", &v1);
-  channel->registerValue("v2", &v2);
+  auto id_v2 = channel->registerValue("v2", &v2);
   auto id_i1 = channel->registerValue("i1", &i1);
-  channel->registerValue("i2", &i2);
+  auto id_i2 = channel->registerValue("i2", &i2);
 
   // changing the pointer to another one is valid
-  channel->registerValue("v2", &v2_bis);
+  // but only if we unregister first
+  channel->unregister(id_v2);
+  id_v2 = channel->registerValue("v2", &v2_bis);
 
-  // changing type is not valid
-  ASSERT_ANY_THROW( channel->registerValue("v2", &i1); );
+  // changing type is never allowed, not even if we unregister
+  ASSERT_ANY_THROW( channel->registerValue("v2", &i1) );
 
   channel->takeSnapshot();
   // give time to the sink thread to do its work
   std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
-  // chaning the pointer after takeSnapshot is valid
-  channel->registerValue("i2", &i2_bis);
+  // changing the pointer after takeSnapshot is valid
+  channel->unregister(id_i2);
+  id_i2 = channel->registerValue("i2", &i2_bis);
 
   // adding a new value after takeSnapshot is not valid (would change the schema)
   ASSERT_ANY_THROW( channel->registerValue("i3", &i3); );
@@ -231,4 +234,39 @@ TEST(DataTamerBasic, Disable)
 
   checkSize(id_v7, 4 * sizeof(float) + sizeof(uint32_t));
   ASSERT_EQ(sink->latest_snapshot.active_mask[0], 0b10111111);
+}
+
+TEST(DataTamerBasic, VectorWithChangingSize)
+{
+  auto channel = LogChannel::create("chan");
+  auto sink = std::make_shared<DummySink>();
+  channel->addDataSink(sink);
+
+  std::vector<float> vect = {1, 2, 3, 4};
+  channel->registerValue("vect", &vect);
+
+  channel->takeSnapshot();
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  ASSERT_EQ(sink->latest_snapshot.payload.size(),
+            vect.size() * sizeof(float) + sizeof(uint32_t));
+
+  // if we push more elements into the vector, it should
+  // work, even if there is a new allocation of memory
+  for(int i=0; i<6; i++)
+  {
+    vect.push_back(float(i));
+  }
+
+  channel->takeSnapshot();
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  ASSERT_EQ(sink->latest_snapshot.payload.size(),
+            vect.size() * sizeof(float) + sizeof(uint32_t));
+
+  // same is the vector size is reduced
+  vect.resize(5);
+
+  channel->takeSnapshot();
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  ASSERT_EQ(sink->latest_snapshot.payload.size(),
+            vect.size() * sizeof(float) + sizeof(uint32_t));
 }

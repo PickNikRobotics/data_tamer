@@ -2,6 +2,8 @@
 
 #include <functional>
 #include <cstring>
+#include <typeindex>
+
 #include "data_tamer/custom_types.hpp"
 #include "data_tamer/contrib/SerializeMe.hpp"
 
@@ -56,11 +58,13 @@ public:
 private:
   const void* v_ptr_ = nullptr;
   BasicType type_ = BasicType::OTHER;
+  std::type_index type_index_ = typeid(void);
   std::uint8_t memory_size_ = 0;
   std::function<void(SerializeMe::SpanBytes&)> serialize_impl_;
   std::function<size_t()> get_size_impl_;
   bool is_vector_ = false;
   uint16_t array_size_ = 0;
+
 };
 
 //------------------------------------------------------------
@@ -69,7 +73,11 @@ private:
 
 template <typename T>
 inline ValuePtr::ValuePtr(const T* pointer, CustomSerializer::Ptr type_info) :
-  v_ptr_(pointer), type_(GetBasicType<T>()), memory_size_(sizeof(T)), is_vector_(false)
+  v_ptr_(pointer)
+  , type_(GetBasicType<T>())
+  , type_index_(typeid(T))
+  , memory_size_(sizeof(T))
+  , is_vector_(false)
 {
   if (type_info)
   {
@@ -84,7 +92,11 @@ inline ValuePtr::ValuePtr(const T* pointer, CustomSerializer::Ptr type_info) :
 
 template <template <class, class> class Container, class T, class... TArgs>
 inline ValuePtr::ValuePtr(const Container<T, TArgs...>* vect) :
-  v_ptr_(vect), type_(GetBasicType<T>()), memory_size_(sizeof(T)), is_vector_(true)
+  v_ptr_(vect)
+  , type_(GetBasicType<T>())
+  , type_index_(typeid(Container<T, TArgs...>))
+  , memory_size_(sizeof(T))
+  , is_vector_(true)
 {
   serialize_impl_ = [vect](SerializeMe::SpanBytes& buffer) -> void {
     SerializeMe::SerializeIntoBuffer(buffer, *vect);
@@ -95,7 +107,11 @@ inline ValuePtr::ValuePtr(const Container<T, TArgs...>* vect) :
 template <template <class, class> class Container, class T, class... TArgs>
 inline ValuePtr::ValuePtr(const Container<T, TArgs...>* vect,
                           CustomSerializer::Ptr type_info) :
-  v_ptr_(vect), type_(GetBasicType<T>()), memory_size_(sizeof(T)), is_vector_(true)
+  v_ptr_(vect)
+  , type_(GetBasicType<T>())
+  , type_index_(typeid(Container<T, TArgs...>))
+  , memory_size_(sizeof(T))
+  , is_vector_(true)
 {
   serialize_impl_ = [type_info, vect](SerializeMe::SpanBytes& buffer) -> void {
     SerializeMe::SerializeIntoBuffer(buffer, uint32_t(vect->size()));
@@ -124,7 +140,11 @@ inline ValuePtr::ValuePtr(const Container<T, TArgs...>* vect,
 
 template <typename T, size_t N>
 inline ValuePtr::ValuePtr(const std::array<T, N>* array) :
-  v_ptr_(array), type_(GetBasicType<T>()), is_vector_(true), array_size_(N)
+  v_ptr_(array)
+  , type_(GetBasicType<T>())
+  , type_index_(typeid(std::array<T, N>))
+  , is_vector_(true)
+  , array_size_(N)
 {
   serialize_impl_ = [array](SerializeMe::SpanBytes& buffer) -> void {
     SerializeMe::SerializeIntoBuffer(buffer, *array);
@@ -135,7 +155,11 @@ inline ValuePtr::ValuePtr(const std::array<T, N>* array) :
 template <typename T, size_t N>
 inline ValuePtr::ValuePtr(const std::array<T, N>* array,
                           CustomSerializer::Ptr type_info) :
-  v_ptr_(array), type_(GetBasicType<T>()), is_vector_(true), array_size_(N)
+  v_ptr_(array)
+  , type_(GetBasicType<T>())
+  , type_index_(typeid(std::array<T, N>))
+  , is_vector_(true)
+  , array_size_(N)
 {
   serialize_impl_ = [type_info, array](SerializeMe::SpanBytes& buffer) -> void {
     for (const auto& value : (*array))
@@ -159,7 +183,9 @@ inline ValuePtr::ValuePtr(const std::array<T, N>* array,
 
 inline bool ValuePtr::operator==(const ValuePtr& other) const
 {
-  return type_ == other.type_ && is_vector_ == other.is_vector_ &&
+  return type_ == other.type_ &&
+         type_index_ == other.type_index_ &&
+         is_vector_ == other.is_vector_ &&
          array_size_ == other.array_size_;
 }
 

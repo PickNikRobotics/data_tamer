@@ -91,6 +91,11 @@ RegistrationID LogChannel::registerValueImpl(const std::string& name,
   const size_t index = it->second;
   auto& instance = _p->series[index];
 
+  if(instance.registered)
+  {
+    throw std::runtime_error("This name was already registered. Unregister it first");
+  }
+
   // check if the new holder is compatible
   if (instance.holder != value_ptr)
   {
