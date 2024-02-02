@@ -3,7 +3,7 @@ function(CompileExample TARGET)
     add_executable(${TARGET} ${TARGET}.cpp)
     target_include_directories(${TARGET}
      PUBLIC $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>)
-    target_link_libraries(${TARGET} data_tamer_cpp)
+    target_link_libraries(${TARGET} data_tamer)
 endfunction()
 
 CompileExample(example)
@@ -23,6 +23,6 @@ if ( ament_cmake_FOUND )
     install(TARGETS ros2_publisher
             DESTINATION lib/${PROJECT_NAME})
 else()
-    target_link_libraries(mcap_reader data_tamer_cpp mcap::mcap)
+    target_link_libraries(mcap_reader data_tamer mcap::mcap)
 endif()
 

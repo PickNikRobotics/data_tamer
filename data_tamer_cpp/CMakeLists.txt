@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.14)
+cmake_minimum_required(VERSION 3.16)
 
 project(data_tamer_cpp VERSION 0.9.4)
 
@@ -44,7 +44,7 @@ if(ament_cmake_FOUND AND NOT BUILD_SHARED_LIBS)
     message("BUILD_SHARED_LIBS forced to ON (i.e. SHARED) in ROS2")
 endif()
 
-add_library(data_tamer_cpp ${LIB_TYPE}
+add_library(data_tamer ${LIB_TYPE}
     include/data_tamer/channel.hpp
     include/data_tamer/custom_types.hpp
     include/data_tamer/data_tamer.hpp
@@ -63,34 +63,34 @@ add_library(data_tamer_cpp ${LIB_TYPE}
     include/data_tamer/details/mutex.hpp
 )
 
-target_compile_features(data_tamer_cpp PUBLIC cxx_std_17)
-target_include_directories(data_tamer_cpp
+target_compile_features(data_tamer PUBLIC cxx_std_17)
+target_include_directories(data_tamer
  PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
  PRIVATE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/3rdparty>
 )
-target_compile_definitions(data_tamer_cpp PUBLIC -DDATA_TAMER_VERSION="${CMAKE_PROJECT_VERSION}")
+target_compile_definitions(data_tamer PUBLIC -DDATA_TAMER_VERSION="${CMAKE_PROJECT_VERSION}")
 
 # detect if compiling in ROS2
 find_package(ament_cmake QUIET)
 if ( ament_cmake_FOUND )
-    target_compile_definitions(data_tamer_cpp PUBLIC USING_ROS2=1 )
+    target_compile_definitions(data_tamer PUBLIC USING_ROS2=1 )
     set(COMPILING_FOR_ROS2 true)
 
     find_package(mcap_vendor REQUIRED)
     find_package(rclcpp REQUIRED)
     find_package(data_tamer_msgs REQUIRED)
 
-    ament_target_dependencies(data_tamer_cpp mcap_vendor rclcpp data_tamer_msgs)
+    ament_target_dependencies(data_tamer mcap_vendor rclcpp data_tamer_msgs)
 
-    ament_export_targets(data_tamer_cppTargets HAS_LIBRARY_TARGET)
+    ament_export_targets(data_tamerTargets HAS_LIBRARY_TARGET)
     ament_export_dependencies(mcap_vendor rclcpp data_tamer_msgs)
     ament_package()
 else()
     find_package(mcap REQUIRED)
-    target_link_libraries(data_tamer_cpp PRIVATE mcap::mcap)
+    target_link_libraries(data_tamer PRIVATE mcap::mcap)
 endif()
 
 install(
@@ -99,8 +99,8 @@ install(
 )
 
 install(
-  TARGETS data_tamer_cpp
-  EXPORT data_tamer_cppTargets
+  TARGETS data_tamer
+  EXPORT data_tamerTargets
   LIBRARY DESTINATION lib
   ARCHIVE DESTINATION lib
   RUNTIME DESTINATION bin
@@ -125,8 +125,8 @@ if (NOT ament_cmake_FOUND )
         VERSION ${PROJECT_VERSION}
         COMPATIBILITY SameMajorVersion)
 
-    install(EXPORT data_tamer_cppTargets
-            FILE data_tamer_cppTargets.cmake
+    install(EXPORT data_tamerTargets
+            FILE data_tamerTargets.cmake
             NAMESPACE data_tamer::
             DESTINATION lib/cmake/data_tamer )
 
