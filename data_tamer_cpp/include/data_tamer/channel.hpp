@@ -268,7 +268,7 @@ void LogChannel::updateTypeRegistryImpl(FieldsVector& fields, const char* field_
 
   if constexpr (GetBasicType<T>() == BasicType::OTHER)
   {
-    field.type_name = TypeDefinition<T>().typeName();
+    field.type_name = CustomTypeName<T>::get();
 
     if constexpr (container_info<T>::is_container)
     {
@@ -288,33 +288,25 @@ void LogChannel::updateTypeRegistryImpl(FieldsVector& fields, const char* field_
 template <typename T>
 inline void LogChannel::updateTypeRegistry()
 {
-  FieldsVector fields;
+  if constexpr(IsNumericType<T>() )
+  {
+    return;
+  }
+  using namespace SerializeMe;
+  static_assert(has_TypeDefinition<T>(), "Missing TypeDefinition");
 
-  if constexpr (!IsNumericType<T>())
-  {   
-    const auto& type_name = DataTamer::TypeDefinition<T>().typeName();
-    auto added_serializer = _type_registry.addType<T>(type_name, true);
-    if (added_serializer)
-    {
-      if constexpr (has_typedef_with_object<T>())
-      {
-        auto func = [this, &fields](const char* field_name, const auto* member) {
-          using MemberType =
-              typename std::remove_cv_t<std::remove_reference_t<decltype(*member)>>;
-          updateTypeRegistryImpl<MemberType>(fields, field_name);
-        };
-        TypeDefinition<T>().typeDef({}, func);
-      }
-      else
-      {
-        auto func = [this, &fields](const char* field_name, const auto& member) {
-          using MemberType = decltype(getPointerType(member));
-          this->updateTypeRegistryImpl<MemberType>(fields, field_name);
-        };
-        TypeDefinition<T>().typeDef(func);
-      }
-      addCustomType(type_name, fields);
-    }
+  FieldsVector fields;
+  const std::string type_name(CustomTypeName<T>::get());
+  if (auto added_serializer = _type_registry.addType<T>(type_name, true))
+  {
+    auto func = [this, &fields](const char* field_name, const auto* member) {
+      using MemberType =
+          typename std::remove_cv_t<std::remove_reference_t<decltype(*member)>>;
+      updateTypeRegistryImpl<MemberType>(fields, field_name);
+    };
+    T dummy;
+    TypeDefinition(dummy, func);
+    addCustomType(type_name, fields);
   }
 }
 
@@ -322,6 +314,10 @@ template <typename T>
 inline RegistrationID LogChannel::registerValue(const std::string& name,
                                                 const T* value_ptr)
 {
+  using namespace SerializeMe;
+  static_assert(has_TypeDefinition<T>() || IsNumericType<T>(),
+                "Missing TypeDefinition");
+
   if constexpr (IsNumericType<T>())
   {
     return registerValueImpl(name, ValuePtr(value_ptr), {});

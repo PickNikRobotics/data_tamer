@@ -1,5 +1,7 @@
 #include "data_tamer/custom_types.hpp"
 
+namespace TestTypes
+{
 struct Point3D
 {
   double x;
@@ -21,10 +23,11 @@ struct Pose
   Quaternion rot;
 };
 
-// Sometimes a field of a type is hidden as a private member and can be
-// accesses only by const reference.
-// This case is also supported but must be registered differently (see below).
-// Classese of this type are commonly found in libraries like Eigen
+} // end namespace TestTypes
+
+namespace PseudoEigen
+{
+
 class Vector2d
 {
   double _x = 0;
@@ -41,64 +44,52 @@ public:
   double& y() { return _y; }
 };
 
-namespace DataTamer
+} // end namespace TestTypes
+
+namespace TestTypes
 {
 
-template <>
-struct TypeDefinition<Point3D>
+template <typename AddField>
+std::string_view TypeDefinition(Point3D& point, AddField& add)
 {
-  std::string typeName() const { return "Point3D"; }
-
-  template <class Function>
-  void typeDef(Function& addField)
-  {
-    addField("x", &Point3D::x);
-    addField("y", &Point3D::y);
-    addField("z", &Point3D::z);
-  }
+  add("x", &point.x);
+  add("y", &point.y);
+  add("z", &point.z);
+  return "Point3D";
 };
 
-template <>
-struct TypeDefinition<Quaternion>
-{
-  std::string typeName() const { return "Quaternion"; }
+//--------------------------------------------------------------
+// We must specialize the function TypeDefinition
+// This must be done in the same namespace of the original type
 
-  template <class Function>
-  void typeDef(Function& addField)
-  {
-    addField("w", &Quaternion::w);
-    addField("x", &Quaternion::x);
-    addField("y", &Quaternion::y);
-    addField("z", &Quaternion::z);
-  }
+template <typename AddField>
+std::string_view TypeDefinition(Quaternion& quat, AddField& add)
+{
+  add("w", &quat.w);
+  add("x", &quat.x);
+  add("y", &quat.y);
+  add("z", &quat.z);
+  return "Quaternion";
 };
 
-template <>
-struct TypeDefinition<Pose>
+template <typename AddField>
+std::string_view TypeDefinition(Pose& pose, AddField& add)
 {
-  std::string typeName() const { return "Pose"; }
-
-  template <class Function>
-  void typeDef(Function& addField)
-  {
-    addField("position", &Pose::pos);
-    addField("rotation", &Pose::rot);
-  }
+  add("position", &pose.pos);
+  add("rotation", &pose.rot);
+  return "Pose";
 };
 
-template <>
-struct TypeDefinition<Vector2d>
-{
-  std::string typeName() const { return "Vector2d"; }
+} // end namespace TestTypes
 
-  // typeDef must use a different overload and x() and y() must return const reference to
-  // a class attribute
-  template <class Function>
-  void typeDef(const Vector2d& vect, Function& addField)
-  {
-    addField("x", &vect.x());
-    addField("y", &vect.y());
-  }
+namespace PseudoEigen
+{
+template <typename AddField>
+std::string_view TypeDefinition(Vector2d& vect, AddField& add)
+{
+  add("x", &vect.x());
+  add("y", &vect.y());
+  return "Vector2d";
 };
 
-}   // namespace DataTamer
+} // end namespace PseudoEigen

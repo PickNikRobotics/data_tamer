@@ -10,6 +10,7 @@
 
 
 using namespace DataTamerParser;
+using namespace TestTypes;
 
 TEST(DataTamerParser, ReadSchema)
 {

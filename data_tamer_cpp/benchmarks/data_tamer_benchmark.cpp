@@ -31,7 +31,7 @@ static void DT_Doubles(benchmark::State& state)
 
 static void DT_PoseType(benchmark::State& state)
 {
-  std::vector<Pose> poses(size_t(state.range(0)));
+  std::vector<TestTypes::Pose> poses(size_t(state.range(0)));
 
   auto registry = ChannelsRegistry();
   auto channel = registry.getChannel("channel");

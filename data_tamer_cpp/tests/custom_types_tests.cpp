@@ -9,6 +9,7 @@
 #include <thread>
 
 using namespace DataTamer;
+using namespace TestTypes;
 
 struct TestType
 {
@@ -21,24 +22,17 @@ struct TestType
   Color color;
 };
 
-
-namespace DataTamer
+template <typename AddField>
+std::string_view TypeDefinition(TestType& obj, AddField& add)
 {
-template <> struct TypeDefinition<TestType>
-{
-  std::string typeName() const { return "TestType"; }
-
-  template <class Function> void typeDef(const TestType& obj, Function& addField)
-  {
-    addField("timestamp", &obj.timestamp);
-    addField("count", &obj.count);
-    addField("positions", &obj.positions);
-    addField("poses", &obj.poses);
-    addField("color", &obj.color);
-  }
+  add("timestamp", &obj.timestamp);
+  add("count", &obj.count);
+  add("positions", &obj.positions);
+  add("poses", &obj.poses);
+  add("color", &obj.color);
+  return "TestType";
 };
 
-} // namespace DataTamer
 
 TEST(DataTamerCustom, Registration)
 {
@@ -289,7 +283,7 @@ TEST(DataTamerCustom, RegisterConstMethods)
     auto sink = std::make_shared<DummySink>();
     channel->addDataSink(sink);
 
-    Vector2d vect = {1, 2};
+    PseudoEigen::Vector2d vect = {1, 2};
     channel->registerValue("vect", &vect);
 
     channel->takeSnapshot();
