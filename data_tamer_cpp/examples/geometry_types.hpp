@@ -4,17 +4,17 @@ namespace TestTypes
 {
 struct Point3D
 {
-  double x;
-  double y;
-  double z;
+  double x = 0;
+  double y = 0;
+  double z = 0;
 };
 
 struct Quaternion
 {
-  double w;
-  double x;
-  double y;
-  double z;
+  double w = 1;
+  double x = 0;
+  double y = 0;
+  double z = 0;
 };
 
 struct Pose

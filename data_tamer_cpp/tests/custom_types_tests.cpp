@@ -13,13 +13,13 @@ using namespace TestTypes;
 
 struct TestType
 {
-  double timestamp;
-  int count;
+  double timestamp = 0;
+  int count = 0;
   std::vector<Point3D> positions;
   std::array<Pose, 3> poses;
 
-  enum Color: uint8_t { RED, GREEN, BLUE };
-  Color color;
+  enum Color: uint8_t { RED, GREEN, BLUE, UNDEFINED };
+  Color color = UNDEFINED;
 };
 
 template <typename AddField>
@@ -31,7 +31,7 @@ std::string_view TypeDefinition(TestType& obj, AddField& add)
   add("poses", &obj.poses);
   add("color", &obj.color);
   return "TestType";
-};
+}
 
 
 TEST(DataTamerCustom, Registration)
