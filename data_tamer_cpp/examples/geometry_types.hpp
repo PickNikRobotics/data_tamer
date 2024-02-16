@@ -56,7 +56,7 @@ std::string_view TypeDefinition(Point3D& point, AddField& add)
   add("y", &point.y);
   add("z", &point.z);
   return "Point3D";
-};
+}
 
 //--------------------------------------------------------------
 // We must specialize the function TypeDefinition
@@ -70,7 +70,7 @@ std::string_view TypeDefinition(Quaternion& quat, AddField& add)
   add("y", &quat.y);
   add("z", &quat.z);
   return "Quaternion";
-};
+}
 
 template <typename AddField>
 std::string_view TypeDefinition(Pose& pose, AddField& add)
@@ -78,7 +78,7 @@ std::string_view TypeDefinition(Pose& pose, AddField& add)
   add("position", &pose.pos);
   add("rotation", &pose.rot);
   return "Pose";
-};
+}
 
 } // end namespace TestTypes
 
@@ -90,6 +90,6 @@ std::string_view TypeDefinition(Vector2d& vect, AddField& add)
   add("x", &vect.x());
   add("y", &vect.y());
   return "Vector2d";
-};
+}
 
 } // end namespace PseudoEigen
