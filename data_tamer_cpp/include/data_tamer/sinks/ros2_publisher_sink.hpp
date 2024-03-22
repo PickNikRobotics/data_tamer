@@ -23,8 +23,6 @@ public:
   bool storeSnapshot(const Snapshot& snapshot) override;
 
 private:
-  // std::shared_ptr<rclcpp::Node> node_;
-
   std::unordered_map<std::string, Schema> schemas_;
   Mutex schema_mutex_;
 
