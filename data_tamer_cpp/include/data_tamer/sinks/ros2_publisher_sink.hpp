@@ -6,6 +6,7 @@
 #include "data_tamer_msgs/msg/snapshot.hpp"
 #include <unordered_map>
 #include <rclcpp/rclcpp.hpp>
+#include <rclcpp_lifecycle/lifecycle_node.hpp>
 
 namespace DataTamer
 {
@@ -15,12 +16,14 @@ class ROS2PublisherSink : public DataSinkBase
 public:
   ROS2PublisherSink(std::shared_ptr<rclcpp::Node> node, const std::string& topic_prefix);
 
+  ROS2PublisherSink(std::shared_ptr<rclcpp_lifecycle::LifecycleNode> node, const std::string& topic_prefix);
+
   void addChannel(const std::string& name, const Schema& schema) override;
 
   bool storeSnapshot(const Snapshot& snapshot) override;
 
 private:
-  std::shared_ptr<rclcpp::Node> node_;
+  // std::shared_ptr<rclcpp::Node> node_;
 
   std::unordered_map<std::string, Schema> schemas_;
   Mutex schema_mutex_;

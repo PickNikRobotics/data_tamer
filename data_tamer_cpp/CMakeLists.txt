@@ -81,12 +81,13 @@ if ( ament_cmake_FOUND )
 
     find_package(mcap_vendor REQUIRED)
     find_package(rclcpp REQUIRED)
+    find_package(rclcpp_lifecycle REQUIRED)
     find_package(data_tamer_msgs REQUIRED)
 
-    ament_target_dependencies(data_tamer mcap_vendor rclcpp data_tamer_msgs)
+    ament_target_dependencies(data_tamer mcap_vendor rclcpp rclcpp_lifecycle data_tamer_msgs)
 
     ament_export_targets(data_tamerTargets HAS_LIBRARY_TARGET)
-    ament_export_dependencies(mcap_vendor rclcpp data_tamer_msgs)
+    ament_export_dependencies(mcap_vendor rclcpp rclcpp_lifecycle data_tamer_msgs)
     ament_package()
 else()
     find_package(mcap REQUIRED)

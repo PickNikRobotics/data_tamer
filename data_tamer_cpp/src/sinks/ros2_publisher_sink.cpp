@@ -17,6 +17,21 @@ ROS2PublisherSink::ROS2PublisherSink(std::shared_ptr<rclcpp::Node> node,
       topic_prefix + "/data", data_qos);
 }
 
+ROS2PublisherSink::ROS2PublisherSink(std::shared_ptr<rclcpp_lifecycle::LifecycleNode> node,
+                                     const std::string& topic_prefix)
+{
+  rclcpp::QoS schemas_qos{rclcpp::KeepAll()};
+  schemas_qos.reliable();
+  schemas_qos.transient_local();   // latch
+
+  const rclcpp::QoS data_qos{rclcpp::KeepAll()};
+
+  schema_publisher_ = node->create_publisher<data_tamer_msgs::msg::Schemas>(
+      topic_prefix + "/schemas", schemas_qos);
+  data_publisher_ = node->create_publisher<data_tamer_msgs::msg::Snapshot>(
+      topic_prefix + "/data", data_qos);
+}
+
 void ROS2PublisherSink::addChannel(const std::string& channel_name, const Schema& schema)
 {
   std::scoped_lock lk(schema_mutex_);
