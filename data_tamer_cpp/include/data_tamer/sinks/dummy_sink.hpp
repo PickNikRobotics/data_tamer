@@ -22,7 +22,10 @@ public:
   Snapshot latest_snapshot;
   Mutex schema_mutex_;
 
-  ~DummySink() override { stopThread(); }
+  ~DummySink() override
+  {
+    stopThread();
+  }
 
   void addChannel(std::string const& name, Schema const& schema) override
   {
@@ -38,7 +41,7 @@ public:
     latest_snapshot = snapshot;
 
     auto it = snapshots_count.find(snapshot.schema_hash);
-    if (it != snapshots_count.end())
+    if(it != snapshots_count.end())
     {
       it->second++;
     }
@@ -46,4 +49,4 @@ public:
   }
 };
 
-}   // namespace DataTamer
+}  // namespace DataTamer

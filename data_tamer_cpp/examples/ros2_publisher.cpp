@@ -29,21 +29,21 @@ int main(int argc, char* argv[])
   int count = 0;
   double t = 0;
 
-  while (rclcpp::ok())
+  while(rclcpp::ok())
   {
     double S = std::sin(t);
-    for (size_t i = 0; i < vect_size; i++)
+    for(size_t i = 0; i < vect_size; i++)
     {
       const double val = double(i) + S;
       real64[i] = val;
       real32[i] = float(val);
       int16[i] = int16_t(10 * (val));
     }
-    if (count++ % 500 == 0)
+    if(count++ % 500 == 0)
     {
       RCLCPP_INFO(node->get_logger(), "snapshots: %d\n", count);
     }
-    if (!channel->takeSnapshot())
+    if(!channel->takeSnapshot())
     {
       RCLCPP_ERROR(node->get_logger(), "pushing failed");
     }

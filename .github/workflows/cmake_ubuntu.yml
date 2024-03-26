@@ -20,13 +20,13 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-      
+
     - name: Install Conan
       id: conan
       uses: turtlebrowser/get-conan@main
       with:
         version: 2.0.13
-      
+
     - name: Create default profile
       run: conan profile detect
 
@@ -48,17 +48,16 @@ jobs:
       shell: bash
       working-directory: ${{github.workspace}}/build
       run: cmake --build . --config Debug
-      
+
     - name: run test (Linux)
       working-directory: ${{github.workspace}}/build
       run: ctest -T test -T Coverage
-      
+
     - name: Upload coverage reports to Codecov
       uses: codecov/codecov-action@v3
-      with: 
+      with:
         directory: ${{github.workspace}}/build
         gcov_ignore: ${{github.workspace}}/3rdparty
         verbose: true
       env:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-      

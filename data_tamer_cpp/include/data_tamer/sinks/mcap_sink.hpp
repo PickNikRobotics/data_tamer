@@ -76,4 +76,4 @@ private:
   void openFile(std::string const& filepath);
 };
 
-}   // namespace DataTamer
+}  // namespace DataTamer

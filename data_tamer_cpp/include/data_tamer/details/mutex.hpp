@@ -48,24 +48,24 @@ inline Mutex::Mutex()
   pthread_mutexattr_t attr;
 
   int res = pthread_mutexattr_init(&attr);
-  if (res != 0)
+  if(res != 0)
   {
-    throw std::runtime_error{std::string("cannot pthread_mutexattr_init: ") +
-                             std::strerror(res)};
+    throw std::runtime_error{ std::string("cannot pthread_mutexattr_init: ") +
+                              std::strerror(res) };
   }
 
   res = pthread_mutexattr_setprotocol(&attr, PTHREAD_PRIO_INHERIT);
-  if (res != 0)
+  if(res != 0)
   {
-    throw std::runtime_error{std::string("cannot pthread_mutexattr_setprotocol: ") +
-                             std::strerror(res)};
+    throw std::runtime_error{ std::string("cannot pthread_mutexattr_setprotocol: ") +
+                              std::strerror(res) };
   }
 
   res = pthread_mutex_init(&m_, &attr);
-  if (res != 0)
+  if(res != 0)
   {
-    throw std::runtime_error{std::string("cannot pthread_mutex_init: ") +
-                             std::strerror(res)};
+    throw std::runtime_error{ std::string("cannot pthread_mutex_init: ") +
+                              std::strerror(res) };
   }
 }
 
@@ -77,7 +77,7 @@ inline Mutex::~Mutex()
 inline void Mutex::lock()
 {
   auto res = pthread_mutex_lock(&m_);
-  if (res != 0)
+  if(res != 0)
   {
     throw std::runtime_error(std::string("failed pthread_mutex_lock: ") +
                              std::strerror(res));
@@ -95,8 +95,10 @@ inline bool Mutex::try_lock() noexcept
 }
 #else
 
-inline Mutex::Mutex() {}
-inline Mutex::~Mutex() {}
+inline Mutex::Mutex()
+{}
+inline Mutex::~Mutex()
+{}
 
 inline void Mutex::lock()
 {
@@ -113,4 +115,4 @@ inline bool Mutex::try_lock() noexcept
 
 #endif
 
-}   // namespace DataTamer
+}  // namespace DataTamer

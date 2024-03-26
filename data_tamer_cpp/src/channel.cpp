@@ -38,7 +38,7 @@ RegistrationID LogChannel::registerValueImpl(const std::string& name,
                                              ValuePtr&& value_ptr,
                                              CustomSerializer::Ptr type_info)
 {
-  if (name.find(' ') != std::string::npos)
+  if(name.find(' ') != std::string::npos)
   {
     throw std::runtime_error("name can not contain spaces");
   }
@@ -48,9 +48,9 @@ RegistrationID LogChannel::registerValueImpl(const std::string& name,
 
   // check if this name exists already
   auto it = _p->registered_values.find(name);
-  if (it == _p->registered_values.end())
+  if(it == _p->registered_values.end())
   {
-    if (_p->logging_started)
+    if(_p->logging_started)
     {
       throw std::runtime_error("Can't register a new value once recording started, "
                                "i.e. after takeShapshot was called the first time");
@@ -58,7 +58,8 @@ RegistrationID LogChannel::registerValueImpl(const std::string& name,
     // appending a new ValueHolder to series
     const auto type = value_ptr.type();
     const std::string type_name = type_info ? type_info->typeName() : ToStr(type);
-    TypeField field{name, type, type_name, value_ptr.isVector(), value_ptr.vectorSize()};
+    TypeField field{ name, type, type_name, value_ptr.isVector(),
+                     value_ptr.vectorSize() };
 
     Pimpl::ValueHolder instance;
     instance.name = name;
@@ -67,23 +68,23 @@ RegistrationID LogChannel::registerValueImpl(const std::string& name,
 
     const size_t index = _p->series.size() - 1;
 
-    _p->registered_values.insert({name, index});
+    _p->registered_values.insert({ name, index });
 
     // update schema and its hash (append only)
     _p->schema.hash = AddFieldToHash(field, _p->schema.hash);
     _p->schema.fields.emplace_back(std::move(field));
 
     // if this was a special serializer with its own schema, save it instead in custom_schemas
-    if (type_info)
+    if(type_info)
     {
       auto custom_schema = type_info->typeSchema();
-      if (custom_schema && _p->schema.custom_types.count(type_info->typeName()) == 0)
+      if(custom_schema && _p->schema.custom_types.count(type_info->typeName()) == 0)
       {
-        _p->schema.custom_schemas.insert({type_info->typeName(), *custom_schema});
+        _p->schema.custom_schemas.insert({ type_info->typeName(), *custom_schema });
       }
     }
 
-    return {index, 1};
+    return { index, 1 };
   }
 
   // trying to registered again an unregistered holder or to
@@ -97,20 +98,20 @@ RegistrationID LogChannel::registerValueImpl(const std::string& name,
   }
 
   // check if the new holder is compatible
-  if (instance.holder != value_ptr)
+  if(instance.holder != value_ptr)
   {
     throw std::runtime_error("Can't change the type of a previously "
                              "registered value");
   }
 
   // if it was marked as NOT registered, we should registered it again
-  if (!instance.registered)
+  if(!instance.registered)
   {
     instance.registered = true;
   }
   instance.enabled = true;
   instance.holder = std::move(value_ptr);
-  return {index, 1};
+  return { index, 1 };
 }
 
 LogChannel::LogChannel(std::string name) : _p(new Pimpl)
@@ -130,15 +131,16 @@ const std::string& LogChannel::channelName() const
   return _p->channel_name;
 }
 
-LogChannel::~LogChannel() {}
+LogChannel::~LogChannel()
+{}
 
 void LogChannel::setEnabled(const RegistrationID& id, bool enable)
 {
   std::lock_guard const lock(_p->mutex);
-  for (size_t i = 0; i < id.fields_count; i++)
+  for(size_t i = 0; i < id.fields_count; i++)
   {
     auto& instance = _p->series[id.first_index + i];
-    if (instance.enabled != enable)
+    if(instance.enabled != enable)
     {
       instance.enabled = enable;
       _p->mask_dirty = true;
@@ -149,7 +151,7 @@ void LogChannel::setEnabled(const RegistrationID& id, bool enable)
 void LogChannel::unregister(const RegistrationID& id)
 {
   std::lock_guard const lock(_p->mutex);
-  for (size_t i = 0; i < id.fields_count; i++)
+  for(size_t i = 0; i < id.fields_count; i++)
   {
     auto& instance = _p->series[id.first_index + i];
     instance.registered = false;
@@ -184,22 +186,22 @@ bool LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
   {
     std::lock_guard const lock(_p->mutex);
 
-    if (_p->sinks.empty())
+    if(_p->sinks.empty())
     {
       return false;
     }
     // update the _p->snapshot.active_mask if necessary
-    if (_p->mask_dirty)
+    if(_p->mask_dirty)
     {
       _p->mask_dirty = false;
       auto& mask = _p->snapshot.active_mask;
       mask.clear();
-      const auto vect_size = (_p->series.size() + 7) / 8;   // ceiling size
+      const auto vect_size = (_p->series.size() + 7) / 8;  // ceiling size
       mask.resize(vect_size, 0xFF);
-      for (size_t i = 0; i < _p->series.size(); i++)
+      for(size_t i = 0; i < _p->series.size(); i++)
       {
         auto const& instance = _p->series[i];
-        if (!instance.enabled)
+        if(!instance.enabled)
         {
           SetBit(mask, i, false);
         }
@@ -207,7 +209,7 @@ bool LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
     }
 
     size_t payload_size = 0;
-    for (size_t i = 0; i < _p->series.size(); i++)
+    for(size_t i = 0; i < _p->series.size(); i++)
     {
       auto const& instance = _p->series[i];
       payload_size += instance.holder.getSerializedSize();
@@ -215,11 +217,11 @@ bool LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
     _p->snapshot.payload.resize(payload_size);
 
     // call sink->addChannel (usually done once)
-    if (!_p->logging_started)
+    if(!_p->logging_started)
     {
       _p->logging_started = true;
       _p->snapshot.schema_hash = _p->schema.hash;
-      for (auto const& sink : _p->sinks)
+      for(auto const& sink : _p->sinks)
       {
         sink->addChannel(_p->channel_name, _p->schema);
       }
@@ -231,9 +233,9 @@ bool LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
     // serialize data into _p->snapshot.payload
     SerializeMe::SpanBytes payload_buffer(_p->snapshot.payload);
 
-    for (auto const& entry : _p->series)
+    for(auto const& entry : _p->series)
     {
-      if (entry.enabled)
+      if(entry.enabled)
       {
         entry.holder.serialize(payload_buffer);
       }
@@ -242,11 +244,11 @@ bool LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
   }
 
   bool all_pushed = true;
-  for (auto& sink : _p->sinks)
+  for(auto& sink : _p->sinks)
   {
     all_pushed &= sink->pushSnapshot(_p->snapshot);
   }
   return all_pushed;
 }
 
-}   // namespace DataTamer
+}  // namespace DataTamer

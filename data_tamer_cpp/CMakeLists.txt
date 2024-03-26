@@ -19,7 +19,7 @@ option(BUILD_SHARED_LIBS "Build using shared libraries" ON)
 find_package(ament_cmake QUIET)
 
 if (ament_cmake_FOUND)
-    set(ROS2_SINK 
+    set(ROS2_SINK
         src/sinks/ros2_publisher_sink.cpp)
 endif()
 
@@ -139,7 +139,7 @@ endif()
 
 if(DATA_TAMER_BUILD_TESTS)
     include(CTest)
-    enable_testing() 
+    enable_testing()
     add_subdirectory(tests)
 endif()
 
@@ -153,4 +153,3 @@ if(benchmark_FOUND)
 else()
     message("Google Benchmark library not found")
 endif()
-

@@ -5,11 +5,11 @@ namespace DataTamer
 ROS2PublisherSink::ROS2PublisherSink(std::shared_ptr<rclcpp::Node> node,
                                      const std::string& topic_prefix)
 {
-  rclcpp::QoS schemas_qos{rclcpp::KeepAll()};
+  rclcpp::QoS schemas_qos{ rclcpp::KeepAll() };
   schemas_qos.reliable();
-  schemas_qos.transient_local();   // latch
+  schemas_qos.transient_local();  // latch
 
-  const rclcpp::QoS data_qos{rclcpp::KeepAll()};
+  const rclcpp::QoS data_qos{ rclcpp::KeepAll() };
 
   schema_publisher_ = node->create_publisher<data_tamer_msgs::msg::Schemas>(
       topic_prefix + "/schemas", schemas_qos);
@@ -27,14 +27,14 @@ void ROS2PublisherSink::addChannel(const std::string& channel_name, const Schema
 bool ROS2PublisherSink::storeSnapshot(const Snapshot& snapshot)
 {
   // send the schemas, if you haven't yet.
-  if (schema_changed_)
+  if(schema_changed_)
   {
     std::scoped_lock lk(schema_mutex_);
     schema_changed_ = false;
     data_tamer_msgs::msg::Schemas msg;
     msg.schemas.reserve(schemas_.size());
 
-    for (const auto& [channel_name, schema] : schemas_)
+    for(const auto& [channel_name, schema] : schemas_)
     {
       data_tamer_msgs::msg::Schema schema_msg;
       schema_msg.hash = schema.hash;
@@ -57,4 +57,4 @@ bool ROS2PublisherSink::storeSnapshot(const Snapshot& snapshot)
   return true;
 }
 
-}   // namespace DataTamer
+}  // namespace DataTamer

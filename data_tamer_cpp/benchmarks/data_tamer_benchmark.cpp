@@ -8,9 +8,16 @@ using namespace DataTamer;
 class NullSink : public DataSinkBase
 {
 public:
-  ~NullSink() override { stopThread(); }
-  void addChannel(std::string const&, Schema const&) override {}
-  bool storeSnapshot(const Snapshot&) override { return true; }
+  ~NullSink() override
+  {
+    stopThread();
+  }
+  void addChannel(std::string const&, Schema const&) override
+  {}
+  bool storeSnapshot(const Snapshot&) override
+  {
+    return true;
+  }
 };
 
 static void DT_Doubles(benchmark::State& state)
@@ -23,7 +30,7 @@ static void DT_Doubles(benchmark::State& state)
 
   channel->registerValue("values", &values);
 
-  for (auto _ : state)
+  for(auto _ : state)
   {
     channel->takeSnapshot();
   }
@@ -39,7 +46,7 @@ static void DT_PoseType(benchmark::State& state)
 
   channel->registerValue("values", &poses);
 
-  for (auto _ : state)
+  for(auto _ : state)
   {
     channel->takeSnapshot();
   }

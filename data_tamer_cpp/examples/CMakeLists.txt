@@ -29,4 +29,3 @@ else()
       $<BUILD_INTERFACE:${PROJECT_DIR}/3rdparty>
     )
 endif()
-

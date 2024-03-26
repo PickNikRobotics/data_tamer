@@ -24,7 +24,7 @@ void SerializeIntoBuffer(SpanBytes& buffer,
   std::memcpy(buffer.data(), value.data(), value.size());
   buffer.trimFront(value.size());
 }
-}   // end namespace SerializeMe
+}  // end namespace SerializeMe
 
 #endif
 
@@ -33,8 +33,8 @@ namespace DataTamer
 
 static constexpr char const* kDataTamer = "data_tamer";
 
-MCAPSink::MCAPSink(const std::string& filepath, bool do_compression) :
-  filepath_(filepath), compression_(do_compression)
+MCAPSink::MCAPSink(const std::string& filepath, bool do_compression)
+  : filepath_(filepath), compression_(do_compression)
 {
   openFile(filepath_);
 }
@@ -46,7 +46,7 @@ void DataTamer::MCAPSink::openFile(std::string const& filepath)
   mcap::McapWriterOptions options(kDataTamer);
   options.compression = compression_ ? mcap::Compression::Zstd : mcap::Compression::None;
   auto status = writer_->open(filepath, options);
-  if (!status.ok())
+  if(!status.ok())
   {
     throw std::runtime_error("Failed to open MCAP file for writing");
   }
@@ -66,7 +66,7 @@ void MCAPSink::addChannel(std::string const& channel_name, Schema const& schema)
   std::scoped_lock lk(mutex_);
   schemas_[channel_name] = schema;
   auto it = hash_to_channel_id_.find(schema.hash);
-  if (it != hash_to_channel_id_.end())
+  if(it != hash_to_channel_id_.end())
   {
     return;
   }
@@ -90,7 +90,7 @@ void MCAPSink::addChannel(std::string const& channel_name, Schema const& schema)
 bool MCAPSink::storeSnapshot(const Snapshot& snapshot)
 {
   std::scoped_lock lk(mutex_);
-  if (forced_stop_recording_)
+  if(forced_stop_recording_)
   {
     return false;
   }
@@ -107,18 +107,18 @@ bool MCAPSink::storeSnapshot(const Snapshot& snapshot)
   // Write our message
   mcap::Message msg;
   msg.channelId = hash_to_channel_id_.at(snapshot.schema_hash);
-  msg.sequence = 1;   // Optional
+  msg.sequence = 1;  // Optional
   // Timestamp requires nanosecond
   msg.logTime = mcap::Timestamp(snapshot.timestamp.count());
   msg.publishTime = msg.logTime;
-  msg.data = reinterpret_cast<std::byte const*>(merged_payload.data());   // NOLINT
+  msg.data = reinterpret_cast<std::byte const*>(merged_payload.data());  // NOLINT
   msg.dataSize = merged_payload.size();
   auto status = writer_->write(msg);
 
   // If reset_time_ is exceeded, we want to overwrite the current file.
   // Better than filling the disk, if you forgot to stop the application.
   auto const now = std::chrono::system_clock::now();
-  if (now - start_time_ > reset_time_)
+  if(now - start_time_ > reset_time_)
   {
     restartRecording(filepath_, compression_);
   }
@@ -146,10 +146,10 @@ void MCAPSink::restartRecording(const std::string& filepath, bool do_compression
   openFile(filepath_);
 
   // rebuild the channels
-  for (auto const& [name, schema] : schemas_)
+  for(auto const& [name, schema] : schemas_)
   {
     addChannel(name, schema);
   }
 }
 
-}   // namespace DataTamer
+}  // namespace DataTamer
