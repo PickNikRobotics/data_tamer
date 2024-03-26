@@ -16,20 +16,9 @@ endif()
 
 option(BUILD_SHARED_LIBS "Build using shared libraries" ON)
 
-if (MSVC)
-    add_compile_options(/W4 /WX)
-else()
-    add_compile_options(-Wall -Wcast-align -Wconversion -Wdouble-promotion -Wextra -Wimplicit-fallthrough
-        -Wno-deprecated-declarations -Wno-ignored-attributes -Wno-unused-parameter
-        -Wnon-virtual-dtor -Wno-unused-variable -Wnull-dereference -Wold-style-cast
-        -Woverloaded-virtual -Wshadow -Wsign-conversion
-        -Werror -Wpedantic)
-endif()
-
-
 find_package(ament_cmake QUIET)
 
-if ( ament_cmake_FOUND )
+if (ament_cmake_FOUND)
     set(ROS2_SINK 
         src/sinks/ros2_publisher_sink.cpp)
 endif()
@@ -63,6 +52,13 @@ add_library(data_tamer ${LIB_TYPE}
     include/data_tamer/details/mutex.hpp
 )
 
+
+if (MSVC)
+    target_compile_options(data_tamer PRIVATE /W4 /WX)
+else()
+    target_compile_options(data_tamer PRIVATE -Wall -Wconversion -Wextra -Wsign-conversion -Werror -Wpedantic -Wno-sign-conversion)
+endif()
+
 target_compile_features(data_tamer PUBLIC cxx_std_17)
 target_include_directories(data_tamer
  PUBLIC
@@ -89,8 +85,14 @@ if ( ament_cmake_FOUND )
     ament_export_dependencies(mcap_vendor rclcpp data_tamer_msgs)
     ament_package()
 else()
-    find_package(mcap REQUIRED)
-    target_link_libraries(data_tamer PRIVATE mcap::mcap)
+    # use the mcap in 3rdparty
+    add_subdirectory(3rdparty/mcap)
+
+    target_include_directories(data_tamer
+     PRIVATE
+      $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/mcap/include>
+    )
+    target_link_libraries(data_tamer PRIVATE mcap_lib)
 endif()
 
 install(
