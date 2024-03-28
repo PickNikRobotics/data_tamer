@@ -38,7 +38,8 @@ protected:
   friend LogChannel;
 
 public:
-  LoggedValue() {}
+  LoggedValue()
+  {}
 
   ~LoggedValue();
 
@@ -64,7 +65,10 @@ public:
   /// @brief Disabling a LoggedValue means that we will not record it in the snapshot
   void setEnabled(bool enabled);
 
-  [[nodiscard]] bool isEnabled() const { return enabled_; }
+  [[nodiscard]] bool isEnabled() const
+  {
+    return enabled_;
+  }
 
 private:
   std::weak_ptr<LogChannel> channel_;
@@ -266,11 +270,11 @@ void LogChannel::updateTypeRegistryImpl(FieldsVector& fields, const char* field_
   field.field_name = field_name;
   field.type = GetBasicType<T>();
 
-  if constexpr (GetBasicType<T>() == BasicType::OTHER)
+  if constexpr(GetBasicType<T>() == BasicType::OTHER)
   {
     field.type_name = TypeDefinition<T>().typeName();
 
-    if constexpr (container_info<T>::is_container)
+    if constexpr(container_info<T>::is_container)
     {
       field.is_vector = true;
       field.array_size = container_info<T>::size;
@@ -290,13 +294,13 @@ inline void LogChannel::updateTypeRegistry()
 {
   FieldsVector fields;
 
-  if constexpr (!IsNumericType<T>())
-  {   
+  if constexpr(!IsNumericType<T>())
+  {
     const auto& type_name = DataTamer::TypeDefinition<T>().typeName();
     auto added_serializer = _type_registry.addType<T>(type_name, true);
-    if (added_serializer)
+    if(added_serializer)
     {
-      if constexpr (has_typedef_with_object<T>())
+      if constexpr(has_typedef_with_object<T>())
       {
         auto func = [this, &fields](const char* field_name, const auto* member) {
           using MemberType =
@@ -322,7 +326,7 @@ template <typename T>
 inline RegistrationID LogChannel::registerValue(const std::string& name,
                                                 const T* value_ptr)
 {
-  if constexpr (IsNumericType<T>())
+  if constexpr(IsNumericType<T>())
   {
     return registerValueImpl(name, ValuePtr(value_ptr), {});
   }
@@ -348,7 +352,7 @@ template <template <class, class> class Container, class T, class... TArgs>
 inline RegistrationID LogChannel::registerValue(const std::string& prefix,
                                                 const Container<T, TArgs...>* vect)
 {
-  if constexpr (IsNumericType<T>())
+  if constexpr(IsNumericType<T>())
   {
     return registerValueImpl(prefix, ValuePtr(vect), {});
   }
@@ -364,7 +368,7 @@ template <typename T, size_t N>
 inline RegistrationID LogChannel::registerValue(const std::string& prefix,
                                                 const std::array<T, N>* vect)
 {
-  if constexpr (IsNumericType<T>())
+  if constexpr(IsNumericType<T>())
   {
     return registerValueImpl(prefix, ValuePtr(vect), {});
   }
@@ -386,14 +390,14 @@ LogChannel::createLoggedValue(std::string const& name, T initial_value)
 
 template <typename T>
 inline LoggedValue<T>::LoggedValue(const std::shared_ptr<LogChannel>& channel,
-                                   const std::string& name, T initial_value) :
-  channel_(channel), value_(initial_value), id_(channel->registerValue(name, &value_))
+                                   const std::string& name, T initial_value)
+  : channel_(channel), value_(initial_value), id_(channel->registerValue(name, &value_))
 {}
 
 template <typename T>
 inline LoggedValue<T>::~LoggedValue()
 {
-  if (auto channel = channel_.lock())
+  if(auto channel = channel_.lock())
   {
     channel->unregister(id_);
   }
@@ -402,7 +406,7 @@ inline LoggedValue<T>::~LoggedValue()
 template <typename T>
 inline void LoggedValue<T>::setEnabled(bool enabled)
 {
-  if (auto channel = channel_.lock())
+  if(auto channel = channel_.lock())
   {
     channel->setEnabled(id_, enabled);
   }
@@ -412,10 +416,10 @@ inline void LoggedValue<T>::setEnabled(bool enabled)
 template <typename T>
 inline void LoggedValue<T>::set(const T& val, bool auto_enable)
 {
-  if (auto channel = channel_.lock())
+  if(auto channel = channel_.lock())
   {
     value_ = val;
-    if (!enabled_ && auto_enable)
+    if(!enabled_ && auto_enable)
     {
       channel->setEnabled(id_, true);
       enabled_ = true;
@@ -431,7 +435,7 @@ inline void LoggedValue<T>::set(const T& val, bool auto_enable)
 template <typename T>
 inline T LoggedValue<T>::get()
 {
-  if (auto channel = channel_.lock())
+  if(auto channel = channel_.lock())
   {
     std::lock_guard const lock(channel->writeMutex());
     return value_;
@@ -443,11 +447,11 @@ template <typename T>
 inline LockedRef<T, Mutex> LoggedValue<T>::getLockedReference()
 {
   Mutex* mutex_ptr = nullptr;
-  if (auto chan = channel_.lock())
+  if(auto chan = channel_.lock())
   {
     mutex_ptr = &chan->writeMutex();
   }
   return LockedRef<T, Mutex>(&value_, mutex_ptr);
 }
 
-}   // namespace DataTamer
+}  // namespace DataTamer

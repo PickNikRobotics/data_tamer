@@ -31,4 +31,4 @@ private:
   std::unique_ptr<Pimpl> _p;
 };
 
-}   // namespace DataTamer
+}  // namespace DataTamer

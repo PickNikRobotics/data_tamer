@@ -48,4 +48,4 @@ private:
   data_tamer_msgs::msg::Snapshot data_msg_;
 };
 
-}   // namespace DataTamer
+}  // namespace DataTamer

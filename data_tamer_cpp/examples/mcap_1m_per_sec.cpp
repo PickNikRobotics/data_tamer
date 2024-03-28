@@ -18,7 +18,8 @@ void WritingThread(const std::string& channel_name)
   std::vector<float> real32(vect_size);
   std::vector<int16_t> int16(vect_size);
 
-  enum Color: uint8_t {
+  enum Color : uint8_t
+  {
     RED = 0,
     GREEN = 1,
     BLUE = 2
@@ -30,13 +31,12 @@ void WritingThread(const std::string& channel_name)
   channel->registerValue("int16", &int16);
   channel->registerValue("color", &color);
 
-
   int count = 0;
   double t = 0;
-  while (t < 10)   // 10 simulated seconds
+  while(t < 10)  // 10 simulated seconds
   {
     auto S = std::sin(t);
-    for (size_t i = 0; i < vect_size; i++)
+    for(size_t i = 0; i < vect_size; i++)
     {
       const auto value = static_cast<double>(i) + S;
       real64[i] = value;
@@ -45,13 +45,13 @@ void WritingThread(const std::string& channel_name)
     }
     color = static_cast<Color>(count % 3);
 
-    if (count++ % 1000 == 0)
+    if(count++ % 1000 == 0)
     {
       printf("[%s] time: %.1f\n", channel_name.c_str(), t);
       std::flush(std::cout);
     }
     auto t1 = std::chrono::system_clock::now();
-    if (!channel->takeSnapshot())
+    if(!channel->takeSnapshot())
     {
       std::cout << "pushing failed\n";
     }
@@ -82,12 +82,12 @@ int main()
   // for 10 seconds (12 million data points)
   const int N = 4;
   std::thread writers[N];
-  for (int i = 0; i < N; i++)
+  for(int i = 0; i < N; i++)
   {
     writers[i] = std::thread(WritingThread, std::string("channel_") + std::to_string(i));
   }
 
-  for (int i = 0; i < N; i++)
+  for(int i = 0; i < N; i++)
   {
     writers[i].join();
   }

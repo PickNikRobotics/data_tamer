@@ -18,11 +18,14 @@ class LockedRef
 public:
   LockedRef() = default;
 
-  LockedRef(T* obj, Mutex* obj_mutex) : ref_(obj), mutex_(obj_mutex) { mutex_->lock(); }
+  LockedRef(T* obj, Mutex* obj_mutex) : ref_(obj), mutex_(obj_mutex)
+  {
+    mutex_->lock();
+  }
 
   ~LockedRef()
   {
-    if (mutex_)
+    if(mutex_)
     {
       mutex_->unlock();
     }
@@ -43,11 +46,14 @@ public:
     std::swap(mutex_, other.mutex_);
   }
 
-  operator bool() const { return ref_ != nullptr; }
+  operator bool() const
+  {
+    return ref_ != nullptr;
+  }
 
   void lock()
   {
-    if (mutex_)
+    if(mutex_)
     {
       mutex_->lock();
     }
@@ -55,21 +61,30 @@ public:
 
   void unlock()
   {
-    if (mutex_)
+    if(mutex_)
     {
       mutex_->unlock();
     }
   }
 
-  bool empty() const { return ref_ == nullptr; }
+  bool empty() const
+  {
+    return ref_ == nullptr;
+  }
 
-  const T& operator()() const { return *ref_; }
+  const T& operator()() const
+  {
+    return *ref_;
+  }
 
-  T& operator()() { return *ref_; }
+  T& operator()()
+  {
+    return *ref_;
+  }
 
 private:
   T* ref_ = nullptr;
   Mutex* mutex_ = nullptr;
 };
 
-}   // namespace DataTamer
+}  // namespace DataTamer

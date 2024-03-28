@@ -15,9 +15,9 @@ struct DataSinkBase::Pimpl
 
     thread = std::thread([this, self]() {
       Snapshot snapshot_copy;
-      while (run)
+      while(run)
       {
-        while (queue.try_dequeue(snapshot_copy))
+        while(queue.try_dequeue(snapshot_copy))
         {
           self->storeSnapshot(snapshot_copy);
         }
@@ -32,7 +32,8 @@ struct DataSinkBase::Pimpl
   moodycamel::ConcurrentQueue<Snapshot> queue;
 };
 
-DataSinkBase::DataSinkBase() : _p(new Pimpl(this)) {}
+DataSinkBase::DataSinkBase() : _p(new Pimpl(this))
+{}
 
 DataSinkBase::~DataSinkBase()
 {
@@ -47,10 +48,10 @@ bool DataSinkBase::pushSnapshot(const Snapshot& snapshot)
 void DataSinkBase::stopThread()
 {
   _p->run = false;
-  if (_p->thread.joinable())
+  if(_p->thread.joinable())
   {
     _p->thread.join();
   }
 }
 
-}   // namespace DataTamer
+}  // namespace DataTamer

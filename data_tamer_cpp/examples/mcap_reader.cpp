@@ -5,7 +5,7 @@
 // using examples/mcap_writer_sample.cpp
 int main(int argc, char** argv)
 {
-  if (argc != 2)
+  if(argc != 2)
   {
     std::cout << "add the MCAP file as argument" << std::endl;
     return 1;
@@ -16,7 +16,7 @@ int main(int argc, char** argv)
   mcap::McapReader reader;
   {
     auto const res = reader.open(filepath);
-    if (!res.ok())
+    if(!res.ok())
     {
       throw std::runtime_error("Can't open MCAP file");
     }
@@ -27,7 +27,7 @@ int main(int argc, char** argv)
   std::unordered_map<size_t, DataTamerParser::Schema> hash_to_schema;
   // must call this, before accessing the schemas
   auto summary = reader.readSummary(mcap::ReadSummaryMethod::NoFallbackScan);
-  for (const auto& [schema_id, mcap_schema] : reader.schemas())
+  for(const auto& [schema_id, mcap_schema] : reader.schemas())
   {
     std::string schema_text(reinterpret_cast<const char*>(mcap_schema->data.data()),
                             mcap_schema->data.size());
@@ -45,7 +45,7 @@ int main(int argc, char** argv)
   auto IncrementCounter = [&](const std::string& series_name,
                               MessageCount& message_counts) {
     auto it = message_counts.find(series_name);
-    if (it == message_counts.end())
+    if(it == message_counts.end())
     {
       message_counts[series_name] = 1;
     }
@@ -56,7 +56,7 @@ int main(int argc, char** argv)
   };
 
   // parse all messages
-  for (const auto& msg : reader.readMessages())
+  for(const auto& msg : reader.readMessages())
   {
     // start updating the fields of SnapshotView
     DataTamerParser::SnapshotView snapshot;
@@ -67,7 +67,8 @@ int main(int argc, char** argv)
     // msg_buffer contains both active_mask and payload, serialized
     // one after the other.
     DataTamerParser::BufferSpan msg_buffer = {
-        reinterpret_cast<const uint8_t*>(msg.message.data), msg.message.dataSize};
+      reinterpret_cast<const uint8_t*>(msg.message.data), msg.message.dataSize
+    };
 
     const uint32_t mask_size = DataTamerParser::Deserialize<uint32_t>(msg_buffer);
     snapshot.active_mask.data = msg_buffer.data;
@@ -91,10 +92,10 @@ int main(int argc, char** argv)
   }
 
   // display the counted data samples
-  for (const auto& [channel_name, msg_counts] : message_counts_per_channel)
+  for(const auto& [channel_name, msg_counts] : message_counts_per_channel)
   {
     std::cout << channel_name << ":" << std::endl;
-    for (const auto& [name, count] : msg_counts)
+    for(const auto& [name, count] : msg_counts)
     {
       std::cout << "   " << name << ":" << count << std::endl;
     }

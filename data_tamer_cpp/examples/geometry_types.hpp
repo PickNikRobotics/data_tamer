@@ -32,13 +32,26 @@ class Vector2d
 
 public:
   Vector2d() = default;
-  Vector2d(double x, double y) : _x(x), _y(y) {}
+  Vector2d(double x, double y) : _x(x), _y(y)
+  {}
 
-  const double& x() const { return _x; }
-  const double& y() const { return _y; }
+  const double& x() const
+  {
+    return _x;
+  }
+  const double& y() const
+  {
+    return _y;
+  }
 
-  double& x() { return _x; }
-  double& y() { return _y; }
+  double& x()
+  {
+    return _x;
+  }
+  double& y()
+  {
+    return _y;
+  }
 };
 
 namespace DataTamer
@@ -47,7 +60,10 @@ namespace DataTamer
 template <>
 struct TypeDefinition<Point3D>
 {
-  std::string typeName() const { return "Point3D"; }
+  std::string typeName() const
+  {
+    return "Point3D";
+  }
 
   template <class Function>
   void typeDef(Function& addField)
@@ -61,7 +77,10 @@ struct TypeDefinition<Point3D>
 template <>
 struct TypeDefinition<Quaternion>
 {
-  std::string typeName() const { return "Quaternion"; }
+  std::string typeName() const
+  {
+    return "Quaternion";
+  }
 
   template <class Function>
   void typeDef(Function& addField)
@@ -76,7 +95,10 @@ struct TypeDefinition<Quaternion>
 template <>
 struct TypeDefinition<Pose>
 {
-  std::string typeName() const { return "Pose"; }
+  std::string typeName() const
+  {
+    return "Pose";
+  }
 
   template <class Function>
   void typeDef(Function& addField)
@@ -89,7 +111,10 @@ struct TypeDefinition<Pose>
 template <>
 struct TypeDefinition<Vector2d>
 {
-  std::string typeName() const { return "Vector2d"; }
+  std::string typeName() const
+  {
+    return "Vector2d";
+  }
 
   // typeDef must use a different overload and x() and y() must return const reference to
   // a class attribute
@@ -101,4 +126,4 @@ struct TypeDefinition<Vector2d>
   }
 };
 
-}   // namespace DataTamer
+}  // namespace DataTamer

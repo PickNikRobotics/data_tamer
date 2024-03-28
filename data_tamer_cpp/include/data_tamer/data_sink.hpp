@@ -111,7 +111,7 @@ inline bool GetBit(const ActiveMask& mask, size_t index)
 
 inline void SetBit(ActiveMask& mask, size_t index, bool value)
 {
-  if (!value)
+  if(!value)
   {
     mask[index >> 3] &= uint8_t(~(1 << (index % 8)));
   }
@@ -121,4 +121,4 @@ inline void SetBit(ActiveMask& mask, size_t index, bool value)
   }
 }
 
-}   // namespace DataTamer
+}  // namespace DataTamer

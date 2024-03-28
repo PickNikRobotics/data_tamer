@@ -63,7 +63,8 @@ using VarNumber = std::variant<
 template <typename T>
 inline constexpr BasicType GetBasicType()
 {
-  if constexpr(std::is_enum_v<T>) {
+  if constexpr(std::is_enum_v<T>)
+  {
     return GetBasicType<std::underlying_type_t<T>>();
   }
 
@@ -91,8 +92,8 @@ inline constexpr BasicType GetBasicType()
 template <typename T>
 inline constexpr bool IsNumericType()
 {
-  return std::is_arithmetic_v<T> || std::is_same_v<T, bool> || std::is_same_v<T, char>
-         || std::is_enum_v<T>;
+  return std::is_arithmetic_v<T> || std::is_same_v<T, bool> || std::is_same_v<T, char> ||
+         std::is_enum_v<T>;
 }
 
 struct RegistrationID
@@ -101,7 +102,10 @@ struct RegistrationID
   size_t fields_count = 0;
 
   // syntactic sugar to be used to concatenate contiguous RegistrationID.
-  void operator+=(const RegistrationID& other) { fields_count += other.fields_count; }
+  void operator+=(const RegistrationID& other)
+  {
+    fields_count += other.fields_count;
+  }
 };
 
 //---------------------------------------------------------
@@ -147,19 +151,18 @@ std::string ToStr(const Schema& schema);
 
 [[nodiscard]] uint64_t AddFieldToHash(const TypeField& field, uint64_t hash);
 
-}   // namespace DataTamer
-
+}  // namespace DataTamer
 
 template <>
 struct std::hash<DataTamer::RegistrationID>
 {
-  std::size_t operator()( const DataTamer::RegistrationID& id ) const
+  std::size_t operator()(const DataTamer::RegistrationID& id) const
   {
     // Compute individual hash values for first, second and third
     // http://stackoverflow.com/a/1646913/126995
     std::size_t res = 17;
-    res = res * 31 + hash<size_t>()( id.first_index );
-    res = res * 31 + hash<size_t>()( id.fields_count );
+    res = res * 31 + hash<size_t>()(id.first_index);
+    res = res * 31 + hash<size_t>()(id.fields_count);
     return res;
   }
 };

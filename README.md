@@ -3,17 +3,17 @@
 [![cmake Ubuntu](https://github.com/facontidavide/data_tamer/actions/workflows/cmake_ubuntu.yml/badge.svg)](https://github.com/facontidavide/data_tamer/actions/workflows/cmake_ubuntu.yml)
 [![ros2](https://github.com/PickNikRobotics/data_tamer/actions/workflows/ros2.yml/badge.svg)](https://github.com/PickNikRobotics/data_tamer/actions/workflows/ros2.yml)
 [![codecov](https://codecov.io/gh/facontidavide/data_tamer/graph/badge.svg?token=D0wtsntWds)](https://codecov.io/gh/facontidavide/data_tamer)
- 
+
 **DataTamer** is a library to log/trace numerical variables over time and
 takes periodic "snapshots" of their values, to later visualize them as **timeseries**.
 
 It works great with [PlotJuggler](https://github.com/facontidavide/PlotJuggler),
 the timeseries visualization tool (note: you will need PlotJuggler **3.8.2** or later).
 
-**DataTamer** is "fearless data logger" because you can record hundreds or **thousands of variables**: 
+**DataTamer** is "fearless data logger" because you can record hundreds or **thousands of variables**:
 even 1 million points per second should have a fairly small CPU overhead.
 
-Since all the values are aggregated in a single "snapshot", it is usually meant to 
+Since all the values are aggregated in a single "snapshot", it is usually meant to
 record data in a periodic loop (a very frequent use case, in robotics applications).
 
 Kudos to [pal_statistics](https://github.com/pal-robotics/pal_statistics), for inspiring this project.
@@ -27,20 +27,20 @@ DataTamer can be used to monitor multiple variables in your applications.
 **Channels** are used to take "snapshots" of a subset of variables at a given time.
 If you want to record at different frequencies, you can use different channels.
 
-DataTamer will forward the collected data to 1 or multiple **sinks**; 
+DataTamer will forward the collected data to 1 or multiple **sinks**;
 a sink may save the information immediately in a file (currently, we support [MCAP](https://mcap.dev/))
 or publish it using an inter-process communication, for instance, a ROS2 publisher.
 
 You can easily create your own, specialized sinks.
 
 Use [PlotJuggler](https://github.com/facontidavide/PlotJuggler) to
-visualize your logs offline or in real-time.  
+visualize your logs offline or in real-time.
 
 ## Features
 
 - **Serialization schema is created at run-time**: no need to do code generation.
 - **Suitable for real-time applications**: very low latency (on the side of the callee).
-- **Multi-sink architecture**: recorded data can be forwarded to multiple "backends". 
+- **Multi-sink architecture**: recorded data can be forwarded to multiple "backends".
 - **Very low serialization overhead**, in the order of 1 bit per traced value.
 - The user can enable/disable traced variables at run-time.
 
@@ -176,11 +176,7 @@ cmake --build build/Debug --parallel
 # How to deserialize data recorded with DataTamer
 
 I will write more extensively about the serialization format used by DataTamer, but for the time being I
-created a single header file without external dependencies that you can just copy into your project: 
+created a single header file without external dependencies that you can just copy into your project:
 [data_tamer_parser.hpp](data_tamer/include/data_tamer_parser)
 
 You can see how it is used in this example: [mcap_reader](data_tamer/examples/mcap_reader.cpp)
-
-
-
-

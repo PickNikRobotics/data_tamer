@@ -23,6 +23,9 @@ if ( ament_cmake_FOUND )
     install(TARGETS ros2_publisher
             DESTINATION lib/${PROJECT_NAME})
 else()
-    target_link_libraries(mcap_reader data_tamer mcap::mcap)
+    target_link_libraries(mcap_reader data_tamer mcap_lib)
+    target_include_directories(mcap_reader
+     PRIVATE
+      $<BUILD_INTERFACE:${PROJECT_DIR}/3rdparty>
+    )
 endif()
-

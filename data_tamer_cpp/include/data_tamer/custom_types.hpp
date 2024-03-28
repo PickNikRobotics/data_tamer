@@ -34,7 +34,10 @@ public:
   virtual const std::string& typeName() const = 0;
 
   // optional custom schema of the type
-  virtual std::optional<CustomSchema> typeSchema() const { return std::nullopt; }
+  virtual std::optional<CustomSchema> typeSchema() const
+  {
+    return std::nullopt;
+  }
   // size in bytes of the serialized object.
   // Needed to pre-allocate memory in the buffer
   virtual size_t serializedSize(const void* instance) const = 0;
@@ -92,13 +95,19 @@ private:
 template <template <class, class> class Container, class T, class... TArgs>
 struct TypeDefinition<Container<T, TArgs...>>
 {
-  std::string typeName() const { return TypeDefinition<T>().typeName(); }
+  std::string typeName() const
+  {
+    return TypeDefinition<T>().typeName();
+  }
 };
 
 template <typename T, size_t N>
 struct TypeDefinition<std::array<T, N>>
 {
-  std::string typeName() const { return TypeDefinition<T>().typeName(); }
+  std::string typeName() const
+  {
+    return TypeDefinition<T>().typeName();
+  }
 };
 
 template <class C, typename T>
@@ -109,7 +118,8 @@ struct has_typedef_with_object : std::false_type
 {
 };
 
-inline void DummyAddField(const char*, const void*){}
+inline void DummyAddField(const char*, const void*)
+{}
 using EmptyFunc = decltype(DummyAddField);
 
 template <class T>
@@ -136,19 +146,19 @@ struct has_typedef_with_member<T, decltype(TypeDefinition<T>().typeDef(
 template <typename T>
 inline void GetFixedSize(bool& is_fixed_size, size_t& fixed_size)
 {
-  if constexpr (IsNumericType<T>())
+  if constexpr(IsNumericType<T>())
   {
     fixed_size += sizeof(T);
   }
   else
   {
     constexpr auto info = SerializeMe::container_info<T>();
-    if constexpr (info.is_container && info.size == 0)
+    if constexpr(info.is_container && info.size == 0)
     {
       // vector
       is_fixed_size = false;
     }
-    else if constexpr (info.is_container && info.size >= 0)
+    else if constexpr(info.is_container && info.size >= 0)
     {
       // array
       size_t obj_size;
@@ -156,9 +166,9 @@ inline void GetFixedSize(bool& is_fixed_size, size_t& fixed_size)
       GetFixedSize<Type>(is_fixed_size, obj_size);
       fixed_size += info.size * obj_size;
     }
-    else if (is_fixed_size)
-    { 
-      if constexpr (has_typedef_with_object<T>())
+    else if(is_fixed_size)
+    {
+      if constexpr(has_typedef_with_object<T>())
       {
         auto funcA = [&](const char*, auto const* member) {
           using MemberType = std::remove_cv_t<std::remove_reference_t<decltype(*member)>>;
@@ -179,15 +189,15 @@ inline void GetFixedSize(bool& is_fixed_size, size_t& fixed_size)
 }
 
 template <typename T>
-inline CustomSerializerT<T>::CustomSerializerT(const std::string& type_name) :
-  _name(type_name)
+inline CustomSerializerT<T>::CustomSerializerT(const std::string& type_name)
+  : _name(type_name)
 {
   static_assert(!SerializeMe::container_info<T>().is_container, "Don't pass containers a "
                                                                 "template type");
 
   bool is_fixed_size = true;
   GetFixedSize<T>(is_fixed_size, _fixed_size);
-  if (!is_fixed_size)
+  if(!is_fixed_size)
   {
     _fixed_size = 0;
   }
@@ -202,7 +212,7 @@ inline const std::string& CustomSerializerT<T>::typeName() const
 template <typename T>
 inline size_t CustomSerializerT<T>::serializedSize(const void* src_instance) const
 {
-  if (_fixed_size != 0)
+  if(_fixed_size != 0)
   {
     return _fixed_size;
   }
@@ -236,7 +246,7 @@ inline CustomSerializer::Ptr TypesRegistry::getSerializer()
   const auto type_name = TypeDefinition<T>().typeName();
   auto it = _types.find(type_name);
 
-  if (it == _types.end())
+  if(it == _types.end())
   {
     CustomSerializer::Ptr serializer = std::make_shared<CustomSerializerT<T>>(type_name);
     _types[type_name] = serializer;
@@ -255,7 +265,7 @@ inline CustomSerializer::Ptr TypesRegistry::addType(const std::string& type_name
                                                                 "as template type");
 
   std::scoped_lock lk(_mutex);
-  if (skip_if_present && _types.count(type_name) != 0)
+  if(skip_if_present && _types.count(type_name) != 0)
   {
     return {};
   }
@@ -264,7 +274,7 @@ inline CustomSerializer::Ptr TypesRegistry::addType(const std::string& type_name
   return serializer;
 }
 
-}   // namespace DataTamer
+}  // namespace DataTamer
 
 // namespace wrapping
 // Forward DataTamer::TypeDefinition to SerializeMe::TypeDefinition
@@ -281,7 +291,7 @@ template <class T>
 template <class Function>
 void TypeDefinition<T>::typeDef(const T& obj, Function& addField)
 {
-  if constexpr (DataTamer::has_typedef_with_object<T>())
+  if constexpr(DataTamer::has_typedef_with_object<T>())
   {
     DataTamer::TypeDefinition<T>().typeDef(obj, addField);
   }
@@ -294,4 +304,4 @@ void TypeDefinition<T>::typeDef(const T& obj, Function& addField)
   }
 }
 
-}   // namespace SerializeMe
+}  // namespace SerializeMe
