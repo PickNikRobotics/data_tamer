@@ -11,8 +11,14 @@
 
 #include "geometry_types.hpp"
 
+struct Bar
+{
+  int a;
+};
+
 int main()
 {
+  using namespace TestTypes;
   using namespace DataTamer;
 
   auto dummy_sink = std::make_shared<DummySink>();

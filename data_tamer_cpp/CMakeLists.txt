@@ -44,8 +44,6 @@ else()
     set(LIB_TYPE STATIC)
 endif()
 
-
-
 if(ament_cmake_FOUND AND NOT BUILD_SHARED_LIBS)
     message("BUILD_SHARED_LIBS forced to ON (i.e. SHARED) in ROS2")
 endif()
@@ -67,6 +65,7 @@ add_library(data_tamer ${LIB_TYPE}
     src/sinks/mcap_sink.cpp
     ${ROS2_SINK}
     include/data_tamer/details/mutex.hpp
+    include/data_tamer/logged_value.hpp
 )
 
 

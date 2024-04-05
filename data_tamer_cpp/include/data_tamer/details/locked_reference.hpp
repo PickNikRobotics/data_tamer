@@ -1,7 +1,7 @@
 #pragma once
 
-#include <memory>
-#include <mutex>
+#include "data_tamer/details/mutex.hpp"
+#include <utility>
 
 namespace DataTamer
 {
@@ -12,7 +12,7 @@ namespace DataTamer
  * As long as the object remains in scope, the mutex is locked, therefore
  * you must destroy this object as soon as the pointer was used.
  */
-template <typename T, class Mutex>
+template <typename T>
 class LockedRef
 {
 public:

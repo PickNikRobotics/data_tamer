@@ -2,11 +2,7 @@
 
 #include "data_tamer/data_sink.hpp"
 
-#include <atomic>
-#include <condition_variable>
-#include <deque>
 #include <mutex>
-#include <thread>
 #include <unordered_map>
 
 // Forward declaration
