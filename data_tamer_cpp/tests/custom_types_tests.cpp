@@ -206,15 +206,9 @@ public:
     return CustomSchema{ "ros1", "int32 x\nint32 y" };
   }
 
-  size_t serializedSize(const void*) const override
-  {
-    return sizeof(Pos2D);
-  }
+  size_t serializedSize(const void*) const override { return sizeof(Pos2D); }
 
-  bool isFixedSize() const override
-  {
-    return true;
-  }
+  bool isFixedSize() const override { return true; }
 
   void serialize(const void* src, SerializeMe::SpanBytes& buffer) const override
   {

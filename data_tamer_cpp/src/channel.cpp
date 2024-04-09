@@ -131,8 +131,7 @@ const std::string& LogChannel::channelName() const
   return _p->channel_name;
 }
 
-LogChannel::~LogChannel()
-{}
+LogChannel::~LogChannel() {}
 
 void LogChannel::setEnabled(const RegistrationID& id, bool enable)
 {

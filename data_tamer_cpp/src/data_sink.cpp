@@ -32,8 +32,7 @@ struct DataSinkBase::Pimpl
   moodycamel::ConcurrentQueue<Snapshot> queue;
 };
 
-DataSinkBase::DataSinkBase() : _p(new Pimpl(this))
-{}
+DataSinkBase::DataSinkBase() : _p(new Pimpl(this)) {}
 
 DataSinkBase::~DataSinkBase()
 {

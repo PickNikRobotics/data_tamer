@@ -43,15 +43,13 @@ class Span
 public:
   Span() = default;
 
-  Span(T* ptr, size_t size) : data_(ptr), size_(size)
-  {}
+  Span(T* ptr, size_t size) : data_(ptr), size_(size) {}
 
   template <size_t N>
   Span(std::array<T, N>& v) : data_(v.data()), size_(N)
   {}
 
-  Span(std::vector<T>& v) : data_(v.data()), size_(v.size())
-  {}
+  Span(std::vector<T>& v) : data_(v.data()), size_(v.size()) {}
 
   T const* data() const;
 

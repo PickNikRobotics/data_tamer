@@ -42,30 +42,18 @@ public:
 
   [[nodiscard]] bool operator==(const ValuePtr& other) const;
 
-  [[nodiscard]] bool operator!=(const ValuePtr& other) const
-  {
-    return !(*this == other);
-  }
+  [[nodiscard]] bool operator!=(const ValuePtr& other) const { return !(*this == other); }
 
   void serialize(SerializeMe::SpanBytes& dest) const;
 
   [[nodiscard]] size_t getSerializedSize() const;
 
   /// Get the type of the stored variable pointer
-  [[nodiscard]] BasicType type() const
-  {
-    return type_;
-  }
+  [[nodiscard]] BasicType type() const { return type_; }
 
-  [[nodiscard]] bool isVector() const
-  {
-    return is_vector_;
-  }
+  [[nodiscard]] bool isVector() const { return is_vector_; }
 
-  [[nodiscard]] uint16_t vectorSize() const
-  {
-    return array_size_;
-  }
+  [[nodiscard]] uint16_t vectorSize() const { return array_size_; }
 
 private:
   const void* v_ptr_ = nullptr;

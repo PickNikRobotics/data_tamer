@@ -4,6 +4,7 @@
 #include "data_tamer/details/locked_reference.hpp"
 
 #include <memory>
+#include <shared_mutex>
 
 namespace DataTamer
 {
@@ -26,8 +27,7 @@ protected:
   friend LogChannel;
 
 public:
-  LoggedValue()
-  {}
+  LoggedValue() {}
 
   ~LoggedValue();
 
@@ -52,25 +52,26 @@ public:
   /// A mutex remain locked as long as LockedRef<> exist, therefore you should destroy
   /// it as soon as you used the reference. Example:
   ///
-  /// if(auto ref = value->getLockedReference())
+  /// if(auto ref = value->getMutablePtr())
   /// {
-  ///   ref() += 1;
+  ///   *ref += 1;
   /// }
-  [[nodiscard]] LockedRef<T> getLockedReference();
+  [[nodiscard]] MutablePtr<T> getMutablePtr();
+
+  /// Same as getMutablePtr, but const pointer (read only)
+  [[nodiscard]] ConstPtr<T> getConstPtr() const;
 
   /// @brief Disabling a LoggedValue means that we will not record it in the snapshot
   void setEnabled(bool enabled);
 
-  [[nodiscard]] bool isEnabled() const
-  {
-    return enabled_;
-  }
+  [[nodiscard]] bool isEnabled() const { return enabled_; }
 
 private:
   std::weak_ptr<LogChannel> channel_;
   T value_ = {};
   RegistrationID id_;
   bool enabled_ = true;
+  std::shared_mutex _local_mutex;
 };
 
 }  // namespace DataTamer

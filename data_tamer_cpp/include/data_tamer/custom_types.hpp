@@ -19,10 +19,7 @@ public:
   virtual const std::string& typeName() const = 0;
 
   // optional custom schema of the type
-  virtual std::optional<CustomSchema> typeSchema() const
-  {
-    return std::nullopt;
-  }
+  virtual std::optional<CustomSchema> typeSchema() const { return std::nullopt; }
   // size in bytes of the serialized object.
   // Needed to pre-allocate memory in the buffer
   virtual size_t serializedSize(const void* instance) const = 0;
@@ -92,19 +89,13 @@ struct CustomTypeName
 template <template <class, class> class Container, class T, class... TArgs>
 struct CustomTypeName<Container<T, TArgs...>>
 {
-  static constexpr std::string_view get()
-  {
-    return CustomTypeName<T>::get();
-  }
+  static constexpr std::string_view get() { return CustomTypeName<T>::get(); }
 };
 
 template <typename T, size_t N>
 struct CustomTypeName<std::array<T, N>>
 {
-  static constexpr std::string_view get()
-  {
-    return CustomTypeName<T>::get();
-  }
+  static constexpr std::string_view get() { return CustomTypeName<T>::get(); }
 };
 
 template <class C, typename T>

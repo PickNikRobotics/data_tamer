@@ -16,11 +16,9 @@ struct ChannelsRegistry::Pimpl
   Mutex mutex;
 };
 
-ChannelsRegistry::ChannelsRegistry() : _p(new Pimpl)
-{}
+ChannelsRegistry::ChannelsRegistry() : _p(new Pimpl) {}
 
-ChannelsRegistry::~ChannelsRegistry()
-{}
+ChannelsRegistry::~ChannelsRegistry() {}
 
 ChannelsRegistry& ChannelsRegistry::Global()
 {

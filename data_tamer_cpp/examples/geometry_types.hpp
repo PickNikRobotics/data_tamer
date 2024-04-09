@@ -36,26 +36,13 @@ class Vector2d
 
 public:
   Vector2d() = default;
-  Vector2d(double x, double y) : _x(x), _y(y)
-  {}
+  Vector2d(double x, double y) : _x(x), _y(y) {}
 
-  const double& x() const
-  {
-    return _x;
-  }
-  const double& y() const
-  {
-    return _y;
-  }
+  const double& x() const { return _x; }
+  const double& y() const { return _y; }
 
-  double& x()
-  {
-    return _x;
-  }
-  double& y()
-  {
-    return _y;
-  }
+  double& x() { return _x; }
+  double& y() { return _y; }
 };
 
 }  // namespace PseudoEigen

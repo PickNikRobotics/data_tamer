@@ -102,10 +102,7 @@ struct RegistrationID
   size_t fields_count = 0;
 
   // syntactic sugar to be used to concatenate contiguous RegistrationID.
-  void operator+=(const RegistrationID& other)
-  {
-    fields_count += other.fields_count;
-  }
+  void operator+=(const RegistrationID& other) { fields_count += other.fields_count; }
 };
 
 //---------------------------------------------------------
