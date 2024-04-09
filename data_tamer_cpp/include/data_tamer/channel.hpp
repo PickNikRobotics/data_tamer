@@ -348,7 +348,7 @@ template <typename T>
 inline void LoggedValue<T>::setEnabled(bool enabled)
 {
   // lock the shared mutex in "write" mode
-  std::lock_guard lk(_local_mutex);
+  std::lock_guard lk(rw_mutex_);
   if(auto channel = channel_.lock())
   {
     channel->setEnabled(id_, enabled);
@@ -360,7 +360,7 @@ template <typename T>
 inline void LoggedValue<T>::set(const T& val, bool auto_enable)
 {
   // lock the shared mutex in "write" mode
-  std::lock_guard lk(_local_mutex);
+  std::lock_guard lk(rw_mutex_);
   if(auto channel = channel_.lock())
   {
     value_ = val;
@@ -381,25 +381,20 @@ template <typename T>
 inline T LoggedValue<T>::get()
 {
   // lock the shared mutex in "read" mode
-  // use ConstPtr as a poor-man lock_guard for shared_lock
-  auto const_ref = ConstPtr(&value_, _local_mutex);
-  return value_;
+  rw_mutex_.lock_shared();
+  T tmp = value_;
+  rw_mutex_.unlock_shared();
+  return tmp;
 }
 
 template <typename T>
-inline ConstPtr<T> LoggedValue<T>::getConstPtr() const
-{
-  return ConstPtr<T>(&value_, _local_mutex);
-}
-
-template <typename T>
-inline MutablePtr<T> LoggedValue<T>::getMutablePtr()
+inline LockedPtr<T> LoggedValue<T>::getLockedPtr()
 {
   if(auto channel = channel_.lock())
   {
-    return MutablePtr<T>(&value_, &channel->writeMutex());
+    return LockedPtr<T>(&value_, &channel->writeMutex());
   }
-  return MutablePtr<T>(&value_, nullptr);
+  return LockedPtr<T>(&value_, nullptr);
 }
 
 }  // namespace DataTamer

@@ -56,10 +56,7 @@ public:
   /// {
   ///   *ref += 1;
   /// }
-  [[nodiscard]] MutablePtr<T> getMutablePtr();
-
-  /// Same as getMutablePtr, but const pointer (read only)
-  [[nodiscard]] ConstPtr<T> getConstPtr() const;
+  [[nodiscard]] LockedPtr<T> getLockedPtr();
 
   /// @brief Disabling a LoggedValue means that we will not record it in the snapshot
   void setEnabled(bool enabled);
@@ -71,7 +68,7 @@ private:
   T value_ = {};
   RegistrationID id_;
   bool enabled_ = true;
-  std::shared_mutex _local_mutex;
+  std::shared_mutex rw_mutex_;
 };
 
 }  // namespace DataTamer
