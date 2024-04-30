@@ -1,7 +1,7 @@
 /**
  * MIT License
  *
- * Copyright (c) 2019-2023 Davide Faconti
+ * Copyright (c) 2019-2024 Davide Faconti
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -43,15 +43,13 @@ class Span
 public:
   Span() = default;
 
-  Span(T* ptr, size_t size) : data_(ptr), size_(size)
-  {}
+  Span(T* ptr, size_t size) : data_(ptr), size_(size) {}
 
   template <size_t N>
   Span(std::array<T, N>& v) : data_(v.data()), size_(N)
   {}
 
-  Span(std::vector<T>& v) : data_(v.data()), size_(v.size())
-  {}
+  Span(std::vector<T>& v) : data_(v.data()), size_(v.size()) {}
 
   T const* data() const;
 
@@ -231,21 +229,26 @@ inline T EndianSwap(T t)
   }
 }
 
-template <class Type>
-struct TypeDefinition
-{
-  std::string typeName() const;
-  template <class Function>
-  void typeDef(const Type& obj, Function& addField);
-};
+// Check if a Function like this is implemented:
+//
+// template <typename Func> std::string_view TypeDefinition(T&, Func&);
 
 template <typename T, class = void>
-struct is_serializer_specialized : std::false_type
+struct has_TypeDefinition : std::false_type
 {
 };
 
+const auto EmptyFuncion = [](const char*, void*) {};
+using EmptyFunc = decltype(EmptyFuncion);
+
+template <typename T1, typename T2>
+using enable_if_same_t = std::enable_if_t<std::is_same_v<T1, T2>>;
+
 template <typename T>
-struct is_serializer_specialized<T, decltype(TypeDefinition<T>(), void())>
+struct has_TypeDefinition<
+    T, enable_if_same_t<std::string_view,
+                        decltype(TypeDefinition(std::declval<T&>(),
+                                                std::declval<EmptyFunc&>()))>>
   : std::true_type
 {
 };
@@ -314,6 +317,8 @@ inline constexpr bool is_vector()
 template <typename T>
 inline size_t BufferSize(const T& val)
 {
+  static_assert(is_number<T>() || has_TypeDefinition<T>(), "Missing TypeDefinition");
+
   if constexpr(is_number<T>())
   {
     return sizeof(T);
@@ -325,7 +330,7 @@ inline size_t BufferSize(const T& val)
       total_size += BufferSize(*field);
     };
 
-    TypeDefinition<T>().typeDef(val, func);
+    TypeDefinition(const_cast<T&>(val), func);
     return total_size;
   }
 }
@@ -367,7 +372,9 @@ inline size_t BufferSize(const Container<T, TArgs...>& vect)
 template <typename T>
 inline void DeserializeFromBuffer(SpanBytesConst& buffer, T& dest)
 {
-  if constexpr(std::is_arithmetic_v<T> || std::is_same_v<T, std::byte>)
+  static_assert(is_number<T>() || has_TypeDefinition<T>(), "Missing TypeDefinition");
+
+  if constexpr(is_number<T>())
   {
     auto const S = sizeof(T);
     if(S > buffer.size())
@@ -386,7 +393,7 @@ inline void DeserializeFromBuffer(SpanBytesConst& buffer, T& dest)
     auto func = [&buffer](const char*, const auto* field) {
       DeserializeFromBuffer(buffer, *field);
     };
-    TypeDefinition<T>().typeDef(dest, func);
+    TypeDefinition(dest, func);
   }
 }
 
@@ -471,6 +478,8 @@ inline void DeserializeFromBuffer(SpanBytesConst& buffer, Container<T, TArgs...>
 template <typename T>
 inline void SerializeIntoBuffer(SpanBytes& buffer, T const& value)
 {
+  static_assert(is_number<T>() || has_TypeDefinition<T>(), "Missing TypeDefinition");
+
   if constexpr(is_number<T>())
   {
     const size_t S = sizeof(T);
@@ -490,7 +499,7 @@ inline void SerializeIntoBuffer(SpanBytes& buffer, T const& value)
     auto func = [&buffer](const char*, const auto* field) {
       SerializeIntoBuffer(buffer, *field);
     };
-    TypeDefinition<T>().typeDef(value, func);
+    TypeDefinition(const_cast<T&>(value), func);
   }
 }
 

@@ -9,11 +9,12 @@
 #include <thread>
 
 using namespace DataTamer;
+using namespace TestTypes;
 
 struct TestType
 {
-  double timestamp;
-  int count;
+  double timestamp = 0;
+  int count = 0;
   std::vector<Point3D> positions;
   std::array<Pose, 3> poses;
 
@@ -21,33 +22,22 @@ struct TestType
   {
     RED,
     GREEN,
-    BLUE
+    BLUE,
+    UNDEFINED
   };
-  Color color;
+  Color color = UNDEFINED;
 };
 
-namespace DataTamer
+template <typename AddField>
+std::string_view TypeDefinition(TestType& obj, AddField& add)
 {
-template <>
-struct TypeDefinition<TestType>
-{
-  std::string typeName() const
-  {
-    return "TestType";
-  }
-
-  template <class Function>
-  void typeDef(const TestType& obj, Function& addField)
-  {
-    addField("timestamp", &obj.timestamp);
-    addField("count", &obj.count);
-    addField("positions", &obj.positions);
-    addField("poses", &obj.poses);
-    addField("color", &obj.color);
-  }
-};
-
-}  // namespace DataTamer
+  add("timestamp", &obj.timestamp);
+  add("count", &obj.count);
+  add("positions", &obj.positions);
+  add("poses", &obj.poses);
+  add("color", &obj.color);
+  return "TestType";
+}
 
 TEST(DataTamerCustom, Registration)
 {
@@ -216,15 +206,9 @@ public:
     return CustomSchema{ "ros1", "int32 x\nint32 y" };
   }
 
-  size_t serializedSize(const void*) const override
-  {
-    return sizeof(Pos2D);
-  }
+  size_t serializedSize(const void*) const override { return sizeof(Pos2D); }
 
-  bool isFixedSize() const override
-  {
-    return true;
-  }
+  bool isFixedSize() const override { return true; }
 
   void serialize(const void* src, SerializeMe::SpanBytes& buffer) const override
   {
@@ -291,7 +275,7 @@ TEST(DataTamerCustom, RegisterConstMethods)
   auto sink = std::make_shared<DummySink>();
   channel->addDataSink(sink);
 
-  Vector2d vect = { 1, 2 };
+  PseudoEigen::Vector2d vect = { 1, 2 };
   channel->registerValue("vect", &vect);
 
   channel->takeSnapshot();

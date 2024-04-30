@@ -1,90 +1,74 @@
 #pragma once
 
-#include <memory>
-#include <mutex>
+#include "data_tamer/details/mutex.hpp"
+#include <utility>
 
 namespace DataTamer
 {
+
 /**
- * @brief The LockedRef class is used to share a pointer to an object
- * and a mutex that protects the read/write access to that object.
- *
- * As long as the object remains in scope, the mutex is locked, therefore
- * you must destroy this object as soon as the pointer was used.
+ * @brief The MutablePtr is a wrapper to a
+ * pointer that locks a mutex in the constructor
+ * and unlocks it in the destructor.
+ * It allows the user to access the reference/pointer and modify the object.
  */
-template <typename T, class Mutex>
-class LockedRef
+template <typename T>
+class LockedPtr
 {
 public:
-  LockedRef() = default;
+  LockedPtr(T* obj, Mutex* mutex);
+  LockedPtr(const LockedPtr&) = delete;
+  LockedPtr& operator=(const LockedPtr&) = delete;
+  LockedPtr(LockedPtr&&);
+  LockedPtr& operator=(LockedPtr&&);
+  ~LockedPtr();
 
-  LockedRef(T* obj, Mutex* obj_mutex) : ref_(obj), mutex_(obj_mutex)
+  /// True if the object is not nullptr
+  operator bool() const { return obj_ != nullptr; }
+  /// Return the reference
+  T& operator*() { return *obj_; }
+  /// Return the pointer
+  T* operator->() { return obj_; }
+
+private:
+  T* obj_ = nullptr;
+  Mutex* mutex_ = nullptr;
+};
+
+//----------------------------------------------------
+//----------------------------------------------------
+//----------------------------------------------------
+
+template <typename T>
+inline LockedPtr<T>::LockedPtr(T* obj, Mutex* mutex) : obj_(obj), mutex_(mutex)
+{
+  if(mutex_)
   {
     mutex_->lock();
   }
+}
 
-  ~LockedRef()
+template <typename T>
+inline LockedPtr<T>::LockedPtr(LockedPtr&& other) : mutex_(other.mutex_)
+{
+  std::swap(obj_, other.obj_);
+}
+
+template <typename T>
+inline LockedPtr<T>& LockedPtr<T>::operator=(LockedPtr<T>&& other)
+{
+  mutex_ = &other.mutex_;
+  std::swap(obj_, other.obj_);
+  return *this;
+}
+
+template <typename T>
+inline LockedPtr<T>::~LockedPtr()
+{
+  if(mutex_)
   {
-    if(mutex_)
-    {
-      mutex_->unlock();
-    }
+    mutex_->unlock();
   }
-
-  LockedRef(LockedRef const&) = delete;
-  LockedRef& operator=(LockedRef const&) = delete;
-
-  LockedRef(LockedRef&& other)
-  {
-    std::swap(ref_, other.ref_);
-    std::swap(mutex_, other.mutex_);
-  }
-
-  LockedRef& operator=(LockedRef&& other)
-  {
-    std::swap(ref_, other.ref_);
-    std::swap(mutex_, other.mutex_);
-  }
-
-  operator bool() const
-  {
-    return ref_ != nullptr;
-  }
-
-  void lock()
-  {
-    if(mutex_)
-    {
-      mutex_->lock();
-    }
-  }
-
-  void unlock()
-  {
-    if(mutex_)
-    {
-      mutex_->unlock();
-    }
-  }
-
-  bool empty() const
-  {
-    return ref_ == nullptr;
-  }
-
-  const T& operator()() const
-  {
-    return *ref_;
-  }
-
-  T& operator()()
-  {
-    return *ref_;
-  }
-
-private:
-  T* ref_ = nullptr;
-  Mutex* mutex_ = nullptr;
-};
+}
 
 }  // namespace DataTamer

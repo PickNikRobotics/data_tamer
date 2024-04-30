@@ -6,10 +6,10 @@ function(CompileExample TARGET)
     target_link_libraries(${TARGET} data_tamer)
 endfunction()
 
-CompileExample(example)
-CompileExample(custom_types)
+CompileExample(T01_basic_example)
+CompileExample(T02_custom_types)
+CompileExample(T03_mcap_writer)
 CompileExample(mcap_1m_per_sec)
-CompileExample(mcap_writer_sample)
 
 add_executable(mcap_reader mcap_reader.cpp)
 target_include_directories(mcap_reader

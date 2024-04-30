@@ -2,6 +2,7 @@
 #include "data_tamer/sinks/mcap_sink.hpp"
 #include <iostream>
 #include <cmath>
+#include <thread>
 
 using namespace DataTamer;
 
