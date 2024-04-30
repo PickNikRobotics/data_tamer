@@ -18,11 +18,15 @@ option(BUILD_SHARED_LIBS "Build using shared libraries" OFF)
 
 find_package(ament_cmake QUIET)
 
+if (ament_cmake_FOUND)
+    set(COMPILING_FOR_ROS2 ON)
+endif()
+
 ###########################################
 # check if mcap can be found. If true,
 # probably we used conan. If false, build from 3rdparty
 find_package(mcap QUIET)
-if(NOT mcap_FOUND AND NOT ament_cmake_FOUND)
+if(NOT mcap_FOUND AND NOT COMPILING_FOR_ROS2)
     set(USE_VENDORED_MCAP ON)
     message(STATUS "MCAP from 3rdparty")
     add_subdirectory(3rdparty/mcap)
@@ -34,17 +38,18 @@ endif()
 ###########################################
 
 
-if (ament_cmake_FOUND)
+if (COMPILING_FOR_ROS2)
+    set(COMPILING_FOR_ROS2 ON)
     set(ROS2_SINK src/sinks/ros2_publisher_sink.cpp)
 endif()
 
-if(BUILD_SHARED_LIBS OR ament_cmake_FOUND)
+if(BUILD_SHARED_LIBS OR COMPILING_FOR_ROS2)
     set(LIB_TYPE SHARED)
 else()
     set(LIB_TYPE STATIC)
 endif()
 
-if(ament_cmake_FOUND AND NOT BUILD_SHARED_LIBS)
+if(COMPILING_FOR_ROS2 AND NOT BUILD_SHARED_LIBS)
     message("BUILD_SHARED_LIBS forced to ON (i.e. SHARED) in ROS2")
 endif()
 
@@ -87,7 +92,10 @@ target_compile_definitions(data_tamer PUBLIC -DDATA_TAMER_VERSION="${CMAKE_PROJE
 
 # detect if compiling in ROS2
 find_package(ament_cmake QUIET)
-if ( ament_cmake_FOUND )
+
+set(INSTALL_TARGETS data_tamer)
+
+if ( COMPILING_FOR_ROS2 )
     message(STATUS "Compiling in ROS2")
     target_compile_definitions(data_tamer PUBLIC USING_ROS2=1 )
     set(COMPILING_FOR_ROS2 true)
@@ -106,25 +114,10 @@ elseif( USE_VENDORED_MCAP )
     target_include_directories(data_tamer PRIVATE
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/mcap/include> )
     target_link_libraries(data_tamer PRIVATE mcap_lib)
-
-    install(
-      TARGETS data_tamer mcap_lib
-      EXPORT data_tamerTargets
-      LIBRARY DESTINATION lib
-      ARCHIVE DESTINATION lib
-      RUNTIME DESTINATION bin
-    )
+    list(APPEND INSTALL_TARGETS mcap_lib)
 else()
     find_package(mcap REQUIRED)
     target_link_libraries(data_tamer PRIVATE mcap::mcap)
-
-    install(
-      TARGETS data_tamer
-      EXPORT data_tamerTargets
-      LIBRARY DESTINATION lib
-      ARCHIVE DESTINATION lib
-      RUNTIME DESTINATION bin
-    )
 endif()
 
 install(
@@ -133,7 +126,16 @@ install(
 )
 
 
-if (NOT ament_cmake_FOUND )
+install(
+  TARGETS ${INSTALL_TARGETS}
+  EXPORT data_tamerTargets
+  LIBRARY DESTINATION lib
+  ARCHIVE DESTINATION lib
+  RUNTIME DESTINATION bin
+  INCLUDES DESTINATION include
+)
+
+if (NOT COMPILING_FOR_ROS2 )
 
     set(LIBRARY_INSTALL_DIR lib)
     set(INCLUDE_INSTALL_DIR include)
