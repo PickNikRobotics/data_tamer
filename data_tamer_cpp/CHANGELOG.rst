@@ -2,6 +2,19 @@
 Changelog for package data_tamer
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Forthcoming
+-----------
+* Support lifecycle node for ros2 publisher sink (`#17 <https://github.com/PickNikRobotics/data_tamer/issues/17>`_)
+  * Support lifecycle node for ros2 publisher sink
+  * Remove unused member variable node\_
+  * Add template for both constructors
+* more efficient locking of LoggedValue<T> and new clang format
+* refactoring custom types
+* fix compilation with and without conan
+* new clang format
+* add mcap to 3rdparty
+* Contributors: Davide Faconti, Victor Massagué Respall
+
 0.9.4 (2024-02-02)
 ------------------
 * changed the way registerValue throws if you try registering the same address again

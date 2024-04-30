@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(data_tamer_cpp VERSION 0.9.4)
+project(data_tamer_cpp VERSION 1.0.0)
 
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -96,7 +96,7 @@ find_package(ament_cmake QUIET)
 set(INSTALL_TARGETS data_tamer)
 
 if ( COMPILING_FOR_ROS2 )
-    message(STATUS "Compiling in ROS2")
+    message(STATUS "Compiling for ROS2")
     target_compile_definitions(data_tamer PUBLIC USING_ROS2=1 )
     set(COMPILING_FOR_ROS2 true)
 
