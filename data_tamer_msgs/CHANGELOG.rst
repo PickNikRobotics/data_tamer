@@ -2,8 +2,8 @@
 Changelog for package data_tamer_msgs
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+1.0.0 (2024-04-30)
+------------------
 * new clang format
 * Contributors: Davide Faconti
 

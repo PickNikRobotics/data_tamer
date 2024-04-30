@@ -2,8 +2,8 @@
 Changelog for package data_tamer
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+1.0.0 (2024-04-30)
+------------------
 * Support lifecycle node for ros2 publisher sink (`#17 <https://github.com/PickNikRobotics/data_tamer/issues/17>`_)
   * Support lifecycle node for ros2 publisher sink
   * Remove unused member variable node\_
