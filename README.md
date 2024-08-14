@@ -177,6 +177,6 @@ cmake --build build/Debug --parallel
 
 I will write more extensively about the serialization format used by DataTamer, but for the time being I
 created a single header file without external dependencies that you can just copy into your project:
-[data_tamer_parser.hpp](data_tamer_cpp/include/data_tamer_parser)
+[data_tamer_parser.hpp](data_tamer_cpp/include/data_tamer_parser/data_tamer_parser.hpp)
 
 You can see how it is used in this example: [mcap_reader](data_tamer_cpp/examples/mcap_reader.cpp)
