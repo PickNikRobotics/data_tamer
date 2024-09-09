@@ -264,3 +264,33 @@ TEST(DataTamerBasic, VectorWithChangingSize)
   ASSERT_EQ(sink->latest_snapshot.payload.size(),
             vect.size() * sizeof(float) + sizeof(uint32_t));
 }
+
+TEST(DataTamerBasic, LockedPtr)
+{
+  auto channel = LogChannel::create("chan");
+  auto logged_float = channel->createLoggedValue<float>("real");
+  float val = 3.14f;
+  float val2 = 2.72f;
+  logged_float->set(val);
+  EXPECT_EQ(logged_float->get(), val);
+
+  {
+    auto ptr = logged_float->getLockedPtr();
+
+    // expect that we can get the pointer
+    EXPECT_TRUE(ptr);
+    EXPECT_EQ(*ptr, val);
+
+    // we shouldn't be able to get it while it's still locked (while ptr exists)
+    auto ptr2 = logged_float->tryGetLockedPtr();
+    EXPECT_FALSE(ptr2);
+
+    *ptr = val2;
+  }
+
+  // we should be able to get it again
+  EXPECT_TRUE(logged_float->getLockedPtr());
+
+  // now expect that our assignment to the locked pointer took place
+  EXPECT_EQ(logged_float->get(), val2);
+}
