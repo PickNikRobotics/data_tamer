@@ -1,6 +1,6 @@
 #include "data_tamer/data_tamer.hpp"
+#include "data_tamer/details/locked_reference.hpp"
 #include "data_tamer/sinks/dummy_sink.hpp"
-#include <iostream>
 
 int main()
 {
@@ -32,6 +32,13 @@ int main()
 
   // you can modify logged_float like this
   logged_float->set(6.28f);
+
+  // if you want to modify it in a thread-safe manner, you can modify it like this
+  // while ptr exists, its mutex will be locked, so make sure you destruct it as soon as you're done!
+  if(auto ptr = logged_float->getLockedPtr())
+  {
+    *ptr += 1.1f;
+  }
 
   // You can disable a value like this
   channel->setEnabled(id1, false);
