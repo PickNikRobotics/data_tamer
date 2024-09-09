@@ -57,7 +57,7 @@ inline LockedPtr<T>::LockedPtr(LockedPtr&& other) : mutex_(other.mutex_)
 template <typename T>
 inline LockedPtr<T>& LockedPtr<T>::operator=(LockedPtr<T>&& other)
 {
-  mutex_ = &other.mutex_;
+  mutex_ = other.mutex_;
   std::swap(obj_, other.obj_);
   return *this;
 }
