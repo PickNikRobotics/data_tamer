@@ -1,8 +1,6 @@
 #include "data_tamer/data_tamer.hpp"
 #include "data_tamer/sinks/dummy_sink.hpp"
 
-#include "../examples/geometry_types.hpp"
-
 #include <gtest/gtest.h>
 
 #include <variant>
