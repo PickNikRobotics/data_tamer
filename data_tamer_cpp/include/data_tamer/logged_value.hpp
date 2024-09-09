@@ -49,10 +49,10 @@ public:
   [[nodiscard]] T get();
 
   /// This method allows us to access a reference to the object in a thread-safe way.
-  /// A mutex remain locked as long as LockedRef<> exist, therefore you should destroy
+  /// A mutex remain locked as long as LockedPtr<> exists, therefore you should destroy
   /// it as soon as you used the reference. Example:
   ///
-  /// if(auto ref = value->getMutablePtr())
+  /// if(auto ref = value->getLockedPtr())
   /// {
   ///   *ref += 1;
   /// }
