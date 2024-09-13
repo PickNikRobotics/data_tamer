@@ -16,7 +16,7 @@ template <typename T>
 class LockedPtr
 {
 public:
-  LockedPtr(T* obj, Mutex* mutex, bool blocking = true);
+  LockedPtr(T* obj, Mutex* mutex);
   LockedPtr(const LockedPtr&) = delete;
   LockedPtr& operator=(const LockedPtr&) = delete;
   LockedPtr(LockedPtr&&);
@@ -40,26 +40,11 @@ private:
 //----------------------------------------------------
 
 template <typename T>
-inline LockedPtr<T>::LockedPtr(T* obj, Mutex* mutex, bool blocking)
-  : obj_(obj), mutex_(mutex)
+inline LockedPtr<T>::LockedPtr(T* obj, Mutex* mutex) : obj_(obj), mutex_(mutex)
 {
   if(mutex_)
   {
-    // if we have a mutex pointer
-    if(blocking)
-    {
-      mutex_->lock();
-    }
-    else
-    {
-      if(!mutex_->try_lock())
-      {
-        // we failed to get the mutex, so return a null object
-        obj_ = nullptr;
-        mutex_ = nullptr;
-        return;
-      }
-    }
+    mutex_->lock();
   }
 }
 

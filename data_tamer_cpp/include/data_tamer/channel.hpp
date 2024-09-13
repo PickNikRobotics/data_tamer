@@ -396,14 +396,5 @@ inline LockedPtr<T> LoggedValue<T>::getLockedPtr()
   }
   return LockedPtr<T>(&value_, nullptr);
 }
-template <typename T>
-inline LockedPtr<T> LoggedValue<T>::tryGetLockedPtr()
-{
-  if(auto channel = channel_.lock())
-  {
-    return LockedPtr<T>(&value_, &channel->writeMutex(), false);
-  }
-  return LockedPtr<T>(&value_, nullptr, false);
-}
 
 }  // namespace DataTamer

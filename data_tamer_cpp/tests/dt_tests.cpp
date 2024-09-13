@@ -281,14 +281,11 @@ TEST(DataTamerBasic, LockedPtr)
     EXPECT_TRUE(ptr);
     EXPECT_EQ(*ptr, val);
 
-    // we shouldn't be able to get it while it's still locked (while ptr exists)
-    auto ptr2 = logged_float->tryGetLockedPtr();
-    EXPECT_FALSE(ptr2);
-
+    // assign a new value to ptr
     *ptr = val2;
   }
 
-  // we should be able to get it again
+  // we should be able to get it again now that ptr is out of scope
   EXPECT_TRUE(logged_float->getLockedPtr());
 
   // now expect that our assignment to the locked pointer took place

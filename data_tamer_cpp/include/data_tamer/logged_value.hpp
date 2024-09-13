@@ -58,13 +58,6 @@ public:
   /// }
   [[nodiscard]] LockedPtr<T> getLockedPtr();
 
-  /**
-   * @brief This method is the same as getLockedPtr but does not block
-   *
-   * @return LockedPtr<T>
-   */
-  [[nodiscard]] LockedPtr<T> tryGetLockedPtr();
-
   /// @brief Disabling a LoggedValue means that we will not record it in the snapshot
   void setEnabled(bool enabled);
 
