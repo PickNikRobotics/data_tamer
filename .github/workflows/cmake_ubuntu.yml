@@ -56,8 +56,8 @@ jobs:
     - name: Upload coverage reports to Codecov
       uses: codecov/codecov-action@v3
       with:
-        directory: ${{github.workspace}}/build
-        gcov_ignore: ${{github.workspace}}/3rdparty
+        directory: ${{github.workspace}}/build/Testing
+        gcov_ignore: concurrentqueue.h
         verbose: true
       env:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
