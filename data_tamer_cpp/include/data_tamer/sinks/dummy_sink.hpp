@@ -1,13 +1,14 @@
 #pragma once
 
 #include "data_tamer/data_sink.hpp"
-#include "data_tamer/details/mutex.hpp"
 
 #include <unordered_map>
-#include <mutex>
+#include <shared_mutex>
 
 namespace DataTamer
 {
+
+using Mutex = std::shared_mutex;
 
 /**
  * @brief The DummySink does nothing, only counting the number of snapshots received.

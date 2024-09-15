@@ -1,5 +1,5 @@
+#include <iostream>
 #include "data_tamer/data_tamer.hpp"
-#include "data_tamer/details/locked_reference.hpp"
 #include "data_tamer/sinks/dummy_sink.hpp"
 
 int main()
@@ -35,9 +35,16 @@ int main()
 
   // if you want to modify it in a thread-safe manner, you can modify it like this
   // while ptr exists, its mutex will be locked, so make sure you destruct it as soon as you're done!
-  if(auto ptr = logged_float->getLockedPtr())
+  if(auto ptr = logged_float->getMutablePtr())
   {
     *ptr += 1.1f;
+  }
+
+  // If you want to access logged_float by reference, but you are not planning to modify its value,
+  // you should use getConstPtr(), instead. In this way, you will reduce mutex contention.
+  if(auto ptr = logged_float->getConstPtr())
+  {
+    std::cout << "logged_float = " << *ptr << "\n";
   }
 
   // You can disable a value like this

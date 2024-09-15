@@ -1,8 +1,6 @@
 #include "data_tamer/data_tamer.hpp"
-#include "data_tamer/details/mutex.hpp"
 
 #include <memory>
-#include <mutex>
 #include <unordered_map>
 #include <unordered_set>
 
