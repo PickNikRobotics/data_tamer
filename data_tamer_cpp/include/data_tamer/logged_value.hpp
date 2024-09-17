@@ -48,8 +48,8 @@ public:
   /// @brief get the stored value.
   [[nodiscard]] T get();
 
-
-  [[deprecated("use getMutablePtr() instead")]] [[nodiscard]] MutablePtr<T> getLockedPtr() {
+  [[deprecated("use getMutablePtr() instead")]] [[nodiscard]] MutablePtr<T> getLockedPtr()
+  {
     return getMutablePtr();
   }
 
@@ -58,7 +58,7 @@ public:
    *
    *  Usage:
    *
-   *    if(auto ref = value->getLockedPtr()) {
+   *    if(auto ref = value->getMutablePtr()) {
    *      auto current_value = *ref;
    *    };
    */
@@ -69,7 +69,7 @@ public:
    *
    *  Usage:
    *
-   *    if(auto ref = value->getLockedPtr()) {
+   *    if(auto ref = value->getMutablePtr()) {
    *      auto current_value = *ref;
    *    };
    */
