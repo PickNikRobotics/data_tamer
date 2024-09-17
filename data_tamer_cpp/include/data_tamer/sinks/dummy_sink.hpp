@@ -2,6 +2,7 @@
 
 #include "data_tamer/data_sink.hpp"
 
+#include <mutex>
 #include <unordered_map>
 #include <shared_mutex>
 
