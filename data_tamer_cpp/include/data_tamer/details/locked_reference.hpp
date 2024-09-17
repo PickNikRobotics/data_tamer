@@ -1,38 +1,59 @@
 #pragma once
 
-#include "data_tamer/details/mutex.hpp"
-#include <utility>
+#include <shared_mutex>
 
-namespace DataTamer
-{
+using Mutex = std::shared_mutex;
 
 /**
- * @brief The MutablePtr is a wrapper to a
+ * @brief The ConstPtr is a wrapper to a const
  * pointer that locks a mutex in the constructor
  * and unlocks it in the destructor.
- * It allows the user to access the reference/pointer and modify the object.
  */
 template <typename T>
-class LockedPtr
+class ConstPtr
 {
 public:
-  LockedPtr(T* obj, Mutex* mutex);
-  LockedPtr(const LockedPtr&) = delete;
-  LockedPtr& operator=(const LockedPtr&) = delete;
-  LockedPtr(LockedPtr&&);
-  LockedPtr& operator=(LockedPtr&&);
-  ~LockedPtr();
+  ConstPtr(const T* obj, Mutex* mutex);
+  ConstPtr(const ConstPtr&) = delete;
+  ConstPtr& operator=(const ConstPtr&) = delete;
+  ConstPtr(ConstPtr&&);
+  ConstPtr& operator=(ConstPtr&&);
+  ~ConstPtr();
 
-  /// True if the object is not nullptr
-  operator bool() const { return obj_ != nullptr; }
-  /// Return the reference
-  T& operator*() { return *obj_; }
-  /// Return the pointer
-  T* operator->() { return obj_; }
+  operator bool() const;
+  Mutex* mutex();
+  const T& operator*() const;
+  const T* operator->() const;
+
+private:
+  const T* obj_ = nullptr;
+  Mutex* mutex_;
+};
+
+/**
+ * @brief The ConstPtr is a wrapper to a
+ * pointer that locks a mutex in the constructor
+ * and unlocks it in the destructor.
+ */
+template <typename T>
+class MutablePtr
+{
+public:
+  MutablePtr(T* obj, Mutex* mutex);
+  MutablePtr(const MutablePtr&) = delete;
+  MutablePtr& operator=(const MutablePtr&) = delete;
+  MutablePtr(MutablePtr&&);
+  MutablePtr& operator=(MutablePtr&&);
+  ~MutablePtr();
+
+  operator bool() const;
+  Mutex* mutex();
+  T& operator*();
+  T* operator->();
 
 private:
   T* obj_ = nullptr;
-  Mutex* mutex_ = nullptr;
+  Mutex* mutex_;
 };
 
 //----------------------------------------------------
@@ -40,7 +61,63 @@ private:
 //----------------------------------------------------
 
 template <typename T>
-inline LockedPtr<T>::LockedPtr(T* obj, Mutex* mutex) : obj_(obj), mutex_(mutex)
+inline ConstPtr<T>::ConstPtr(const T* obj, Mutex* mutex) : obj_(obj), mutex_(mutex)
+{
+  if(mutex_)
+  {
+    mutex_->lock_shared();
+  }
+}
+
+template <typename T>
+inline ConstPtr<T>::ConstPtr(ConstPtr&& other) : obj_(other.obj_), mutex_(other.mutex_)
+{}
+
+template <typename T>
+inline ConstPtr<T>& ConstPtr<T>::operator=(ConstPtr&& other)
+{
+  mutex_ = other.mutex_;
+  std::swap(obj_, other.obj_);
+  return *this;
+}
+
+template <typename T>
+inline ConstPtr<T>::~ConstPtr()
+{
+  if(mutex_)
+  {
+    mutex_->unlock_shared();
+  }
+}
+
+template <typename T>
+inline ConstPtr<T>::operator bool() const
+{
+  return obj_ != nullptr;
+}
+
+template <typename T>
+inline Mutex *ConstPtr<T>::mutex()
+{
+  return mutex_;
+}
+
+template <typename T>
+inline const T& ConstPtr<T>::operator*() const
+{
+  return *obj_;
+}
+
+template <typename T>
+inline const T* ConstPtr<T>::operator->() const
+{
+  return obj_;
+}
+
+//----------------------------------------------------
+
+template <typename T>
+inline MutablePtr<T>::MutablePtr(T* obj, Mutex *mutex) : obj_(obj), mutex_(mutex)
 {
   if(mutex_)
   {
@@ -49,13 +126,13 @@ inline LockedPtr<T>::LockedPtr(T* obj, Mutex* mutex) : obj_(obj), mutex_(mutex)
 }
 
 template <typename T>
-inline LockedPtr<T>::LockedPtr(LockedPtr&& other) : mutex_(other.mutex_)
+inline MutablePtr<T>::MutablePtr(MutablePtr&& other) : mutex_(other.mutex_)
 {
   std::swap(obj_, other.obj_);
 }
 
 template <typename T>
-inline LockedPtr<T>& LockedPtr<T>::operator=(LockedPtr<T>&& other)
+inline MutablePtr<T>& MutablePtr<T>::operator=(MutablePtr<T>&& other)
 {
   mutex_ = other.mutex_;
   std::swap(obj_, other.obj_);
@@ -63,7 +140,7 @@ inline LockedPtr<T>& LockedPtr<T>::operator=(LockedPtr<T>&& other)
 }
 
 template <typename T>
-inline LockedPtr<T>::~LockedPtr()
+inline MutablePtr<T>::~MutablePtr()
 {
   if(mutex_)
   {
@@ -71,4 +148,26 @@ inline LockedPtr<T>::~LockedPtr()
   }
 }
 
-}  // namespace DataTamer
+template <typename T>
+inline MutablePtr<T>::operator bool() const
+{
+  return obj_ != nullptr;
+}
+
+template <typename T>
+inline Mutex* MutablePtr<T>::mutex()
+{
+  return mutex_;
+}
+
+template <typename T>
+inline T& MutablePtr<T>::operator*()
+{
+  return *obj_;
+}
+
+template <typename T>
+inline T* MutablePtr<T>::operator->()
+{
+  return obj_;
+}

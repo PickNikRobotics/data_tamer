@@ -1,7 +1,7 @@
 #pragma once
 
 #include "data_tamer/data_sink.hpp"
-#include "data_tamer/details/mutex.hpp"
+#include "data_tamer/details/locked_reference.hpp"
 #include "data_tamer_msgs/msg/schemas.hpp"
 #include "data_tamer_msgs/msg/snapshot.hpp"
 #include <unordered_map>

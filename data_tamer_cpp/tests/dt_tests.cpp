@@ -275,7 +275,7 @@ TEST(DataTamerBasic, LockedPtr)
   EXPECT_EQ(logged_float->get(), val);
 
   {
-    auto ptr = logged_float->getLockedPtr();
+    auto ptr = logged_float->getMutablePtr();
 
     // expect that we can get the pointer
     EXPECT_TRUE(ptr);
@@ -286,7 +286,7 @@ TEST(DataTamerBasic, LockedPtr)
   }
 
   // we should be able to get it again now that ptr is out of scope
-  EXPECT_TRUE(logged_float->getLockedPtr());
+  EXPECT_TRUE(logged_float->getMutablePtr());
 
   // now expect that our assignment to the locked pointer took place
   EXPECT_EQ(logged_float->get(), val2);

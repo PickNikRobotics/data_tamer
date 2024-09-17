@@ -2,7 +2,6 @@
 
 #include "data_tamer/values.hpp"
 #include "data_tamer/data_sink.hpp"
-#include "data_tamer/details/mutex.hpp"
 #include "data_tamer/logged_value.hpp"
 
 #include <chrono>
@@ -388,13 +387,23 @@ inline T LoggedValue<T>::get()
 }
 
 template <typename T>
-inline LockedPtr<T> LoggedValue<T>::getLockedPtr()
+inline MutablePtr<T> LoggedValue<T>::getMutablePtr()
 {
   if(auto channel = channel_.lock())
   {
-    return LockedPtr<T>(&value_, &channel->writeMutex());
+    return MutablePtr<T>(&value_, &channel->writeMutex());
   }
-  return LockedPtr<T>(&value_, nullptr);
+  return MutablePtr<T>(&value_, nullptr);
+}
+
+template <typename T>
+inline ConstPtr<T> LoggedValue<T>::getConstPtr()
+{
+  if(auto channel = channel_.lock())
+  {
+    return ConstPtr<T>(&value_, &channel->writeMutex());
+  }
+  return ConstPtr<T>(&value_, nullptr);
 }
 
 }  // namespace DataTamer

@@ -48,15 +48,32 @@ public:
   /// @brief get the stored value.
   [[nodiscard]] T get();
 
-  /// This method allows us to access a reference to the object in a thread-safe way.
-  /// A mutex remain locked as long as LockedPtr<> exists, therefore you should destroy
-  /// it as soon as you used the reference. Example:
-  ///
-  /// if(auto ref = value->getLockedPtr())
-  /// {
-  ///   *ref += 1;
-  /// }
-  [[nodiscard]] LockedPtr<T> getLockedPtr();
+  [[deprecated("use getMutablePtr() instead")]] [[nodiscard]] MutablePtr<T> getLockedPtr()
+  {
+    return getMutablePtr();
+  }
+
+  /** This method allows the user to access the object by reference (read/write access),
+   *  in a thread-safe way.
+   *
+   *  Usage:
+   *
+   *    if(auto ref = value->getMutablePtr()) {
+   *      auto current_value = *ref;
+   *    };
+   */
+  [[nodiscard]] MutablePtr<T> getMutablePtr();
+
+  /** This method allows the user to access the object as const reference (read-only)
+   *  in a thread-safe way.
+   *
+   *  Usage:
+   *
+   *    if(auto ref = value->getMutablePtr()) {
+   *      auto current_value = *ref;
+   *    };
+   */
+  [[nodiscard]] ConstPtr<T> getConstPtr();
 
   /// @brief Disabling a LoggedValue means that we will not record it in the snapshot
   void setEnabled(bool enabled);

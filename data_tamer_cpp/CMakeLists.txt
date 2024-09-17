@@ -69,7 +69,7 @@ add_library(data_tamer ${LIB_TYPE}
 
     src/sinks/mcap_sink.cpp
     ${ROS2_SINK}
-    include/data_tamer/details/mutex.hpp
+
     include/data_tamer/logged_value.hpp
 )
 
