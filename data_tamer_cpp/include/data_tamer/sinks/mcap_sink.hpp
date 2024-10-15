@@ -25,7 +25,7 @@ public:
    * @brief MCAPSink.
    * IMPORTANT: if you want the recorder to be more robust to crash/segfault,
    * set `do_compression` to false.
-   * Compression is dafe if your application is closing cleanly.
+   * Compression is safe if your application is closing cleanly.
    *
    * @param filepath   path of the file to be saved. Should have extension ".mcap"
    * @param do_compression if true, compress the data on the fly.
@@ -40,6 +40,8 @@ public:
 
   /// After a certain amount of time, the MCAP file will be reset
   /// and overwritten. Default value is 600 seconds (10 minutes)
+  /// To disable this feature, use a time of 0 seconds.
+  /// WARNING: this can consume a large amount of disk space very quickly.
   void setMaxTimeBeforeReset(std::chrono::seconds reset_time);
 
   /// Stop recording and save the file
@@ -67,6 +69,7 @@ private:
   std::chrono::system_clock::time_point start_time_;
 
   bool forced_stop_recording_ = false;
+  bool unlimited_recording_ = false;
   std::recursive_mutex mutex_;
 
   void openFile(std::string const& filepath);
