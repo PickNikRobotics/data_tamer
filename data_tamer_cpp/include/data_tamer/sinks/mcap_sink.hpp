@@ -69,7 +69,6 @@ private:
   std::chrono::system_clock::time_point start_time_;
 
   bool forced_stop_recording_ = false;
-  bool unlimited_recording_ = false;
   std::recursive_mutex mutex_;
 
   void openFile(std::string const& filepath);
