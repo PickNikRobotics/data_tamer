@@ -1,6 +1,7 @@
 #include "data_tamer/sinks/mcap_sink.hpp"
 #include "data_tamer/contrib/SerializeMe.hpp"
 
+#include <chrono>
 #include <sstream>
 #include <mutex>
 
@@ -118,7 +119,7 @@ bool MCAPSink::storeSnapshot(const Snapshot& snapshot)
   // If reset_time_ is exceeded, we want to overwrite the current file.
   // Better than filling the disk, if you forgot to stop the application.
   auto const now = std::chrono::system_clock::now();
-  if(now - start_time_ > reset_time_)
+  if(reset_time_ != std::chrono::seconds(0) && now - start_time_ > reset_time_)
   {
     restartRecording(filepath_, compression_);
   }
