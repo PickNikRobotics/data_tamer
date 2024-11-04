@@ -19,7 +19,11 @@ option(BUILD_SHARED_LIBS "Build using shared libraries" OFF)
 # optionally build for ROS 2
 option(BUILD_ROS "Build for ROS 2" ON)
 if (BUILD_ROS)
-    find_package(ament_cmake REQUIRED)
+    find_package(ament_cmake QUIET)
+    if (NOT ament_cmake_FOUND)
+        set(BUILD_ROS FALSE)
+        message(WARNING "ament_cmake not found, building without ROS 2 support. Set BUILD_ROS to false to disable this warning.")
+    endif()
 endif()
 
 ###########################################
@@ -49,7 +53,7 @@ else()
 endif()
 
 if(BUILD_ROS AND NOT BUILD_SHARED_LIBS)
-    message("BUILD_SHARED_LIBS forced to ON (i.e. SHARED) in ROS2")
+    message("BUILD_SHARED_LIBS forced to ON (i.e. SHARED) in ROS2. Set BUILD_SHARED_LIBS to false to disable this warning when building with ROS.")
 endif()
 
 add_library(data_tamer ${LIB_TYPE}
