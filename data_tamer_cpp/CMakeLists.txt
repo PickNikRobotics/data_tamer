@@ -53,7 +53,7 @@ else()
 endif()
 
 if(DATA_TAMER_BUILD_ROS AND NOT BUILD_SHARED_LIBS)
-    message("BUILD_SHARED_LIBS forced to ON (i.e. SHARED) in ROS2. Set BUILD_SHARED_LIBS to false to disable this warning when building with ROS.")
+    message("BUILD_SHARED_LIBS forced to ON (i.e. SHARED) in ROS2. Set BUILD_SHARED_LIBS to true to disable this warning when building with ROS.")
 endif()
 
 add_library(data_tamer ${LIB_TYPE}
