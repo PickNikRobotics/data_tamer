@@ -17,12 +17,12 @@ endif()
 option(BUILD_SHARED_LIBS "Build using shared libraries" OFF)
 
 # optionally build for ROS 2
-option(BUILD_ROS "Build for ROS 2" ON)
-if (BUILD_ROS)
+option(DATA_TAMER_BUILD_ROS "Build for ROS 2" ON)
+if (DATA_TAMER_BUILD_ROS)
     find_package(ament_cmake QUIET)
     if (NOT ament_cmake_FOUND)
-        set(BUILD_ROS FALSE)
-        message(WARNING "ament_cmake not found, building without ROS 2 support. Set BUILD_ROS to false to disable this warning.")
+        set(DATA_TAMER_BUILD_ROS FALSE)
+        message(WARNING "ament_cmake not found, building without ROS 2 support. Set DATA_TAMER_BUILD_ROS to false to disable this warning.")
     endif()
 endif()
 
@@ -30,7 +30,7 @@ endif()
 # check if mcap can be found. If true,
 # probably we used conan. If false, build from 3rdparty
 find_package(mcap QUIET)
-if(NOT mcap_FOUND AND NOT BUILD_ROS)
+if(NOT mcap_FOUND AND NOT DATA_TAMER_BUILD_ROS)
     set(USE_VENDORED_MCAP ON)
     message(STATUS "MCAP from 3rdparty")
     add_subdirectory(3rdparty/mcap)
@@ -42,17 +42,17 @@ endif()
 ###########################################
 
 
-if (BUILD_ROS)
+if (DATA_TAMER_BUILD_ROS)
     set(ROS2_SINK src/sinks/ros2_publisher_sink.cpp)
 endif()
 
-if(BUILD_SHARED_LIBS OR BUILD_ROS)
+if(BUILD_SHARED_LIBS OR DATA_TAMER_BUILD_ROS)
     set(LIB_TYPE SHARED)
 else()
     set(LIB_TYPE STATIC)
 endif()
 
-if(BUILD_ROS AND NOT BUILD_SHARED_LIBS)
+if(DATA_TAMER_BUILD_ROS AND NOT BUILD_SHARED_LIBS)
     message("BUILD_SHARED_LIBS forced to ON (i.e. SHARED) in ROS2. Set BUILD_SHARED_LIBS to false to disable this warning when building with ROS.")
 endif()
 
@@ -98,7 +98,7 @@ find_package(ament_cmake QUIET)
 
 set(INSTALL_TARGETS data_tamer)
 
-if (BUILD_ROS)
+if (DATA_TAMER_BUILD_ROS)
     message(STATUS "Compiling for ROS2")
     target_compile_definitions(data_tamer PUBLIC USING_ROS2=1 )
 
@@ -138,7 +138,7 @@ install(
   INCLUDES DESTINATION include
 )
 
-if (NOT COMPILING_FOR_ROS2 )
+if (NOT DATA_TAMER_BUILD_ROS)
 
     set(LIBRARY_INSTALL_DIR lib)
     set(INCLUDE_INSTALL_DIR include)
