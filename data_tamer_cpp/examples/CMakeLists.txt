@@ -15,7 +15,9 @@ add_executable(mcap_reader mcap_reader.cpp)
 target_include_directories(mcap_reader
  PUBLIC $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>)
 
-if ( ament_cmake_FOUND )
+# optionally build for ROS 2
+option(DATA_TAMER_BUILD_ROS "Build for ROS 2" ON)
+if ( DATA_TAMER_BUILD_ROS AND ament_cmake_FOUND )
     ament_target_dependencies(mcap_reader mcap_vendor)
 
     CompileExample(ros2_publisher)
