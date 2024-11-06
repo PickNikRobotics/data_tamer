@@ -68,46 +68,73 @@ using SpanBytes = Span<uint8_t>;
 using SpanBytesConst = Span<uint8_t const>;
 using StringSize = uint16_t;
 
-//------------- Forward declarations of BufferSize ------------------
+// Check if a Function like this is implemented:
+//
+// template <typename Func> std::string_view TypeDefinition(T&, Func&);
+
+template <typename T, class = void>
+struct has_TypeDefinition : std::false_type
+{
+};
+
+const auto EmptyFuncion = [](const char*, void*) {};
+using EmptyFunc = decltype(EmptyFuncion);
+
+template <typename T1, typename T2>
+using enable_if_same_t = std::enable_if_t<std::is_same_v<T1, T2>>;
 
 template <typename T>
+struct has_TypeDefinition<
+    T, enable_if_same_t<std::string_view,
+                        decltype(TypeDefinition(std::declval<T&>(),
+                                                std::declval<EmptyFunc&>()))>>
+  : std::true_type
+{
+};
+
+//------------- Forward declarations of BufferSize ------------------
+
+template <typename T, bool = true>
 size_t BufferSize(const T& val);
 
 template <>
 size_t BufferSize(const std::string& str);
 
-template <class T, size_t N>
+template <class T, size_t N, std::enable_if_t<!has_TypeDefinition<std::array<T, N>>::value, bool> = true>
 size_t BufferSize(const std::array<T, N>& v);
 
-template <template <class, class> class Container, class T, class... TArgs>
+template <template <class, class> class Container, class T, class... TArgs,
+          std::enable_if_t<!has_TypeDefinition<Container<T, TArgs...>>::value, bool> = true>
 size_t BufferSize(const Container<T, TArgs...>& vect);
 
 //---------- Forward declarations of DeserializeFromBuffer -----------
 
-template <typename T>
+template <typename T, bool = true>
 void DeserializeFromBuffer(SpanBytesConst& buffer, T& dest);
 
 template <>
 void DeserializeFromBuffer(SpanBytesConst& buffer, std::string& str);
 
-template <class T, size_t N>
+template <class T, size_t N, std::enable_if_t<!has_TypeDefinition<std::array<T, N>>::value, bool> = true>
 void DeserializeFromBuffer(SpanBytesConst& buffer, std::array<T, N>& v);
 
-template <template <class, class> class Container, class T, class... TArgs>
+template <template <class, class> class Container, class T, class... TArgs,
+          std::enable_if_t<!has_TypeDefinition<Container<T, TArgs...>>::value, bool> = true>
 void DeserializeFromBuffer(SpanBytesConst& buffer, Container<T, TArgs...>& dest);
 
 //---------- Forward declarations of SerializeIntoBuffer -----------
 
-template <typename T>
+template <typename T, bool = true>
 void SerializeIntoBuffer(SpanBytes& buffer, const T& value);
 
 template <>
 void SerializeIntoBuffer(SpanBytes& buffer, const std::string& str);
 
-template <class T, size_t N>
+template <class T, size_t N, std::enable_if_t<!has_TypeDefinition<std::array<T, N>>::value, bool> = true>
 void SerializeIntoBuffer(SpanBytes& buffer, const std::array<T, N>& v);
 
-template <template <class, class> class Container, class T, class... TArgs>
+template <template <class, class> class Container, class T, class... TArgs,
+          std::enable_if_t<!has_TypeDefinition<Container<T, TArgs...>>::value, bool> = true>
 void SerializeIntoBuffer(SpanBytes& buffer, const Container<T, TArgs...>& vect);
 
 //-----------------------------------------------------------------------
@@ -228,31 +255,6 @@ inline T EndianSwap(T t)
     std::runtime_error("Problem with IndianSwap");
   }
 }
-
-// Check if a Function like this is implemented:
-//
-// template <typename Func> std::string_view TypeDefinition(T&, Func&);
-
-template <typename T, class = void>
-struct has_TypeDefinition : std::false_type
-{
-};
-
-const auto EmptyFuncion = [](const char*, void*) {};
-using EmptyFunc = decltype(EmptyFuncion);
-
-template <typename T1, typename T2>
-using enable_if_same_t = std::enable_if_t<std::is_same_v<T1, T2>>;
-
-template <typename T>
-struct has_TypeDefinition<
-    T, enable_if_same_t<std::string_view,
-                        decltype(TypeDefinition(std::declval<T&>(),
-                                                std::declval<EmptyFunc&>()))>>
-  : std::true_type
-{
-};
-
 template <typename T>
 inline constexpr bool is_number()
 {
@@ -314,7 +316,7 @@ inline constexpr bool is_vector()
 //-----------------------------------------------------------------------
 //-----------------------------------------------------------------------
 
-template <typename T>
+template <typename T, bool>
 inline size_t BufferSize(const T& val)
 {
   static_assert(is_number<T>() || has_TypeDefinition<T>(), "Missing TypeDefinition");
@@ -341,13 +343,15 @@ inline size_t BufferSize(const std::string& str)
   return sizeof(StringSize) + str.size();
 }
 
-template <class T, size_t N>
+template <class T, size_t N,
+          std::enable_if_t<!has_TypeDefinition<std::array<T, N>>::value, bool>>
 inline size_t BufferSize(const std::array<T, N>&)
 {
   return BufferSize(T{}) * N;
 }
 
-template <template <class, class> class Container, class T, class... TArgs>
+template <template <class, class> class Container, class T, class... TArgs,
+          std::enable_if_t<!has_TypeDefinition<Container<T, TArgs...>>::value, bool>>
 inline size_t BufferSize(const Container<T, TArgs...>& vect)
 {
   if constexpr(std::is_trivially_copyable_v<T> && is_vector<Container<T, TArgs...>>())
@@ -369,7 +373,7 @@ inline size_t BufferSize(const Container<T, TArgs...>& vect)
 //-----------------------------------------------------------------------
 //-----------------------------------------------------------------------
 
-template <typename T>
+template <typename T, bool>
 inline void DeserializeFromBuffer(SpanBytesConst& buffer, T& dest)
 {
   static_assert(is_number<T>() || has_TypeDefinition<T>(), "Missing TypeDefinition");
@@ -412,7 +416,8 @@ inline void DeserializeFromBuffer(SpanBytesConst& buffer, std::string& dest)
   buffer.trimFront(size);
 }
 
-template <typename T, size_t N>
+template <typename T, size_t N,
+          std::enable_if_t<!has_TypeDefinition<std::array<T, N>>::value, bool>>
 inline void DeserializeFromBuffer(SpanBytesConst& buffer, std::array<T, N>& dest)
 {
   if(N * BufferSize(T{}) > buffer.size())
@@ -434,7 +439,8 @@ inline void DeserializeFromBuffer(SpanBytesConst& buffer, std::array<T, N>& dest
   }
 }
 
-template <template <class, class> class Container, class T, class... TArgs>
+template <template <class, class> class Container, class T, class... TArgs,
+          std::enable_if_t<!has_TypeDefinition<Container<T, TArgs...>>::value, bool>>
 inline void DeserializeFromBuffer(SpanBytesConst& buffer, Container<T, TArgs...>& dest)
 {
   uint32_t num_values = 0;
@@ -475,7 +481,7 @@ inline void DeserializeFromBuffer(SpanBytesConst& buffer, Container<T, TArgs...>
 //-----------------------------------------------------------------------
 //-----------------------------------------------------------------------
 
-template <typename T>
+template <typename T, bool>
 inline void SerializeIntoBuffer(SpanBytes& buffer, T const& value)
 {
   static_assert(is_number<T>() || has_TypeDefinition<T>(), "Missing TypeDefinition");
@@ -523,7 +529,8 @@ inline void SerializeIntoBuffer(SpanBytes& buffer, std::string const& str)
   buffer.trimFront(size);
 }
 
-template <typename T, size_t N>
+template <typename T, size_t N,
+          std::enable_if_t<!has_TypeDefinition<std::array<T, N>>::value, bool>>
 inline void SerializeIntoBuffer(SpanBytes& buffer, std::array<T, N> const& vect)
 {
   if(N > std::numeric_limits<uint32_t>::max())
@@ -553,7 +560,8 @@ inline void SerializeIntoBuffer(SpanBytes& buffer, std::array<T, N> const& vect)
   }
 }
 
-template <template <class, class> class Container, class T, class... TArgs>
+template <template <class, class> class Container, class T, class... TArgs,
+          std::enable_if_t<!has_TypeDefinition<Container<T, TArgs...>>::value, bool>>
 inline void SerializeIntoBuffer(SpanBytes& buffer, Container<T, TArgs...> const& vect)
 {
   const auto num_values = static_cast<uint32_t>(vect.size());
