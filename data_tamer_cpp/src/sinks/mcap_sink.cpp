@@ -4,6 +4,7 @@
 #include <chrono>
 #include <sstream>
 #include <mutex>
+#include <string>
 
 #ifndef USING_ROS2
 #define MCAP_IMPLEMENTATION
@@ -35,7 +36,7 @@ namespace DataTamer
 static constexpr char const* kDataTamer = "data_tamer";
 
 MCAPSink::MCAPSink(const std::string& filepath, bool do_compression)
-  : filepath_(filepath), compression_(do_compression)
+  : filepath_(filepath), compression_(do_compression), original_filepath_(filepath)
 {
   openFile(filepath_);
 }
@@ -121,7 +122,13 @@ bool MCAPSink::storeSnapshot(const Snapshot& snapshot)
   auto const now = std::chrono::system_clock::now();
   if(reset_time_ != std::chrono::seconds(0) && now - start_time_ > reset_time_)
   {
-    restartRecording(filepath_, compression_);
+    if(create_file_on_reset_)
+    {
+      // change the current filepath to the original with "_[# resets]"" appended
+      filepath_ = original_filepath_ + "_" + std::to_string(file_reset_counter_);
+      ++file_reset_counter_;
+    }
+    restartRecordingImpl(filepath_, compression_, false);
   }
   return true;
 }
@@ -129,6 +136,11 @@ bool MCAPSink::storeSnapshot(const Snapshot& snapshot)
 void MCAPSink::setMaxTimeBeforeReset(std::chrono::seconds reset_time)
 {
   reset_time_ = reset_time;
+}
+
+void MCAPSink::setCreateNewFileOnReset(bool create_file_on_reset)
+{
+  create_file_on_reset_ = create_file_on_reset;
 }
 
 void MCAPSink::stopRecording()
@@ -141,7 +153,19 @@ void MCAPSink::stopRecording()
 
 void MCAPSink::restartRecording(const std::string& filepath, bool do_compression)
 {
+  restartRecordingImpl(filepath, do_compression, true);
+}
+
+void MCAPSink::restartRecordingImpl(const std::string& filepath, bool do_compression,
+                                    bool new_file)
+{
   std::scoped_lock lk(mutex_);
+  if(new_file)
+  {
+    // if this was called by a user, we need to change the filepath that we will increment when reset
+    file_reset_counter_ = 1;
+    original_filepath_ = filepath;
+  }
   filepath_ = filepath;
   compression_ = do_compression;
   openFile(filepath_);
