@@ -16,17 +16,21 @@ endif()
 
 option(BUILD_SHARED_LIBS "Build using shared libraries" OFF)
 
-find_package(ament_cmake QUIET)
-
-if (ament_cmake_FOUND)
-    set(COMPILING_FOR_ROS2 ON)
+# optionally build for ROS 2
+option(DATA_TAMER_BUILD_ROS "Build for ROS 2" ON)
+if (DATA_TAMER_BUILD_ROS)
+    find_package(ament_cmake QUIET)
+    if (NOT ament_cmake_FOUND)
+        set(DATA_TAMER_BUILD_ROS FALSE)
+        message(WARNING "ament_cmake not found, building without ROS 2 support. Set DATA_TAMER_BUILD_ROS to false to disable this warning.")
+    endif()
 endif()
 
 ###########################################
 # check if mcap can be found. If true,
 # probably we used conan. If false, build from 3rdparty
 find_package(mcap QUIET)
-if(NOT mcap_FOUND AND NOT COMPILING_FOR_ROS2)
+if(NOT mcap_FOUND AND NOT DATA_TAMER_BUILD_ROS)
     set(USE_VENDORED_MCAP ON)
     message(STATUS "MCAP from 3rdparty")
     add_subdirectory(3rdparty/mcap)
@@ -38,19 +42,18 @@ endif()
 ###########################################
 
 
-if (COMPILING_FOR_ROS2)
-    set(COMPILING_FOR_ROS2 ON)
+if (DATA_TAMER_BUILD_ROS)
     set(ROS2_SINK src/sinks/ros2_publisher_sink.cpp)
 endif()
 
-if(BUILD_SHARED_LIBS OR COMPILING_FOR_ROS2)
+if(BUILD_SHARED_LIBS OR DATA_TAMER_BUILD_ROS)
     set(LIB_TYPE SHARED)
 else()
     set(LIB_TYPE STATIC)
 endif()
 
-if(COMPILING_FOR_ROS2 AND NOT BUILD_SHARED_LIBS)
-    message("BUILD_SHARED_LIBS forced to ON (i.e. SHARED) in ROS2")
+if(DATA_TAMER_BUILD_ROS AND NOT BUILD_SHARED_LIBS)
+    message("BUILD_SHARED_LIBS forced to ON (i.e. SHARED) in ROS2. Set BUILD_SHARED_LIBS to true to disable this warning when building with ROS.")
 endif()
 
 add_library(data_tamer ${LIB_TYPE}
@@ -95,10 +98,9 @@ find_package(ament_cmake QUIET)
 
 set(INSTALL_TARGETS data_tamer)
 
-if ( COMPILING_FOR_ROS2 )
+if (DATA_TAMER_BUILD_ROS)
     message(STATUS "Compiling for ROS2")
     target_compile_definitions(data_tamer PUBLIC USING_ROS2=1 )
-    set(COMPILING_FOR_ROS2 true)
 
     find_package(mcap_vendor REQUIRED)
     find_package(rclcpp REQUIRED)
@@ -136,7 +138,7 @@ install(
   INCLUDES DESTINATION include
 )
 
-if (NOT COMPILING_FOR_ROS2 )
+if (NOT DATA_TAMER_BUILD_ROS)
 
     set(LIBRARY_INSTALL_DIR lib)
     set(INCLUDE_INSTALL_DIR include)
