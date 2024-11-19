@@ -251,7 +251,7 @@ inline void LogChannel::updateTypeRegistry()
     auto func = [this, &fields](const char* field_name, const auto* member) {
       using MemberType =
           typename std::remove_cv_t<std::remove_reference_t<decltype(*member)>>;
-      updateTypeRegistryImpl<MemberType>(fields, field_name);
+      this->updateTypeRegistryImpl<MemberType>(fields, field_name);
     };
     T dummy;
     TypeDefinition(dummy, func);

@@ -202,7 +202,6 @@ inline CustomSerializer::Ptr TypesRegistry::getSerializer()
                                                                 "as template type");
 
   std::scoped_lock lk(_mutex);
-  T dummy;
   const std::string type_name(CustomTypeName<T>::get());
   auto it = _types.find(type_name);
 

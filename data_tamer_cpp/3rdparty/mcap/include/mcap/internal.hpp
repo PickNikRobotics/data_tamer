@@ -69,7 +69,7 @@ inline const std::string CompressionString(Compression compression) {
 }
 
 inline uint16_t ParseUint16(const std::byte* data) {
-  return uint16_t(data[0]) | (uint16_t(data[1]) << 8);
+  return uint16_t(data[0]) | uint16_t(uint16_t(data[1]) << 8);
 }
 
 inline uint32_t ParseUint32(const std::byte* data) {
