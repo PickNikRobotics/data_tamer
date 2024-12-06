@@ -100,11 +100,13 @@ size_t BufferSize(const T& val);
 template <>
 size_t BufferSize(const std::string& str);
 
-template <class T, size_t N, std::enable_if_t<!has_TypeDefinition<std::array<T, N>>::value, bool> = true>
+template <class T, size_t N,
+          std::enable_if_t<!has_TypeDefinition<std::array<T, N>>::value, bool> = true>
 size_t BufferSize(const std::array<T, N>& v);
 
-template <template <class, class> class Container, class T, class... TArgs,
-          std::enable_if_t<!has_TypeDefinition<Container<T, TArgs...>>::value, bool> = true>
+template <
+    template <class, class> class Container, class T, class... TArgs,
+    std::enable_if_t<!has_TypeDefinition<Container<T, TArgs...>>::value, bool> = true>
 size_t BufferSize(const Container<T, TArgs...>& vect);
 
 //---------- Forward declarations of DeserializeFromBuffer -----------
@@ -115,11 +117,13 @@ void DeserializeFromBuffer(SpanBytesConst& buffer, T& dest);
 template <>
 void DeserializeFromBuffer(SpanBytesConst& buffer, std::string& str);
 
-template <class T, size_t N, std::enable_if_t<!has_TypeDefinition<std::array<T, N>>::value, bool> = true>
+template <class T, size_t N,
+          std::enable_if_t<!has_TypeDefinition<std::array<T, N>>::value, bool> = true>
 void DeserializeFromBuffer(SpanBytesConst& buffer, std::array<T, N>& v);
 
-template <template <class, class> class Container, class T, class... TArgs,
-          std::enable_if_t<!has_TypeDefinition<Container<T, TArgs...>>::value, bool> = true>
+template <
+    template <class, class> class Container, class T, class... TArgs,
+    std::enable_if_t<!has_TypeDefinition<Container<T, TArgs...>>::value, bool> = true>
 void DeserializeFromBuffer(SpanBytesConst& buffer, Container<T, TArgs...>& dest);
 
 //---------- Forward declarations of SerializeIntoBuffer -----------
@@ -130,11 +134,13 @@ void SerializeIntoBuffer(SpanBytes& buffer, const T& value);
 template <>
 void SerializeIntoBuffer(SpanBytes& buffer, const std::string& str);
 
-template <class T, size_t N, std::enable_if_t<!has_TypeDefinition<std::array<T, N>>::value, bool> = true>
+template <class T, size_t N,
+          std::enable_if_t<!has_TypeDefinition<std::array<T, N>>::value, bool> = true>
 void SerializeIntoBuffer(SpanBytes& buffer, const std::array<T, N>& v);
 
-template <template <class, class> class Container, class T, class... TArgs,
-          std::enable_if_t<!has_TypeDefinition<Container<T, TArgs...>>::value, bool> = true>
+template <
+    template <class, class> class Container, class T, class... TArgs,
+    std::enable_if_t<!has_TypeDefinition<Container<T, TArgs...>>::value, bool> = true>
 void SerializeIntoBuffer(SpanBytes& buffer, const Container<T, TArgs...>& vect);
 
 //-----------------------------------------------------------------------
@@ -177,8 +183,8 @@ inline void Span<T>::trimFront(size_t offset)
 #endif  // __s390x__
 #if !defined(SERIALIZE_LITTLEENDIAN)
 #if defined(__GNUC__) || defined(__clang__) || defined(__ICCARM__)
-#if(defined(__BIG_ENDIAN__) ||                                                           \
-    (defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__))
+#if (defined(__BIG_ENDIAN__) ||                                                          \
+     (defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__))
 #define SERIALIZE_LITTLEENDIAN 0
 #else
 #define SERIALIZE_LITTLEENDIAN 1
@@ -494,9 +500,10 @@ inline void SerializeIntoBuffer(SpanBytes& buffer, T const& value)
       throw std::runtime_error("SerializeIntoBuffer: buffer overflow");
     }
 #if SERIALIZE_LITTLEENDIAN == 0
-    *(reinterpret_cast<T*>(buffer.data())) = EndianSwap<T>(value);
+    T swapped = EndianSwap<T>(value);
+    std::memcpy(buffer.data(), &swapped, S);
 #else
-    *(reinterpret_cast<T*>(buffer.data())) = value;
+    std::memcpy(buffer.data(), &value, S);
 #endif
     buffer.trimFront(S);  // NOLINT
   }
