@@ -86,8 +86,6 @@ struct Schema
   std::map<std::string, FieldsVector> custom_types;
 };
 
-Schema BuilSchemaFromText(const std::string& txt);
-
 struct SnapshotView
 {
   /// Unique identifier of the schema
