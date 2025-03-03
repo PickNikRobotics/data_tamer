@@ -2,6 +2,42 @@
 Changelog for package data_tamer
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Forthcoming
+-----------
+* force the size of BasicType ot be 1 byte (`#47 <https://github.com/PickNikRobotics/data_tamer/issues/47>`_)
+  * force the size of BasicType ot be 1 byte
+  This fix the issue when the log is generated on two different computers
+  using different compilers (example Linux / QNX)
+  * fix
+* add file reset capabilities (`#37 <https://github.com/PickNikRobotics/data_tamer/issues/37>`_)
+* Enable users to build without ROS (`#36 <https://github.com/PickNikRobotics/data_tamer/issues/36>`_)
+  * make building with ROS an option
+  * clarify warnings, allow for default-building without ROS
+  * switch name of ros build flag
+  * add build ros argument for examples
+  * fix incorrect message
+* Merge pull request `#32 <https://github.com/PickNikRobotics/data_tamer/issues/32>`_ from PickNikRobotics/default_increment_filename
+  Allow endless recording
+* remove unused variable
+* allow for unlimited recording
+* use a new mutex wrapper API (`#27 <https://github.com/PickNikRobotics/data_tamer/issues/27>`_)
+  * use a new mutx wrapper API
+  * fix compilation
+  * change docstrings to reference non-deprecated function
+  * add now-missing includes
+  ---------
+  Co-authored-by: Henry Moore <henry.moore@picknik.ai>
+* Locked ptr test, documentation, and example (`#24 <https://github.com/PickNikRobotics/data_tamer/issues/24>`_)
+  * add locked ptr usage to example
+  * update comment relating to locked ptr
+  * remove unused headers
+  * add test for locked ptr and non-blocking method
+  * remove unsafe lockedPtr get function
+* Merge pull request `#23 <https://github.com/PickNikRobotics/data_tamer/issues/23>`_ from torsoelectronics/main
+  Fix compile error
+* Fix build error
+* Contributors: Daniel Mouritzen, Davide Faconti, Henry Moore
+
 1.0.0 (2024-04-30)
 ------------------
 * Support lifecycle node for ros2 publisher sink (`#17 <https://github.com/PickNikRobotics/data_tamer/issues/17>`_)
