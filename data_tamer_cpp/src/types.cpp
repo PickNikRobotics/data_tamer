@@ -97,7 +97,7 @@ uint64_t AddFieldToHash(const TypeField& field, uint64_t hash)
 {
   // https://stackoverflow.com/questions/2590677/how-do-i-combine-hash-values-in-c0x
   const std::hash<std::string> str_hasher;
-  const std::hash<BasicType> type_hasher;
+  const std::hash<uint8_t> type_hasher;
   const std::hash<bool> bool_hasher;
   const std::hash<uint32_t> uint_hasher;
 
@@ -106,7 +106,7 @@ uint64_t AddFieldToHash(const TypeField& field, uint64_t hash)
   };
 
   combine(str_hasher, field.field_name);
-  combine(type_hasher, field.type);
+  combine(type_hasher, static_cast<uint8_t>(field.type));
   if(field.type == BasicType::OTHER)
   {
     combine(str_hasher, field.type_name);

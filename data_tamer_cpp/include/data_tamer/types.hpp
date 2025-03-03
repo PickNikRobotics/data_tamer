@@ -15,7 +15,7 @@ namespace DataTamer
 constexpr int SCHEMA_VERSION = 4;
 
 // clang-format off
-enum class BasicType
+enum class BasicType: uint8_t
 {
   BOOL,
   CHAR,
