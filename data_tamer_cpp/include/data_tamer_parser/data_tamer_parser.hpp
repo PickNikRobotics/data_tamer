@@ -19,7 +19,7 @@ namespace DataTamerParser
 
 constexpr int SCHEMA_VERSION = 4;
 
-enum class BasicType
+enum class BasicType: uint8_t
 {
   BOOL,
   CHAR,
@@ -190,7 +190,7 @@ inline bool GetBit(BufferSpan mask, size_t index)
 {
   // https://stackoverflow.com/questions/2590677/how-do-i-combine-hash-values-in-c0x
   const std::hash<std::string> str_hasher;
-  const std::hash<BasicType> type_hasher;
+  const std::hash<uint8_t> type_hasher;
   const std::hash<bool> bool_hasher;
   const std::hash<uint32_t> uint_hasher;
 
@@ -199,7 +199,7 @@ inline bool GetBit(BufferSpan mask, size_t index)
   };
 
   combine(str_hasher, field.field_name);
-  combine(type_hasher, field.type);
+  combine(type_hasher, static_cast<uint8_t>(field.type));
   if(field.type == BasicType::OTHER)
   {
     combine(str_hasher, field.type_name);
@@ -216,7 +216,7 @@ bool TypeField::operator==(const TypeField& other) const
          type_name == other.type_name;
 }
 
-inline Schema BuilSchemaFromText(const std::string& txt)
+inline Schema BuilSchemaFromText(const std::string& txt, bool check_hash = false)
 {
   auto trimString = [](std::string& str) {
     while(!str.empty() && (str.back() == ' ' || str.back() == '\r'))
@@ -361,7 +361,7 @@ inline Schema BuilSchemaFromText(const std::string& txt)
 
     field_vector->push_back(field);
   }
-  if(declared_schema != 0 && declared_schema != schema.hash)
+  if(check_hash && declared_schema != 0 && declared_schema != schema.hash)
   {
     throw std::runtime_error("Error in hash calculation");
   }
