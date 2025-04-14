@@ -93,9 +93,6 @@ target_include_directories(data_tamer
 )
 target_compile_definitions(data_tamer PUBLIC -DDATA_TAMER_VERSION="${CMAKE_PROJECT_VERSION}")
 
-# detect if compiling in ROS2
-find_package(ament_cmake QUIET)
-
 set(INSTALL_TARGETS data_tamer)
 
 if (DATA_TAMER_BUILD_ROS)

@@ -1,4 +1,9 @@
+# look for gtest from ROS, but do not fail if it is not found
+find_package(gtest_vendor QUIET)
+
+# we must have gtest either from the ROS vendor (above) or on the system
 find_package(GTest REQUIRED)
+
 include(GoogleTest)
 
 add_executable(datatamer_test

@@ -20,6 +20,7 @@
   <depend>data_tamer_msgs</depend>
 
   <test_depend>ament_cmake_gtest</test_depend>
+  <test_depend>gtest_vendor</test_depend>
 
   <export>
       <build_type>ament_cmake</build_type>
