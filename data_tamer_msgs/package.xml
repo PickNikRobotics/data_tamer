@@ -5,8 +5,11 @@
   <version>1.0.1</version>
   <description>Interfaces for data_tamer</description>
   <maintainer email="davide.faconti@gmail.com">Davide Faconti</maintainer>
-  <author email="davide.faconti@gmail.com">Davide Faconti</author>
+  <maintainer email="henrygerardmoore@gmail.com">Henry Moore</maintainer>
+
   <license>MIT</license>
+
+  <author email="davide.faconti@gmail.com">Davide Faconti</author>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
   <buildtool_depend>rosidl_default_generators</buildtool_depend>

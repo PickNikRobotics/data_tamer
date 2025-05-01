@@ -1,4 +1,5 @@
 <?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>data_tamer_cpp</name>
   <version>1.0.1</version>
@@ -7,6 +8,7 @@
   </description>
 
   <maintainer email="davide.faconti@gmail.com">Davide Faconti</maintainer>
+  <maintainer email="henrygerardmoore@gmail.com">Henry Moore</maintainer>
 
   <license>MIT</license>
 
@@ -20,6 +22,7 @@
   <depend>data_tamer_msgs</depend>
 
   <test_depend>ament_cmake_gtest</test_depend>
+  <test_depend>gtest_vendor</test_depend>
 
   <export>
       <build_type>ament_cmake</build_type>
