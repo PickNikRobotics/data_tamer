@@ -1,8 +1,8 @@
 # look for gtest from ROS, but do not fail if it is not found
 find_package(gtest_vendor QUIET)
+find_package(ament_cmake_gtest QUIET)
 
-if(gtest_vendor_FOUND AND DATA_TAMER_BUILD_ROS)
-    find_package(ament_cmake_gtest REQUIRED)
+if(gtest_vendor_FOUND AND ament_cmake_gtest_FOUND)
     ament_add_gtest(datatamer_test
         dt_tests.cpp
         custom_types_tests.cpp
@@ -13,6 +13,12 @@ if(gtest_vendor_FOUND AND DATA_TAMER_BUILD_ROS)
 
     target_link_libraries(datatamer_test data_tamer)
 else()
+    if (NOT gtest_vendor_FOUND)
+        message(STATUS "gtest vendor not found, falling back to system GTest")
+    endif()
+    if (NOT ament_cmake_gtest_FOUND)
+        message(STATUS "ament_cmake_gtest not found, falling back to system GTest")
+    endif()
     # we must have gtest either from the ROS vendor (above) or on the system
     find_package(GTest REQUIRED)
 
