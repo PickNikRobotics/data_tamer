@@ -2,6 +2,23 @@
 Changelog for package data_tamer
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+1.0.2 (2025-05-12)
+-----------
+* Merge pull request `#52 <https://github.com/PickNikRobotics/data_tamer/issues/52>`_ from PickNikRobotics/fix_build_farm_3
+  Try installing test deps no matter what
+* try installing test deps no matter what
+* Merge pull request `#51 <https://github.com/PickNikRobotics/data_tamer/issues/51>`_ from PickNikRobotics/fix_build_farm_2
+  ignore build ros argument in test CMake
+* ignore build ros argument in test
+* Merge pull request `#50 <https://github.com/PickNikRobotics/data_tamer/issues/50>`_ from PickNikRobotics/fix_build_farm
+  Fix ament GTest usage
+* use ament add gtest
+* Merge pull request `#49 <https://github.com/PickNikRobotics/data_tamer/issues/49>`_ from PickNikRobotics/fix_gtest_link
+  Get gtest from vendor on ROS
+* add myself to maintainer list, add package xml scheme
+* get gtest from vendor on ROS
+* Contributors: Henry Moore
+
 1.0.1 (2025-03-03)
 ------------------
 * force the size of BasicType ot be 1 byte (`#47 <https://github.com/PickNikRobotics/data_tamer/issues/47>`_)
