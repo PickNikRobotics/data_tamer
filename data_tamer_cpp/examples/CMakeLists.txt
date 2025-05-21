@@ -18,7 +18,13 @@ target_include_directories(mcap_reader
 # optionally build for ROS 2
 option(DATA_TAMER_BUILD_ROS "Build for ROS 2" ON)
 if ( DATA_TAMER_BUILD_ROS AND ament_cmake_FOUND )
-    ament_target_dependencies(mcap_reader mcap_vendor)
+    target_include_directories(mcap_reader PUBLIC
+        ${mcap_vendor_INCLUDE_DIRS}
+    )
+    target_link_libraries(mcap_reader
+        data_tamer
+        ${mcap_vendor_LIBRARIES}
+    )
 
     CompileExample(ros2_publisher)
 

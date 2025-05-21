@@ -104,7 +104,23 @@ if (DATA_TAMER_BUILD_ROS)
     find_package(rclcpp_lifecycle REQUIRED)
     find_package(data_tamer_msgs REQUIRED)
 
-    ament_target_dependencies(data_tamer mcap_vendor rclcpp rclcpp_lifecycle data_tamer_msgs)
+    target_include_directories(data_tamer PUBLIC
+        ${mcap_vendor_INCLUDE_DIRS}
+        ${rclcpp_INCLUDE_DIRS}
+        ${rclcpp_lifecycle_INCLUDE_DIRS}
+        ${data_tamer_msgs_INCLUDE_DIRS}
+    )
+
+    # we need to find the underlying library for `target_link_libraries` to work
+    find_library(MCAP_LIBRARY mcap PATHS ${mcap_vendor_LIBRARY_DIRS})
+
+    target_link_libraries(data_tamer PUBLIC
+        ${mcap_vendor_LIBRARIES}
+        ${rclcpp_LIBRARIES}
+        ${rclcpp_lifecycle_LIBRARIES}
+        ${data_tamer_msgs_LIBRARIES}
+        ${MCAP_LIBRARY}
+    )
 
     ament_export_targets(data_tamerTargets HAS_LIBRARY_TARGET)
     ament_export_dependencies(mcap_vendor rclcpp rclcpp_lifecycle data_tamer_msgs)
