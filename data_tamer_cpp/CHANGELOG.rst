@@ -2,6 +2,10 @@
 Changelog for package data_tamer
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+1.0.3 (2025-05-23)
+-----------
+* Remove ament_target_dependencies usage
+
 1.0.2 (2025-05-12)
 -----------
 * Merge pull request `#52 <https://github.com/PickNikRobotics/data_tamer/issues/52>`_ from PickNikRobotics/fix_build_farm_3
