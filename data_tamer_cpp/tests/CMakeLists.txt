@@ -6,7 +6,8 @@ if(gtest_vendor_FOUND AND ament_cmake_gtest_FOUND)
     ament_add_gtest(datatamer_test
         dt_tests.cpp
         custom_types_tests.cpp
-        parser_tests.cpp)
+        parser_tests.cpp
+        trait_tests.cpp)
 
     target_include_directories(datatamer_test
         PUBLIC $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>)
