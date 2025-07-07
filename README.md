@@ -101,29 +101,28 @@ You can also register a custom type, as shown in the example below.
 #include "data_tamer/sinks/mcap_sink.hpp"
 #include "data_tamer/custom_types.hpp"
 
-// a custom type
+// This is your custom type
+namespace MyNamespace
+{
 struct Point3D
 {
   double x;
   double y;
   double z;
 };
+} // end namespace MyNamespace
 
-namespace DataTamer
+// You must implement the function TypeDefinition in the same namespace as Point3D
+namespace MyNamespace
 {
-template <> struct TypeDefinition<Point3D>
-{
-  // Provide the name of the type
-  std::string typeName() const { return "Point3D"; }
-  // List all the member variables that you want to be saved (including their name)
-  template <class Function> void typeDef(Function& addField)
-  {
-    addField("x", &Point3D::x);
-    addField("y", &Point3D::y);
-    addField("z", &Point3D::z);
-  }
+template <typename AddField>
+std::string_view TypeDefinition(Point3D& point, AddField& add) {
+  add("x", &point.x);
+  add("y", &point.y);
+  add("z", &point.z);
+  return "Point3D";
 }
-} // end namespace DataTamer
+} // end namespace MyNamespace
 
 int main()
 {
