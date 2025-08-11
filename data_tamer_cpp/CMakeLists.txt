@@ -8,9 +8,33 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
 
 # Find system dependencies for mcap
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(ZSTD REQUIRED libzstd)
-pkg_check_modules(LZ4 REQUIRED liblz4)
+find_package(PkgConfig QUIET)
+if(PkgConfig_FOUND)
+    pkg_check_modules(ZSTD REQUIRED libzstd)
+    pkg_check_modules(LZ4 REQUIRED liblz4)
+else()
+    # Fallback: try to find libraries manually
+    find_library(ZSTD_LIBRARY NAMES zstd libzstd)
+    find_path(ZSTD_INCLUDE_DIR NAMES zstd.h)
+    find_library(LZ4_LIBRARY NAMES lz4 liblz4)
+    find_path(LZ4_INCLUDE_DIR NAMES lz4.h)
+    
+    if(ZSTD_LIBRARY AND ZSTD_INCLUDE_DIR)
+        set(ZSTD_FOUND TRUE)
+        set(ZSTD_LIBRARIES ${ZSTD_LIBRARY})
+        set(ZSTD_INCLUDE_DIRS ${ZSTD_INCLUDE_DIR})
+    endif()
+    
+    if(LZ4_LIBRARY AND LZ4_INCLUDE_DIR)
+        set(LZ4_FOUND TRUE)
+        set(LZ4_LIBRARIES ${LZ4_LIBRARY})
+        set(LZ4_INCLUDE_DIRS ${LZ4_INCLUDE_DIR})
+    endif()
+    
+    if(NOT ZSTD_FOUND OR NOT LZ4_FOUND)
+        message(FATAL_ERROR "Could not find ZSTD or LZ4 libraries. Please install libzstd-dev and liblz4-dev packages.")
+    endif()
+endif()
 
 if(${CMAKE_PROJECT_NAME} STREQUAL ${PROJECT_NAME})
     option(DATA_TAMER_BUILD_TESTS "Build tests" ON)
