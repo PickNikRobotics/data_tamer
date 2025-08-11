@@ -7,6 +7,11 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
 
+# Find system dependencies for mcap
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(ZSTD REQUIRED libzstd)
+pkg_check_modules(LZ4 REQUIRED liblz4)
+
 if(${CMAKE_PROJECT_NAME} STREQUAL ${PROJECT_NAME})
     option(DATA_TAMER_BUILD_TESTS "Build tests" ON)
     option(DATA_TAMER_BUILD_EXAMPLES "Build examples" ON)
@@ -34,6 +39,15 @@ find_package(mcap QUIET)
 if(NOT mcap_FOUND AND NOT DATA_TAMER_BUILD_ROS)
     set(USE_VENDORED_MCAP ON)
     message(STATUS "MCAP from 3rdparty")
+    
+    # Pass pkg-config variables to mcap subdirectory
+    set(ZSTD_INCLUDE_DIR ${ZSTD_INCLUDE_DIRS})
+    set(ZSTD_LIBRARY ${ZSTD_LIBRARIES})
+    set(ZSTD_FOUND TRUE)
+    set(LZ4_INCLUDE_DIR ${LZ4_INCLUDE_DIRS})
+    set(LZ4_LIBRARY ${LZ4_LIBRARIES})
+    set(LZ4_FOUND TRUE)
+    
     add_subdirectory(3rdparty/mcap)
     set(mcap_LIBRARY mcap_lib)
 else()
