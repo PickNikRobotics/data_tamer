@@ -207,7 +207,7 @@ inline bool GetBit(BufferSpan mask, size_t index)
   return hash;
 }
 
-bool TypeField::operator==(const TypeField& other) const
+inline bool TypeField::operator==(const TypeField& other) const
 {
   return is_vector == other.is_vector && type == other.type &&
          array_size == other.array_size && field_name == other.field_name &&
