@@ -3,6 +3,8 @@
 
 #include <sstream>
 #include <mutex>
+#include <string>
+#include <thread>
 
 #ifndef USING_ROS2
 #define MCAP_IMPLEMENTATION
@@ -138,6 +140,22 @@ void MCAPSink::stopRecording()
   writer_.reset();
 }
 
+void MCAPSink::finishQueueAndStop()
+{
+  // stop accepting new snapshots
+  stopAcceptingSnapshots();
+
+  // finish any that are queued
+  processQueuedSnapshots();
+
+  // sleep and process any that were missed by previous processing
+  std::this_thread::sleep_for(std::chrono::microseconds(250));
+  processQueuedSnapshots();
+
+  // now stop the recording as normal
+  stopRecording();
+}
+
 void MCAPSink::restartRecording(const std::string& filepath, bool do_compression)
 {
   std::scoped_lock lk(mutex_);
@@ -150,6 +168,9 @@ void MCAPSink::restartRecording(const std::string& filepath, bool do_compression
   {
     addChannel(name, schema);
   }
+
+  // start accepting snapshots again in case they were stopped
+  startAcceptingSnapshots();
 }
 
 }   // namespace DataTamer
