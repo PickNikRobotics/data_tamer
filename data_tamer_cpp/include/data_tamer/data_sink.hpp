@@ -96,6 +96,12 @@ protected:
 
   void stopThread();
 
+  void stopAcceptingSnapshots();
+
+  void processQueuedSnapshots();
+
+  void startAcceptingSnapshots();
+
 private:
   struct Pimpl;
   std::unique_ptr<Pimpl> _p;

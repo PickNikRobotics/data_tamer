@@ -29,6 +29,7 @@ struct DataSinkBase::Pimpl
 
   std::thread thread;
   std::atomic_bool run = true;
+  std::atomic_bool accept_snapshots = true;
   moodycamel::ConcurrentQueue<Snapshot> queue;
 };
 
@@ -41,7 +42,33 @@ DataSinkBase::~DataSinkBase()
 
 bool DataSinkBase::pushSnapshot(const Snapshot& snapshot)
 {
-  return _p->queue.enqueue(snapshot);
+  if(_p->accept_snapshots)
+  {
+    return _p->queue.enqueue(snapshot);
+  }
+  else
+  {
+    return false;
+  }
+}
+
+void DataSinkBase::stopAcceptingSnapshots()
+{
+  _p->accept_snapshots = false;
+}
+
+void DataSinkBase::startAcceptingSnapshots()
+{
+  _p->accept_snapshots = true;
+}
+
+void DataSinkBase::processQueuedSnapshots()
+{
+  Snapshot snapshot_copy;
+  while(_p->queue.try_dequeue(snapshot_copy))
+  {
+    this->storeSnapshot(snapshot_copy);
+  }
 }
 
 void DataSinkBase::stopThread()
