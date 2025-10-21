@@ -31,6 +31,7 @@ struct LogChannel::Pimpl
   Schema schema;
   bool logging_started = false;
 
+  mutable Mutex sinks_mutex;
   std::unordered_set<std::shared_ptr<DataSinkBase>> sinks;
 };
 
@@ -159,7 +160,23 @@ void LogChannel::unregister(const RegistrationID& id)
 
 void LogChannel::addDataSink(std::shared_ptr<DataSinkBase> sink)
 {
-  _p->sinks.insert(sink);
+  std::lock_guard const lock_sinks(_p->sinks_mutex);
+
+  if (!_p->logging_started)
+  {
+    _p->sinks.insert(sink);
+  }
+  else
+  {
+    sink->addChannel(_p->channel_name, _p->schema);
+    _p->sinks.insert(sink);
+  }
+}
+
+void LogChannel::removeDataSink(std::shared_ptr<DataSinkBase> sink)
+{
+  std::lock_guard const lock(_p->sinks_mutex);
+  _p->sinks.erase(sink);
 }
 
 Schema LogChannel::getSchema() const
@@ -182,12 +199,16 @@ void LogChannel::addCustomType(const std::string& custom_type_name,
 bool LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
 {
   {
-    std::lock_guard const lock(_p->mutex);
-
+    std::lock_guard const lock_sinks(_p->sinks_mutex);
     if (_p->sinks.empty())
     {
       return false;
     }
+  }
+
+  {
+    std::lock_guard const lock(_p->mutex);
+
     // update the _p->snapshot.active_mask if necessary
     if (_p->mask_dirty)
     {
@@ -219,6 +240,8 @@ bool LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
     {
       _p->logging_started = true;
       _p->snapshot.schema_hash = _p->schema.hash;
+
+      std::lock_guard const lock_sinks(_p->sinks_mutex);
       for (auto const& sink : _p->sinks)
       {
         sink->addChannel(_p->channel_name, _p->schema);
@@ -242,9 +265,12 @@ bool LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
   }
 
   bool all_pushed = true;
-  for (auto& sink : _p->sinks)
   {
-    all_pushed &= sink->pushSnapshot(_p->snapshot);
+    std::lock_guard const lock_sinks(_p->sinks_mutex);
+    for (auto& sink : _p->sinks)
+    {
+      all_pushed &= sink->pushSnapshot(_p->snapshot);
+    }
   }
   return all_pushed;
 }
