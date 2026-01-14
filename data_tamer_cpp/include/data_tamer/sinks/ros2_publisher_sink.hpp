@@ -6,21 +6,25 @@
 #include "data_tamer_msgs/msg/snapshot.hpp"
 #include <unordered_map>
 #include <rclcpp/rclcpp.hpp>
-#include <rclcpp_lifecycle/lifecycle_node.hpp>
+#include <rclcpp/node_interfaces/node_interfaces.hpp>
+#include <rclcpp/node_interfaces/node_topics_interface.hpp>
 
 namespace DataTamer
 {
 
+using PublisherNodeInterfaces =
+    rclcpp::node_interfaces::NodeInterfaces<rclcpp::node_interfaces::NodeTopicsInterface>;
+
 class ROS2PublisherSink : public DataSinkBase
 {
 public:
-  ROS2PublisherSink(std::shared_ptr<rclcpp::Node> node, const std::string& topic_prefix);
+  ROS2PublisherSink(PublisherNodeInterfaces& interfaces, const std::string& topic_prefix)
+    : interfaces_(interfaces)
+  {
+    create_publishers(topic_prefix);
+  }
 
-  ROS2PublisherSink(std::shared_ptr<rclcpp_lifecycle::LifecycleNode> node,
-                    const std::string& topic_prefix);
-
-  template <typename NodeT>
-  void create_publishers(NodeT& node, const std::string& topic_prefix)
+  void create_publishers(const std::string& topic_prefix)
   {
     rclcpp::QoS schemas_qos{ rclcpp::KeepAll() };
     schemas_qos.reliable();
@@ -28,10 +32,10 @@ public:
 
     const rclcpp::QoS data_qos{ rclcpp::KeepAll() };
 
-    schema_publisher_ = node->template create_publisher<data_tamer_msgs::msg::Schemas>(
-        topic_prefix + "/schemas", schemas_qos);
-    data_publisher_ = node->template create_publisher<data_tamer_msgs::msg::Snapshot>(
-        topic_prefix + "/data", data_qos);
+    schema_publisher_ = rclcpp::create_publisher<data_tamer_msgs::msg::Schemas>(
+        interfaces_, topic_prefix + "/schemas", schemas_qos);
+    data_publisher_ = rclcpp::create_publisher<data_tamer_msgs::msg::Snapshot>(
+        interfaces_, topic_prefix + "/data", data_qos);
   }
 
   void addChannel(const std::string& name, const Schema& schema) override;
@@ -47,6 +51,9 @@ private:
 
   bool schema_changed_ = true;
   data_tamer_msgs::msg::Snapshot data_msg_;
+
+  // ---- Stored node façade ----
+  PublisherNodeInterfaces& interfaces_;
 };
 
 }  // namespace DataTamer
