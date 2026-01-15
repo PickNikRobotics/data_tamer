@@ -19,7 +19,7 @@ class ROS2PublisherSink : public DataSinkBase
 {
 public:
   ROS2PublisherSink(PublisherNodeInterfaces interfaces, const std::string& topic_prefix)
-    : interfaces_(interfaces)
+    : interfaces_(std::move(interfaces))
   {
     create_publishers(topic_prefix);
   }
