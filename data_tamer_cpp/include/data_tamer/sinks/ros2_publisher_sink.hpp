@@ -18,7 +18,7 @@ using PublisherNodeInterfaces =
 class ROS2PublisherSink : public DataSinkBase
 {
 public:
-  ROS2PublisherSink(PublisherNodeInterfaces& interfaces, const std::string& topic_prefix)
+  ROS2PublisherSink(PublisherNodeInterfaces interfaces, const std::string& topic_prefix)
     : interfaces_(interfaces)
   {
     create_publishers(topic_prefix);
@@ -53,7 +53,7 @@ private:
   data_tamer_msgs::msg::Snapshot data_msg_;
 
   // ---- Stored node façade ----
-  PublisherNodeInterfaces& interfaces_;
+  PublisherNodeInterfaces interfaces_;
 };
 
 }  // namespace DataTamer
