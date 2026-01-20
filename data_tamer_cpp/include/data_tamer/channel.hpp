@@ -6,6 +6,7 @@
 
 #include <chrono>
 #include <memory>
+#include <Eigen/Dense>
 
 namespace DataTamer
 {
@@ -86,8 +87,9 @@ public:
    * @param value  pointer to the vectors of values.
    * @return       the ID to be used to unregister or enable/disable the values.
    */
-  template <template <class, class> class Container, class T, class... TArgs,
-            std::enable_if_t<!has_TypeDefinition<Container<T, TArgs...>>::value, bool> = true>
+  template <
+      template <class, class> class Container, class T, class... TArgs,
+      std::enable_if_t<!has_TypeDefinition<Container<T, TArgs...>>::value, bool> = true>
   RegistrationID registerValue(const std::string& name,
                                const Container<T, TArgs...>* value);
 
@@ -103,6 +105,8 @@ public:
   template <typename T, size_t N,
             std::enable_if_t<!has_TypeDefinition<std::array<T, N>>::value, bool> = true>
   RegistrationID registerValue(const std::string& name, const std::array<T, N>* value);
+
+  RegistrationID registerValue(const std::string& prefix, const Eigen::VectorXd* value);
 
   /**
    * @brief registerCustomValue should be used when you want to "bypass" the serialization
@@ -323,6 +327,12 @@ inline RegistrationID LogChannel::registerValue(const std::string& prefix,
     auto def = _type_registry.getSerializer<T>();
     return registerValueImpl(prefix, ValuePtr(vect, def), def);
   }
+}
+
+inline RegistrationID LogChannel::registerValue(const std::string& prefix,
+                                                const Eigen::VectorXd* value)
+{
+  return registerValueImpl(prefix, ValuePtr(value), {});
 }
 
 template <typename T>
