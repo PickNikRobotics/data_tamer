@@ -6,7 +6,10 @@
 
 #include <chrono>
 #include <memory>
+
+#if DATA_TAMER_EIGEN_SUPPORT
 #include <Eigen/Dense>
+#endif
 
 namespace DataTamer
 {
@@ -106,7 +109,9 @@ public:
             std::enable_if_t<!has_TypeDefinition<std::array<T, N>>::value, bool> = true>
   RegistrationID registerValue(const std::string& name, const std::array<T, N>* value);
 
+#if DATA_TAMER_EIGEN_SUPPORT
   RegistrationID registerValue(const std::string& prefix, const Eigen::VectorXd* value);
+#endif
 
   /**
    * @brief registerCustomValue should be used when you want to "bypass" the serialization
@@ -329,11 +334,13 @@ inline RegistrationID LogChannel::registerValue(const std::string& prefix,
   }
 }
 
+#if DATA_TAMER_EIGEN_SUPPORT
 inline RegistrationID LogChannel::registerValue(const std::string& prefix,
                                                 const Eigen::VectorXd* value)
 {
   return registerValueImpl(prefix, ValuePtr(value), {});
 }
+#endif
 
 template <typename T>
 inline std::shared_ptr<LoggedValue<T>>

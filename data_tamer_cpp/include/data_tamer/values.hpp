@@ -7,8 +7,9 @@
 #include "data_tamer/custom_types.hpp"
 #include "data_tamer/contrib/SerializeMe.hpp"
 
+#if DATA_TAMER_EIGEN_SUPPORT
 #include <Eigen/Dense>
-
+#endif
 namespace DataTamer
 {
 using SerializeMe::has_TypeDefinition;
@@ -43,7 +44,9 @@ public:
             std::enable_if_t<!has_TypeDefinition<std::array<T, N>>::value, bool> = true>
   ValuePtr(const std::array<T, N>* vect, CustomSerializer::Ptr type_info);
 
+#if DATA_TAMER_EIGEN_SUPPORT
   ValuePtr(const Eigen::VectorXd* vect);
+#endif
 
   ValuePtr(ValuePtr const& other) = delete;
   ValuePtr& operator=(ValuePtr const& other) = delete;
@@ -194,6 +197,7 @@ inline ValuePtr::ValuePtr(const std::array<T, N>* array, CustomSerializer::Ptr t
   };
 }
 
+#if DATA_TAMER_EIGEN_SUPPORT
 inline ValuePtr::ValuePtr(const Eigen::VectorXd* vect)
   : v_ptr_(vect)
   , type_(GetBasicType<double>())         // element type
@@ -218,6 +222,7 @@ inline ValuePtr::ValuePtr(const Eigen::VectorXd* vect)
     return sizeof(uint32_t) + static_cast<size_t>(vect->size()) * sizeof(double);
   };
 }
+#endif
 
 inline bool ValuePtr::operator==(const ValuePtr& other) const
 {
