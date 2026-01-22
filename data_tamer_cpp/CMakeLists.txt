@@ -138,7 +138,7 @@ if (DATA_TAMER_BUILD_ROS)
     )
 
     if (DATA_TAMER_EIGEN_SUPPORT)
-        target_link_libraries(data_tamer PUBLIC Eigen3)
+        target_link_libraries(data_tamer PUBLIC Eigen3::Eigen)
     endif()
 
     ament_export_targets(data_tamerTargets HAS_LIBRARY_TARGET)
