@@ -15,11 +15,18 @@ namespace DataTamer
 using PublisherNodeInterfaces =
     rclcpp::node_interfaces::NodeInterfaces<rclcpp::node_interfaces::NodeTopicsInterface>;
 
+// Concept: allow Node, LifecycleNode, or NodeInterface
+template <typename NodeLike>
+concept NodeInterfaceType = std::same_as<NodeLike, rclcpp::Node> ||
+                            std::same_as<NodeLike, rclcpp_lifecycle::LifecycleNode> ||
+                            std::same_as<NodeLike, PublisherNodeInterfaces>;
+
 class ROS2PublisherSink : public DataSinkBase
 {
 public:
-  ROS2PublisherSink(PublisherNodeInterfaces interfaces, const std::string& topic_prefix)
-    : interfaces_(std::move(interfaces))
+  template <typename NodeType>
+  ROS2PublisherSink(NodeType interfaces, const std::string& topic_prefix)
+    : interfaces_(interfaces)
   {
     create_publishers(topic_prefix);
   }
