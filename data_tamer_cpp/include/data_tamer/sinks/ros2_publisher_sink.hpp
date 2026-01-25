@@ -5,7 +5,9 @@
 #include "data_tamer_msgs/msg/schemas.hpp"
 #include "data_tamer_msgs/msg/snapshot.hpp"
 #include <unordered_map>
+#include <type_traits>
 #include <rclcpp/rclcpp.hpp>
+#include "rclcpp_lifecycle/lifecycle_node.hpp"
 #include <rclcpp/node_interfaces/node_interfaces.hpp>
 #include <rclcpp/node_interfaces/node_topics_interface.hpp>
 
@@ -15,18 +17,12 @@ namespace DataTamer
 using PublisherNodeInterfaces =
     rclcpp::node_interfaces::NodeInterfaces<rclcpp::node_interfaces::NodeTopicsInterface>;
 
-// Concept: allow Node, LifecycleNode, or NodeInterface
-template <typename NodeLike>
-concept NodeInterfaceType = std::same_as<NodeLike, rclcpp::Node> ||
-                            std::same_as<NodeLike, rclcpp_lifecycle::LifecycleNode> ||
-                            std::same_as<NodeLike, PublisherNodeInterfaces>;
-
 class ROS2PublisherSink : public DataSinkBase
 {
 public:
-  template <typename NodeType>
-  ROS2PublisherSink(NodeType interfaces, const std::string& topic_prefix)
-    : interfaces_(interfaces)
+  template <typename NodeT>
+  ROS2PublisherSink(NodeT&& nodelike, const std::string& topic_prefix)
+    : node_interface_(normalize_node(nodelike))
   {
     create_publishers(topic_prefix);
   }
@@ -40,9 +36,9 @@ public:
     const rclcpp::QoS data_qos{ rclcpp::KeepAll() };
 
     schema_publisher_ = rclcpp::create_publisher<data_tamer_msgs::msg::Schemas>(
-        interfaces_, topic_prefix + "/schemas", schemas_qos);
+        node_interface_, topic_prefix + "/schemas", schemas_qos);
     data_publisher_ = rclcpp::create_publisher<data_tamer_msgs::msg::Snapshot>(
-        interfaces_, topic_prefix + "/data", data_qos);
+        node_interface_, topic_prefix + "/data", data_qos);
   }
 
   void addChannel(const std::string& name, const Schema& schema) override;
@@ -50,6 +46,20 @@ public:
   bool storeSnapshot(const Snapshot& snapshot) override;
 
 private:
+  template <typename NodeT>
+  static PublisherNodeInterfaces normalize_node(NodeT&& nodelike)
+  {
+    using D = std::decay_t<NodeT>;
+
+    if constexpr(std::is_same_v<D, PublisherNodeInterfaces>)
+      return nodelike;
+    else if constexpr(std::is_same_v<D, std::shared_ptr<rclcpp::Node>> ||
+                      std::is_same_v<D, std::shared_ptr<rclcpp_lifecycle::LifecycleNode>>)
+      return PublisherNodeInterfaces(*nodelike);
+    else
+      return PublisherNodeInterfaces(nodelike);
+  }
+
   std::unordered_map<std::string, Schema> schemas_;
   Mutex schema_mutex_;
 
@@ -60,7 +70,7 @@ private:
   data_tamer_msgs::msg::Snapshot data_msg_;
 
   // ---- Stored node façade ----
-  PublisherNodeInterfaces interfaces_;
+  PublisherNodeInterfaces node_interface_;
 };
 
 }  // namespace DataTamer
