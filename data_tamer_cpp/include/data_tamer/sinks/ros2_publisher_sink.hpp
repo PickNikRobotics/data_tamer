@@ -7,7 +7,7 @@
 #include <unordered_map>
 #include <type_traits>
 #include <rclcpp/rclcpp.hpp>
-#include "rclcpp_lifecycle/lifecycle_node.hpp"
+#include <rclcpp_lifecycle/lifecycle_node.hpp>
 #include <rclcpp/node_interfaces/node_interfaces.hpp>
 #include <rclcpp/node_interfaces/node_topics_interface.hpp>
 
