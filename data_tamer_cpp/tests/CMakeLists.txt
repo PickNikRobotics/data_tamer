@@ -4,7 +4,8 @@ include(GoogleTest)
 add_executable(datatamer_test
     dt_tests.cpp
     custom_types_tests.cpp
-    parser_tests.cpp)
+    parser_tests.cpp
+    add_remove_sink_tests.cpp)
 gtest_discover_tests(datatamer_test DISCOVERY_MODE PRE_TEST)
 
 target_include_directories(datatamer_test

@@ -179,6 +179,12 @@ void LogChannel::removeDataSink(std::shared_ptr<DataSinkBase> sink)
   _p->sinks.erase(sink);
 }
 
+size_t LogChannel::getNumberOfSinks() const
+{
+  std::lock_guard const lock(_p->sinks_mutex);
+  return _p->sinks.size();
+}
+
 Schema LogChannel::getSchema() const
 {
   std::lock_guard const lock(_p->mutex);
