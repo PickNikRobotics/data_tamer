@@ -13,10 +13,10 @@ using namespace DataTamer;
 
 TEST(DataTamerROS2Publisher, SharedPointer)
 {
-  auto node = std::make_shared<rclcpp::Node>("test_datatamer");
-  auto ros2_sink = std::make_shared<ROS2PublisherSink>(node, "test");
+  auto node = std::make_shared<rclcpp::Node>("test_datatamer_shared_pointer");
+  auto ros2_sink = std::make_shared<ROS2PublisherSink>(node, "test_shared_pointer");
 
-  auto channel = ChannelsRegistry::Global().getChannel("channel");
+  auto channel = ChannelsRegistry::Global().getChannel("channel_shared_pointer");
 
   channel->addDataSink(ros2_sink);
 
@@ -29,10 +29,16 @@ TEST(DataTamerROS2Publisher, SharedPointer)
 TEST(DataTamerROS2Publisher, SharedPointerLifeCycle)
 {
   auto lifecycle_node = std::make_shared<rclcpp_lifecycle::LifecycleNode>("test_"
-                                                                          "datatamer");
-  auto ros2_sink = std::make_shared<ROS2PublisherSink>(lifecycle_node, "test");
+                                                                          "datatamer_"
+                                                                          "shared_"
+                                                                          "pointer_"
+                                                                          "lifecycle");
+  auto ros2_sink = std::make_shared<ROS2PublisherSink>(lifecycle_node, "test_shared_"
+                                                                       "pointer_"
+                                                                       "lifecycle");
 
-  auto channel = ChannelsRegistry::Global().getChannel("channel");
+  auto channel = ChannelsRegistry::Global().getChannel("channel_shared_pointer_"
+                                                       "lifecycle");
 
   channel->addDataSink(ros2_sink);
 
@@ -44,10 +50,10 @@ TEST(DataTamerROS2Publisher, SharedPointerLifeCycle)
 
 TEST(DataTamerROS2Publisher, Dereference)
 {
-  auto node = std::make_shared<rclcpp::Node>("test_datatamer");
-  auto ros2_sink = std::make_shared<ROS2PublisherSink>(*node, "test");
+  auto node = std::make_shared<rclcpp::Node>("test_datatamer_dereference");
+  auto ros2_sink = std::make_shared<ROS2PublisherSink>(*node, "test_dereference");
 
-  auto channel = ChannelsRegistry::Global().getChannel("channel");
+  auto channel = ChannelsRegistry::Global().getChannel("channel_dereference");
 
   channel->addDataSink(ros2_sink);
 
@@ -60,10 +66,14 @@ TEST(DataTamerROS2Publisher, Dereference)
 TEST(DataTamerROS2Publisher, DereferenceLifeCycle)
 {
   auto lifecycle_node = std::make_shared<rclcpp_lifecycle::LifecycleNode>("test_"
-                                                                          "datatamer");
-  auto ros2_sink = std::make_shared<ROS2PublisherSink>(*lifecycle_node, "test");
+                                                                          "datatamer_"
+                                                                          "dereference_"
+                                                                          "lifecycle");
+  auto ros2_sink = std::make_shared<ROS2PublisherSink>(*lifecycle_node, "test_"
+                                                                        "dereference_"
+                                                                        "lifecycle");
 
-  auto channel = ChannelsRegistry::Global().getChannel("channel");
+  auto channel = ChannelsRegistry::Global().getChannel("channel_dereference_lifecycle");
 
   channel->addDataSink(ros2_sink);
 
