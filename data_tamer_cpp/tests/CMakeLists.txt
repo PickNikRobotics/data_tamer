@@ -29,7 +29,6 @@ else()
     add_executable(datatamer_test
         dt_tests.cpp
         custom_types_tests.cpp
-        ros2_publisher_tests.cpp
         parser_tests.cpp)
     gtest_discover_tests(datatamer_test DISCOVERY_MODE PRE_TEST)
 
