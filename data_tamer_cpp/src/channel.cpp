@@ -240,13 +240,14 @@ bool LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
     }
     _p->snapshot.payload.resize(payload_size);
 
-    // call sink->addChannel (usually done once)
+    // set up the channel if we haven't begun logging
     if(!_p->logging_started)
     {
-      _p->logging_started = true;
       _p->snapshot.schema_hash = _p->schema.hash;
 
       std::lock_guard const lock_sinks(_p->sinks_mutex);
+      // start logging inside the sinks_mutex so that addDataSink does not have an incorrect value due to a race condition
+      _p->logging_started = true;
       for(auto const& sink : _p->sinks)
       {
         sink->addChannel(_p->channel_name, _p->schema);
