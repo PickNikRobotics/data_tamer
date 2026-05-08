@@ -86,8 +86,9 @@ public:
    * @param value  pointer to the vectors of values.
    * @return       the ID to be used to unregister or enable/disable the values.
    */
-  template <template <class, class> class Container, class T, class... TArgs,
-            std::enable_if_t<!has_TypeDefinition<Container<T, TArgs...>>::value, bool> = true>
+  template <
+      template <class, class> class Container, class T, class... TArgs,
+      std::enable_if_t<!has_TypeDefinition<Container<T, TArgs...>>::value, bool> = true>
   RegistrationID registerValue(const std::string& name,
                                const Container<T, TArgs...>* value);
 
@@ -152,6 +153,16 @@ public:
    * @brief addDataSink add a sink, i.e. a class collecting our snapshots.
    */
   void addDataSink(std::shared_ptr<DataSinkBase> sink);
+
+  /**
+   * @brief removeDataSink remove a sink, i.e. a class collecting our snapshots.
+   */
+  void removeDataSink(std::shared_ptr<DataSinkBase> sink);
+
+  /**
+  * @brief getNumberOfSinks returns the number of registered sinks.
+  */
+  size_t getNumberOfSinks() const;
 
   /**
    * @brief takeSnapshot copies the current value of all your registered values
