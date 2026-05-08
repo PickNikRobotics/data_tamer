@@ -17,7 +17,7 @@ TEST(DataTamerROS2Publisher, SharedPointer)
   channel->addDataSink(ros2_sink);
 
   double const value = 1.;
-  auto id_value = channel->registerValue("value", &value);
+  channel->registerValue("value", &value);
 
   EXPECT_TRUE(channel->takeSnapshot());
 }
@@ -39,7 +39,7 @@ TEST(DataTamerROS2Publisher, SharedPointerLifeCycle)
   channel->addDataSink(ros2_sink);
 
   double const value = 1.;
-  auto id_value = channel->registerValue("value", &value);
+  channel->registerValue("value", &value);
 
   EXPECT_TRUE(channel->takeSnapshot());
 
@@ -56,7 +56,7 @@ TEST(DataTamerROS2Publisher, Dereference)
   channel->addDataSink(ros2_sink);
 
   double const value = 1.;
-  auto id_value = channel->registerValue("value", &value);
+  channel->registerValue("value", &value);
 
   EXPECT_TRUE(channel->takeSnapshot());
 }
@@ -76,7 +76,7 @@ TEST(DataTamerROS2Publisher, DereferenceLifeCycle)
   channel->addDataSink(ros2_sink);
 
   double const value = 1.;
-  auto id_value = channel->registerValue("value", &value);
+  channel->registerValue("value", &value);
 
   EXPECT_TRUE(channel->takeSnapshot());
 
@@ -95,7 +95,7 @@ TEST(DataTamerROS2Publisher, NodeInterfacesDirect)
   channel->addDataSink(ros2_sink);
 
   double const value = 1.;
-  auto id_value = channel->registerValue("value", &value);
+  channel->registerValue("value", &value);
 
   EXPECT_TRUE(channel->takeSnapshot());
 }
@@ -117,7 +117,7 @@ TEST(DataTamerROS2Publisher, NodeInterfacesDirectLifeCycle)
   channel->addDataSink(ros2_sink);
 
   double const value = 1.;
-  auto id_value = channel->registerValue("value", &value);
+  channel->registerValue("value", &value);
 
   EXPECT_TRUE(channel->takeSnapshot());
 
