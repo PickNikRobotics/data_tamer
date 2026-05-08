@@ -42,6 +42,8 @@ TEST(DataTamerROS2Publisher, SharedPointerLifeCycle)
   auto id_value = channel->registerValue("value", &value);
 
   EXPECT_TRUE(channel->takeSnapshot());
+
+  lifecycle_node->shutdown();
 }
 
 TEST(DataTamerROS2Publisher, Dereference)
@@ -77,6 +79,8 @@ TEST(DataTamerROS2Publisher, DereferenceLifeCycle)
   auto id_value = channel->registerValue("value", &value);
 
   EXPECT_TRUE(channel->takeSnapshot());
+
+  lifecycle_node->shutdown();
 }
 
 TEST(DataTamerROS2Publisher, NodeInterfacesDirect)
@@ -116,6 +120,8 @@ TEST(DataTamerROS2Publisher, NodeInterfacesDirectLifeCycle)
   auto id_value = channel->registerValue("value", &value);
 
   EXPECT_TRUE(channel->takeSnapshot());
+
+  lifecycle_node->shutdown();
 }
 
 int main(int argc, char** argv)
