@@ -79,6 +79,45 @@ TEST(DataTamerROS2Publisher, DereferenceLifeCycle)
   EXPECT_TRUE(channel->takeSnapshot());
 }
 
+TEST(DataTamerROS2Publisher, NodeInterfacesDirect)
+{
+  auto node = std::make_shared<rclcpp::Node>("test_datatamer_node_interfaces");
+  PublisherNodeInterfaces interfaces(*node);
+  auto ros2_sink = std::make_shared<ROS2PublisherSink>(interfaces, "test_node_"
+                                                                   "interfaces");
+
+  auto channel = ChannelsRegistry::Global().getChannel("channel_node_interfaces");
+
+  channel->addDataSink(ros2_sink);
+
+  double const value = 1.;
+  auto id_value = channel->registerValue("value", &value);
+
+  EXPECT_TRUE(channel->takeSnapshot());
+}
+
+TEST(DataTamerROS2Publisher, NodeInterfacesDirectLifeCycle)
+{
+  auto lifecycle_node = std::make_shared<rclcpp_lifecycle::LifecycleNode>("test_"
+                                                                          "datatamer_"
+                                                                          "node_"
+                                                                          "interfaces_"
+                                                                          "lifecycle");
+  PublisherNodeInterfaces interfaces(*lifecycle_node);
+  auto ros2_sink = std::make_shared<ROS2PublisherSink>(interfaces, "test_node_interfaces_"
+                                                                   "lifecycle");
+
+  auto channel = ChannelsRegistry::Global().getChannel("channel_node_interfaces_"
+                                                       "lifecycle");
+
+  channel->addDataSink(ros2_sink);
+
+  double const value = 1.;
+  auto id_value = channel->registerValue("value", &value);
+
+  EXPECT_TRUE(channel->takeSnapshot());
+}
+
 int main(int argc, char** argv)
 {
   rclcpp::init(argc, argv);
