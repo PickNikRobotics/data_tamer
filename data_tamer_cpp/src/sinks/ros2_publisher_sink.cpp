@@ -2,18 +2,6 @@
 
 namespace DataTamer
 {
-ROS2PublisherSink::ROS2PublisherSink(std::shared_ptr<rclcpp::Node> node,
-                                     const std::string& topic_prefix)
-{
-  create_publishers(node, topic_prefix);
-}
-
-ROS2PublisherSink::ROS2PublisherSink(
-    std::shared_ptr<rclcpp_lifecycle::LifecycleNode> node,
-    const std::string& topic_prefix)
-{
-  create_publishers(node, topic_prefix);
-}
 
 void ROS2PublisherSink::addChannel(const std::string& channel_name, const Schema& schema)
 {
