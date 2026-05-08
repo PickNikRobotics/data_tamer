@@ -162,15 +162,13 @@ void LogChannel::addDataSink(std::shared_ptr<DataSinkBase> sink)
 {
   std::lock_guard const lock_sinks(_p->sinks_mutex);
 
-  if (!_p->logging_started)
-  {
-    _p->sinks.insert(sink);
-  }
-  else
+  // if we haven't already started logging, then takeSnapshot() handles adding the channel
+  // otherwise it must be done here so the sink knows about the existing schema
+  if (_p->logging_started)
   {
     sink->addChannel(_p->channel_name, _p->schema);
-    _p->sinks.insert(sink);
   }
+  _p->sinks.insert(sink);
 }
 
 void LogChannel::removeDataSink(std::shared_ptr<DataSinkBase> sink)
