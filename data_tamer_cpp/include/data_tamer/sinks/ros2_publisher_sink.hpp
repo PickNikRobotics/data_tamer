@@ -27,20 +27,6 @@ public:
     create_publishers(topic_prefix);
   }
 
-  void create_publishers(const std::string& topic_prefix)
-  {
-    rclcpp::QoS schemas_qos{ rclcpp::KeepAll() };
-    schemas_qos.reliable();
-    schemas_qos.transient_local();  // latch
-
-    const rclcpp::QoS data_qos{ rclcpp::KeepAll() };
-
-    schema_publisher_ = rclcpp::create_publisher<data_tamer_msgs::msg::Schemas>(
-        node_interface_, topic_prefix + "/schemas", schemas_qos);
-    data_publisher_ = rclcpp::create_publisher<data_tamer_msgs::msg::Snapshot>(
-        node_interface_, topic_prefix + "/data", data_qos);
-  }
-
   void addChannel(const std::string& name, const Schema& schema) override;
 
   bool storeSnapshot(const Snapshot& snapshot) override;
@@ -58,6 +44,20 @@ private:
       return PublisherNodeInterfaces(*nodelike);
     else
       return PublisherNodeInterfaces(nodelike);
+  }
+
+  void create_publishers(const std::string& topic_prefix)
+  {
+    rclcpp::QoS schemas_qos{ rclcpp::KeepAll() };
+    schemas_qos.reliable();
+    schemas_qos.transient_local();  // latch
+
+    const rclcpp::QoS data_qos{ rclcpp::KeepAll() };
+
+    schema_publisher_ = rclcpp::create_publisher<data_tamer_msgs::msg::Schemas>(
+        node_interface_, topic_prefix + "/schemas", schemas_qos);
+    data_publisher_ = rclcpp::create_publisher<data_tamer_msgs::msg::Snapshot>(
+        node_interface_, topic_prefix + "/data", data_qos);
   }
 
   std::unordered_map<std::string, Schema> schemas_;
