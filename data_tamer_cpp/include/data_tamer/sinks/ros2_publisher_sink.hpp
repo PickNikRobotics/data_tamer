@@ -37,13 +37,31 @@ private:
   {
     using D = std::decay_t<NodeT>;
 
+    // use a friendlier compile error than the one that would otherwise come out
+    static_assert(
+        std::is_same_v<D, PublisherNodeInterfaces> ||
+            std::is_same_v<D, std::shared_ptr<rclcpp::Node>> ||
+            std::is_same_v<D, std::shared_ptr<rclcpp_lifecycle::LifecycleNode>> ||
+            std::is_constructible_v<PublisherNodeInterfaces, D&>,
+        "ROS2PublisherSink: unsupported node-like type passed to "
+        "`ROS2PublisherSink(NodeT&& nodelike, const std::string& topic_prefix)`. Pass a "
+        "rclcpp::Node, "
+        "rclcpp_lifecycle::LifecycleNode, a shared_ptr to either, or a "
+        "PublisherNodeInterfaces.");
+
     if constexpr(std::is_same_v<D, PublisherNodeInterfaces>)
+    {
       return nodelike;
+    }
     else if constexpr(std::is_same_v<D, std::shared_ptr<rclcpp::Node>> ||
                       std::is_same_v<D, std::shared_ptr<rclcpp_lifecycle::LifecycleNode>>)
+    {
       return PublisherNodeInterfaces(*nodelike);
+    }
     else
+    {
       return PublisherNodeInterfaces(nodelike);
+    }
   }
 
   void create_publishers(const std::string& topic_prefix)
