@@ -1,13 +1,9 @@
 #include "data_tamer/data_tamer.hpp"
-#include "data_tamer/sinks/dummy_sink.hpp"
 #include "data_tamer/sinks/ros2_publisher_sink.hpp"
 
 #include <gtest/gtest.h>
 
-#include <filesystem>
-#include <variant>
 #include <string>
-#include <thread>
 
 using namespace DataTamer;
 
