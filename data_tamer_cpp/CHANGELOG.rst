@@ -2,6 +2,34 @@
 Changelog for package data_tamer
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Forthcoming
+-----------
+* Merge pull request `#68 <https://github.com/PickNikRobotics/data_tamer/issues/68>`_ from coderjake91/feature/update-ROS2PublisherSink-to-use-NodeInterfaces
+  Update ROS 2 publisher sink to use NodeInterfaces
+* Merge pull request `#65 <https://github.com/PickNikRobotics/data_tamer/issues/65>`_ from Basiljamal1/main
+  Add thread-safe methods to add and remove data sinks in LogChannel
+* modify logging_started toggle to avoid possible (benign) race condition
+* clarify addDataSink logic with comment and simplify code
+* doxygen name fix
+* test: add and improve tests for adding and removing data sinks in LogChannel
+* Merge pull request `#62 <https://github.com/PickNikRobotics/data_tamer/issues/62>`_ from PickNikRobotics/finish_queue_before_stop
+  add ability to finish queue then stop recording
+* fix: Updated header file for channel.hpp
+* Add thread-safe methods to add and remove data sinks in LogChannel
+* Merge pull request `#64 <https://github.com/PickNikRobotics/data_tamer/issues/64>`_ from Shibodd/cmake_benchmarks_option
+  CMakeLists: add DATA_TAMER_BUILD_BENCHMARKS option
+* CMakeLists: add DATA_TAMER_BUILD_BENCHMARKS option
+* add ability to finish queue then stop recording
+* Inline operator== function to prevent multiple includes (`#60 <https://github.com/PickNikRobotics/data_tamer/issues/60>`_)
+  Co-authored-by: jlack <jlack@nauticusrobotics.com>
+* Fix compilation on Windows by exporting all symbols with CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS (`#58 <https://github.com/PickNikRobotics/data_tamer/issues/58>`_)
+* Merge pull request `#40 <https://github.com/PickNikRobotics/data_tamer/issues/40>`_ from damien-robotsix/custom_container_handling
+  fix: handling of custom containers that has a TypeDefinition
+* add trait 'tests'
+* fix: ub in SerializeIntoBuffer
+* fix: handling of custom containers that has a TypeDefinition
+* Contributors: Basil Jamal, Damien SIX, Henry Moore, Jacob Frazer, Silvio Traversaro, Unimore, jlack1987
+
 1.0.3 (2025-05-23)
 -----------
 * Remove ament_target_dependencies usage
