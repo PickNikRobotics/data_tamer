@@ -2,8 +2,8 @@
 Changelog for package data_tamer
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+1.0.4 (2026-07-26)
+------------------
 * Merge pull request `#68 <https://github.com/PickNikRobotics/data_tamer/issues/68>`_ from coderjake91/feature/update-ROS2PublisherSink-to-use-NodeInterfaces
   Update ROS 2 publisher sink to use NodeInterfaces
 * Merge pull request `#65 <https://github.com/PickNikRobotics/data_tamer/issues/65>`_ from Basiljamal1/main
