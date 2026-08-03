@@ -283,7 +283,7 @@ TEST(DataTamerBasic, FinishQueue)
   channel->addDataSink(sink);
 
   double const value = 1.;
-  auto id_value = channel->registerValue("value", &value);
+  channel->registerValue("value", &value);
 
   EXPECT_TRUE(channel->takeSnapshot());
 
