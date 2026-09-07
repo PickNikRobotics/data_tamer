@@ -165,14 +165,44 @@ public:
   size_t getNumberOfSinks() const;
 
   /**
+   * @brief startRecording freezes the schema and registers it into all the
+   * sinks added so far. After this call, registering a new value throws.
+   *
+   * Calling it is optional: the first takeSnapshot() does the same thing.
+   * Call it explicitly, after registering all values and adding all sinks,
+   * when the first snapshot is taken from a real-time thread: sink setup can
+   * be slow (for instance MCAPSink writes the schema to disk).
+   */
+  void startRecording();
+
+  /**
    * @brief takeSnapshot copies the current value of all your registered values
    *  and send an instance of Snapshot to all your Sinks.
+   *
+   * This method blocks if another thread holds writeMutex() or is calling
+   * setEnabled(), unregister() or getSchema(). See tryTakeSnapshot().
    *
    * @param timestamp is the time since epoch, by default.
    *
    * @return true is succesfully pushed to all its sinks.
    */
   bool takeSnapshot(std::chrono::nanoseconds timestamp = NsecSinceEpoch());
+
+  /**
+   * @brief tryTakeSnapshot is the non-blocking version of takeSnapshot(),
+   * intended for real-time loops.
+   *
+   * If the channel mutex is held by another thread, the snapshot is skipped
+   * and the method returns false immediately. In steady state (after
+   * startRecording() and after the sinks have seen the largest payload) this
+   * method takes no blocking lock and performs no heap allocation.
+   *
+   * @param timestamp is the time since epoch, by default.
+   *
+   * @return true if the snapshot was taken and pushed to all its sinks.
+   *         false if it was skipped, or if at least one sink dropped it.
+   */
+  bool tryTakeSnapshot(std::chrono::nanoseconds timestamp = NsecSinceEpoch());
 
   /**
    * @brief getActiveFlags returns a serialized buffer, where
@@ -211,6 +241,11 @@ private:
   void updateTypeRegistryImpl(FieldsVector& fields, const char* name);
 
   void addCustomType(const std::string& custom_type_name, const FieldsVector& fields);
+
+  bool takeSnapshotImpl(std::chrono::nanoseconds timestamp, bool blocking);
+
+  // requires _p->mutex to be held by the caller
+  void startRecordingImpl();
 
   [[nodiscard]] RegistrationID registerValueImpl(const std::string& name,
                                                  ValuePtr&& value_ptr,

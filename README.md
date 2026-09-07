@@ -51,6 +51,27 @@ visualize your logs offline or in real-time.
 - If you use `DataTamer::registerValue` you must be careful about the lifetime of the
 object. If you prefer a safer RAII interface, use `DataTamer::createLoggedValue` instead.
 
+## Real-time usage
+
+`takeSnapshot()` is designed to be called from a periodic loop, but a few
+details matter if that loop is a real-time control loop:
+
+- Call `channel->startRecording()` once, after registering all values and
+  adding all sinks, before the loop starts. Otherwise the first snapshot
+  registers the schema into every sink, which for `MCAPSink` means a write to
+  disk on the caller's thread.
+- Use `channel->tryTakeSnapshot()` instead of `takeSnapshot()`. If another
+  thread is calling `setEnabled()`, `unregister()`, `getSchema()` or holding
+  `writeMutex()`, the snapshot is skipped and `false` is returned instead of
+  blocking.
+- The handoff to the sinks is a bounded, lock-free queue of pre-allocated
+  snapshots (64 per sink by default, see `DataSinkBase::DataSinkBase(queue_size)`).
+  In steady state no heap allocation happens on the caller's thread. If a sink
+  cannot keep up, the newest snapshots are dropped and counted in
+  `DataSinkBase::droppedSnapshotsCount()`; memory never grows.
+- All sink work (MCAP writing, ROS 2 publishing) runs on one background thread
+  per sink, at default priority. Pin or reprioritize it as your platform requires.
+
 # Examples
 
 ## Basic example

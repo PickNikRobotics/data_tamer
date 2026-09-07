@@ -8,6 +8,7 @@ if(gtest_vendor_FOUND AND ament_cmake_gtest_FOUND)
         custom_types_tests.cpp
         parser_tests.cpp
         ros2_publisher_tests.cpp
+        realtime_tests.cpp
         trait_tests.cpp)
 
     target_include_directories(datatamer_test
@@ -30,7 +31,8 @@ else()
         dt_tests.cpp
         custom_types_tests.cpp
         parser_tests.cpp
-        add_remove_sink_tests.cpp)
+        add_remove_sink_tests.cpp
+        realtime_tests.cpp)
     gtest_discover_tests(datatamer_test DISCOVERY_MODE PRE_TEST)
 
     target_include_directories(datatamer_test

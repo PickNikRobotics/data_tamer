@@ -55,7 +55,25 @@ using DataSnapshot = std::vector<uint8_t>;
 class DataSinkBase
 {
 public:
+  /// Default number of snapshots that can be queued before pushSnapshot()
+  /// starts dropping them.
+  static constexpr size_t kDefaultQueueSize = 64;
+
   DataSinkBase();
+
+  /**
+   * @brief Construct a sink with an explicit queue size.
+   *
+   * The sink pre-allocates `queue_size` Snapshot slots. pushSnapshot() copies
+   * into a free slot without allocating (once the slot's payload capacity has
+   * grown to the largest payload seen) and returns false, dropping the
+   * snapshot, if all slots are waiting to be consumed.
+   *
+   * @param queue_size             number of pre-allocated snapshots (minimum 1)
+   * @param reserved_payload_bytes optional initial capacity of each slot's payload,
+   *                               to avoid the one-off allocation on the first push.
+   */
+  explicit DataSinkBase(size_t queue_size, size_t reserved_payload_bytes = 0);
 
   DataSinkBase(const DataSinkBase& other) = delete;
   DataSinkBase& operator=(const DataSinkBase& other) = delete;
@@ -75,14 +93,25 @@ public:
   virtual void addChannel(const std::string& name, const Schema& schema) = 0;
 
   /**
-   * @brief pushSnapshot will push the data into a concurrent queue,
-   * that a different thread will consume, using storeSnapshot()
+   * @brief pushSnapshot will copy the data into a pre-allocated slot of a
+   * bounded lock-free queue, that a different thread will consume,
+   * using storeSnapshot().
+   *
+   * This method does not block and, in steady state, does not allocate.
+   * The one exception is the first call from a given thread, when the queue
+   * registers that thread as a producer.
    *
    * @param snapshot see type Snapshot for details
    *
-   * @return false if the queue is full and snapshot was not pushed
+   * @return false if the queue is full and snapshot was dropped
    */
   virtual bool pushSnapshot(const Snapshot& snapshot);
+
+  /// Number of snapshot slots in the queue.
+  size_t queueSize() const;
+
+  /// Number of snapshots dropped by pushSnapshot() because the queue was full.
+  size_t droppedSnapshotsCount() const;
 
 protected:
   /**
