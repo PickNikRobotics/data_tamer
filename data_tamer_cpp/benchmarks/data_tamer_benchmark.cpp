@@ -85,7 +85,7 @@ static void DT_LoggedValueSet(benchmark::State& state)
 }
 
 // takeSnapshot on this thread while another thread hammers set() on 100 LoggedValues
-static void DT_SnapshotWithWriter(benchmark::State& state)
+static void snapshotWithWriter(benchmark::State& state, bool transactions)
 {
   auto registry = ChannelsRegistry();
   auto channel = registry.getChannel("channel");
@@ -103,9 +103,20 @@ static void DT_SnapshotWithWriter(benchmark::State& state)
     double x = 0;
     while(run)
     {
-      for(auto& v : values)
+      if(transactions)
       {
-        v->set(x);
+        auto transaction = channel->scopedWrite();
+        for(auto& v : values)
+        {
+          v->set(x);
+        }
+      }
+      else
+      {
+        for(auto& v : values)
+        {
+          v->set(x);
+        }
       }
       x += 1.0;
     }
@@ -116,10 +127,21 @@ static void DT_SnapshotWithWriter(benchmark::State& state)
   writer.join();
 }
 
+static void DT_SnapshotWithWriter(benchmark::State& state)
+{
+  snapshotWithWriter(state, false);
+}
+
+static void DT_SnapshotWithTransactionWriter(benchmark::State& state)
+{
+  snapshotWithWriter(state, true);
+}
+
 BENCHMARK(DT_Doubles)->Arg(125)->Arg(250)->Arg(500)->Arg(1000)->Arg(2000);
 BENCHMARK(DT_PoseType)->Arg(125)->Arg(250)->Arg(500)->Arg(1000);
 BENCHMARK(DT_MultiSink)->Arg(1)->Arg(2)->Arg(4);
 BENCHMARK(DT_LoggedValueSet)->Arg(10)->Arg(100)->Arg(1000);
 BENCHMARK(DT_SnapshotWithWriter);
+BENCHMARK(DT_SnapshotWithTransactionWriter);
 
 BENCHMARK_MAIN();

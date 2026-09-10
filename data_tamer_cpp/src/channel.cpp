@@ -26,6 +26,8 @@ struct LogChannel::Pimpl
   std::unordered_map<std::string, size_t> registered_values;
 
   std::shared_ptr<ChannelSharedState> shared = std::make_shared<ChannelSharedState>();
+  std::atomic<uint64_t> write_lock_contended{ 0 };
+  std::atomic<uint64_t> write_lock_wait_max_ns{ 0 };
 
   Snapshot snapshot;
   Schema schema;
@@ -184,7 +186,27 @@ Schema LogChannel::getSchema() const
 
 Mutex& LogChannel::writeMutex()
 {
-  return _p->mutex;
+  return _p->shared->write_mutex;
+}
+
+ChannelSharedState::Transaction LogChannel::scopedWrite()
+{
+  return ChannelSharedState::Transaction(*_p->shared);
+}
+
+uint64_t LogChannel::writeLockContended() const
+{
+  return _p->write_lock_contended.load(std::memory_order_relaxed);
+}
+
+uint64_t LogChannel::writeLockWaitMaxNs() const
+{
+  return _p->write_lock_wait_max_ns.load(std::memory_order_relaxed);
+}
+
+LogChannel::Stats LogChannel::stats() const
+{
+  return { writeLockContended(), writeLockWaitMaxNs() };
 }
 
 std::shared_ptr<ChannelSharedState> LogChannel::sharedState() const
@@ -225,35 +247,45 @@ bool LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
       }
     }
 
+    // set up the channel if we haven't begun logging
+    if(!_p->logging_started)
     {
-      // Excludes non-scalar LoggedValue writers and scopedWrite() transactions
-      // (Task 5 turns this into spin-then-lock with contention counters).
-      std::lock_guard<WriteMutex> write_lock(_p->shared->write_mutex);
+      _p->snapshot.schema_hash = _p->schema.hash;
+
+      std::lock_guard const lock_sinks(_p->sinks_mutex);
+      // start logging inside the sinks_mutex so that addDataSink does not have an incorrect value due to a race condition
+      _p->logging_started = true;
+      for(auto const& sink : _p->sinks)
+      {
+        sink->addChannel(_p->channel_name, _p->schema);
+      }
+    }
+
+    {
+      auto& write_mutex = _p->shared->write_mutex;
+      uint64_t blocked_wait_ns = 0;
+      const bool blocked = write_mutex.lockWithSpin(WriteMutex::kLockSpinNs, &blocked_wait_ns);
+      std::lock_guard<WriteMutex> write_lock(write_mutex, std::adopt_lock);
+      if(blocked)
+      {
+        _p->write_lock_contended.fetch_add(1, std::memory_order_relaxed);
+        auto previous = _p->write_lock_wait_max_ns.load(std::memory_order_relaxed);
+        while(previous < blocked_wait_ns &&
+              !_p->write_lock_wait_max_ns.compare_exchange_weak(
+                  previous, blocked_wait_ns, std::memory_order_relaxed))
+        {
+        }
+      }
 
       size_t payload_size = 0;
       for(size_t i = 0; i < _p->series.size(); i++)
       {
-        auto const& instance = _p->series[i];
-        payload_size += instance.holder.getSerializedSize();
-      }
-      _p->snapshot.payload.resize(payload_size);
-
-      // set up the channel if we haven't begun logging
-      if(!_p->logging_started)
-      {
-        _p->snapshot.schema_hash = _p->schema.hash;
-
-        std::lock_guard const lock_sinks(_p->sinks_mutex);
-        // start logging inside the sinks_mutex so that addDataSink does not have an incorrect value due to a race condition
-        _p->logging_started = true;
-        for(auto const& sink : _p->sinks)
+        if(GetBit(_p->snapshot.active_mask, i))
         {
-          sink->addChannel(_p->channel_name, _p->schema);
+          payload_size += _p->series[i].holder.getSerializedSize();
         }
       }
-
-      _p->snapshot.timestamp = timestamp;
-      _p->snapshot.channel_name = channelName();
+      _p->snapshot.payload.resize(payload_size);
 
       // serialize data into _p->snapshot.payload
       SerializeMe::SpanBytes payload_buffer(_p->snapshot.payload);
@@ -267,6 +299,9 @@ bool LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
       }
       _p->snapshot.payload.resize(_p->snapshot.payload.size() - payload_buffer.size());
     }
+
+    _p->snapshot.timestamp = timestamp;
+    _p->snapshot.channel_name = channelName();
   }
 
   bool all_pushed = true;

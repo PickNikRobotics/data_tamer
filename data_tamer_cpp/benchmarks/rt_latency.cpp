@@ -3,7 +3,8 @@
 // count per call after warm-up, and the channel's counters (when available).
 //
 // usage: rt_latency [--values N] [--sinks K] [--writers W] [--seconds S]
-//                   [--rate HZ] [--mcap PATH] [--fifo]
+//                   [--rate HZ] [--mcap PATH] [--fifo] [--transactions]
+//                   [--vector-writer]
 #include "data_tamer/data_sink.hpp"
 #include "data_tamer/data_tamer.hpp"
 #include "data_tamer/sinks/mcap_sink.hpp"
@@ -36,6 +37,8 @@ struct Options
   int rate_hz = 1000;
   std::string mcap;
   bool fifo = false;
+  bool transactions = false;
+  bool vector_writer = false;
 };
 
 static Options parse(int argc, char** argv)
@@ -51,6 +54,8 @@ static Options parse(int argc, char** argv)
     else if(!std::strcmp(argv[i], "--rate")) next(o.rate_hz);
     else if(!std::strcmp(argv[i], "--mcap")) o.mcap = argv[++i];
     else if(!std::strcmp(argv[i], "--fifo")) o.fifo = true;
+    else if(!std::strcmp(argv[i], "--transactions")) o.transactions = true;
+    else if(!std::strcmp(argv[i], "--vector-writer")) o.vector_writer = true;
     else
     {
       std::fprintf(stderr, "unknown option %s\n", argv[i]);
@@ -86,9 +91,10 @@ static void printPercentiles(std::vector<long>& ns)
 int main(int argc, char** argv)
 {
   const Options opt = parse(argc, argv);
-  std::printf("rt_latency values=%d sinks=%d writers=%d seconds=%d rate=%dHz mcap=%s fifo=%d\n",
+  std::printf("rt_latency values=%d sinks=%d writers=%d seconds=%d rate=%dHz mcap=%s fifo=%d transactions=%d vector_writer=%d\n",
               opt.values, opt.sinks, opt.writers, opt.seconds, opt.rate_hz,
-              opt.mcap.empty() ? "-" : opt.mcap.c_str(), int(opt.fifo));
+              opt.mcap.empty() ? "-" : opt.mcap.c_str(), int(opt.fifo),
+              int(opt.transactions), int(opt.vector_writer));
 
   auto channel = LogChannel::create("rt");
   std::vector<std::shared_ptr<DataSinkBase>> sinks;
@@ -115,6 +121,11 @@ int main(int argc, char** argv)
   {
     logged.push_back(channel->createLoggedValue<double>("lv" + std::to_string(i)));
   }
+  std::shared_ptr<LoggedValue<std::vector<double>>> vector_value;
+  if(opt.vector_writer)
+  {
+    vector_value = channel->createLoggedValue<std::vector<double>>("vector_writer");
+  }
 
   std::atomic_bool run{ true };
   std::vector<std::thread> writers;
@@ -124,11 +135,34 @@ int main(int argc, char** argv)
       double x = double(w);
       while(run)
       {
-        for(size_t i = size_t(w); i < logged.size(); i += size_t(opt.writers))
+        if(opt.transactions)
         {
-          logged[i]->set(x);
+          auto transaction = channel->scopedWrite();
+          for(size_t i = size_t(w); i < logged.size(); i += size_t(opt.writers))
+          {
+            logged[i]->set(x);
+          }
+        }
+        else
+        {
+          for(size_t i = size_t(w); i < logged.size(); i += size_t(opt.writers))
+          {
+            logged[i]->set(x);
+          }
         }
         x += 1.0;
+        std::this_thread::sleep_for(std::chrono::microseconds(200));
+      }
+    });
+  }
+  if(vector_value)
+  {
+    writers.emplace_back([&] {
+      size_t size = 1;
+      while(run)
+      {
+        vector_value->set(std::vector<double>(size, double(size)));
+        size = size == 64 ? 1 : size + 1;
         std::this_thread::sleep_for(std::chrono::microseconds(200));
       }
     });
@@ -186,6 +220,10 @@ int main(int argc, char** argv)
   }
 
   printPercentiles(durations);
+  const auto stats = channel->stats();
+  std::printf("write_lock_contended=%llu write_lock_wait_max_ns=%llu\n",
+              (unsigned long long)stats.write_lock_contended,
+              (unsigned long long)stats.write_lock_wait_max_ns);
   std::printf("allocations per call after warm-up: %.4f\n", double(allocations) / double(total));
   std::printf("takeSnapshot returned false: %zu / %zu\n", failed, total);
   std::printf("fifo=%d\n", int(fifo_ok));

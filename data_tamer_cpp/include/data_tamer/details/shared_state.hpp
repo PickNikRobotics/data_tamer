@@ -23,6 +23,53 @@ namespace DataTamer
 class ChannelSharedState
 {
 public:
+  /**
+   * @brief Scoped ownership of this state's write mutex.
+   *
+   * A nested transaction for the same state is a no-op. The thread-local
+   * linked chain is allocation-free and has no nesting-depth limit.
+   */
+  class Transaction
+  {
+  public:
+    explicit Transaction(ChannelSharedState& state) : state_(&state), previous_(active())
+    {
+      owns_ = !state.inTransactionOnThisThread();
+      if(owns_)
+      {
+        state.write_mutex.lock();
+      }
+      active() = this;
+    }
+
+    ~Transaction()
+    {
+      active() = previous_;
+      if(owns_)
+      {
+        state_->write_mutex.unlock();
+      }
+    }
+
+    Transaction(const Transaction&) = delete;
+    Transaction& operator=(const Transaction&) = delete;
+    Transaction(Transaction&&) = delete;
+    Transaction& operator=(Transaction&&) = delete;
+
+  private:
+    friend class ChannelSharedState;
+
+    static Transaction*& active()
+    {
+      static thread_local Transaction* transaction = nullptr;
+      return transaction;
+    }
+
+    ChannelSharedState* state_;
+    Transaction* previous_;
+    bool owns_ = false;
+  };
+
   /// The transaction lock: writers hold it for a scopedWrite(); the snapshot
   /// thread holds it for serialization. Priority-inheriting where available.
   WriteMutex write_mutex;
@@ -60,6 +107,19 @@ public:
     {
       mask_dirty.store(true, std::memory_order_release);
     }
+  }
+
+  [[nodiscard]] bool inTransactionOnThisThread() const noexcept
+  {
+    for(auto* transaction = Transaction::active(); transaction;
+        transaction = transaction->previous_)
+    {
+      if(transaction->state_ == this)
+      {
+        return true;
+      }
+    }
+    return false;
   }
 
 private:

@@ -6,6 +6,7 @@
 #include "data_tamer/details/shared_state.hpp"
 
 #include <chrono>
+#include <cstdint>
 #include <memory>
 
 namespace DataTamer
@@ -206,6 +207,24 @@ public:
   */
   Mutex& writeMutex();
 
+  /// Hold the channel write mutex so a group of writes appears in one
+  /// snapshot or in none. Nested transactions on this thread are safe.
+  [[nodiscard]] ChannelSharedState::Transaction scopedWrite();
+
+  /// Snapshots that blocked after exhausting the write-mutex spin budget.
+  [[nodiscard]] uint64_t writeLockContended() const;
+
+  /// Longest blocking mutex acquisition after spin exhaustion, in nanoseconds.
+  [[nodiscard]] uint64_t writeLockWaitMaxNs() const;
+
+  struct Stats
+  {
+    uint64_t write_lock_contended = 0;
+    uint64_t write_lock_wait_max_ns = 0;
+  };
+
+  [[nodiscard]] Stats stats() const;
+
   /// State shared with this channel's LoggedValues (enable flags, write mutex).
   [[nodiscard]] std::shared_ptr<ChannelSharedState> sharedState() const;
 
@@ -401,7 +420,7 @@ inline void LoggedValue<T>::set(const T& val, bool auto_enable)
   }
   else
   {
-    std::lock_guard<WriteMutex> lk(state_->write_mutex);
+    ChannelSharedState::Transaction transaction(*state_);
     value_ = val;
   }
   if(auto_enable && !isEnabled())
@@ -419,7 +438,7 @@ inline T LoggedValue<T>::get() const
   }
   else
   {
-    std::lock_guard<WriteMutex> lk(state_->write_mutex);
+    ChannelSharedState::Transaction transaction(*state_);
     return value_;
   }
 }

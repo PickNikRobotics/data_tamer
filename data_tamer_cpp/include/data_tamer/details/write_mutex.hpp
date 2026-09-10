@@ -93,8 +93,13 @@ public:
    * @return true if the call had to block (i.e. a writer held the mutex for
    *         longer than the spin budget). Callers use this to count contention.
    */
-  bool lockWithSpin(std::int64_t spin_ns = kLockSpinNs)
+  bool lockWithSpin(std::int64_t spin_ns = kLockSpinNs,
+                    std::uint64_t* blocked_wait_ns = nullptr)
   {
+    if(blocked_wait_ns)
+    {
+      *blocked_wait_ns = 0;
+    }
     if(try_lock())
     {
       return false;
@@ -114,7 +119,14 @@ public:
         }
       }
     } while(std::chrono::steady_clock::now() < deadline);
+    const auto wait_start = std::chrono::steady_clock::now();
     lock();
+    if(blocked_wait_ns)
+    {
+      *blocked_wait_ns = std::uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                          std::chrono::steady_clock::now() - wait_start)
+                                          .count());
+    }
     return true;
   }
 
