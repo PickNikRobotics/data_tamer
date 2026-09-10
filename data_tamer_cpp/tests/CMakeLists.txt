@@ -13,7 +13,8 @@ if(DATA_TAMER_BUILD_ROS AND gtest_vendor_FOUND AND ament_cmake_gtest_FOUND)
         add_remove_sink_tests.cpp
         trait_tests.cpp
         alloc_counter.cpp
-        alloc_counter_tests.cpp)
+        alloc_counter_tests.cpp
+        write_mutex_tests.cpp)
 
     target_include_directories(datatamer_test
         PUBLIC $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>)
@@ -38,7 +39,8 @@ else()
         add_remove_sink_tests.cpp
         trait_tests.cpp
         alloc_counter.cpp
-        alloc_counter_tests.cpp)
+        alloc_counter_tests.cpp
+        write_mutex_tests.cpp)
 
     target_include_directories(datatamer_test
         PUBLIC $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>)
