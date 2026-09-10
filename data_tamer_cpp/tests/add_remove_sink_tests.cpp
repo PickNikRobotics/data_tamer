@@ -42,7 +42,7 @@ TEST(DataTamerSinkRegistry, SnapshotsAreRecordedWhileSinkPresent)
   take_snapshots(channel, snapshot_count);
 
   const auto hash = channel->getSchema().hash;
-  ASSERT_EQ(sink->snapshots_count[hash], snapshot_count);
+  ASSERT_EQ(sink->snapshotsCount(hash), snapshot_count);
 }
 
 TEST(DataTamerSinkRegistry, RemoveSinkStopsRecording)
@@ -58,7 +58,7 @@ TEST(DataTamerSinkRegistry, RemoveSinkStopsRecording)
   take_snapshots(channel, snapshot_count);
 
   const auto hash = channel->getSchema().hash;
-  ASSERT_EQ(sink->snapshots_count[hash], snapshot_count);
+  ASSERT_EQ(sink->snapshotsCount(hash), snapshot_count);
 
   channel->removeDataSink(sink);
 
@@ -67,5 +67,5 @@ TEST(DataTamerSinkRegistry, RemoveSinkStopsRecording)
   // Taking more snapshots, should not be recorded in the sink (i.e does not increase snapshots_count)
   take_snapshots(channel, snapshot_count);
 
-  ASSERT_EQ(sink->snapshots_count[hash], snapshot_count);
+  ASSERT_EQ(sink->snapshotsCount(hash), snapshot_count);
 }

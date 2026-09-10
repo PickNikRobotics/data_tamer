@@ -153,7 +153,8 @@ TEST(DataTamerParser, PlainParsing)
 
   const auto& schema_in = channel->getSchema();
   const auto& schema_out = DataTamerParser::BuilSchemaFromText(ToStr(schema_in));
-  const auto snapshot_view = ConvertSnapshot(dummy_sink->latest_snapshot);
+  const auto snapshot = dummy_sink->latestSnapshot();
+  const auto snapshot_view = ConvertSnapshot(snapshot);
 
   std::map<std::string, double> parsed_values;
   auto callback = [&](const std::string& field_name,
@@ -192,7 +193,8 @@ TEST(DataTamerParser, CustomParsing)
 
   const auto& schema_in = channel->getSchema();
   const auto& schema_out = DataTamerParser::BuilSchemaFromText(ToStr(schema_in));
-  const auto snapshot_view = ConvertSnapshot(dummy_sink->latest_snapshot);
+  const auto snapshot = dummy_sink->latestSnapshot();
+  const auto snapshot_view = ConvertSnapshot(snapshot);
 
   std::map<std::string, double> parsed_values;
   auto callback = [&](const std::string& field_name,
@@ -246,7 +248,8 @@ TEST(DataTamerParser, VectorParsing)
 
   const auto& schema_in = channel->getSchema();
   const auto& schema_out = DataTamerParser::BuilSchemaFromText(ToStr(schema_in));
-  const auto snapshot_view = ConvertSnapshot(dummy_sink->latest_snapshot);
+  const auto snapshot = dummy_sink->latestSnapshot();
+  const auto snapshot_view = ConvertSnapshot(snapshot);
 
   std::map<std::string, double> parsed_values;
   auto callback = [&](const std::string& field_name,

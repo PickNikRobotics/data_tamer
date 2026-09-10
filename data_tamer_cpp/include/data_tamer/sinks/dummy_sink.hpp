@@ -14,38 +14,81 @@ using Mutex = std::shared_mutex;
 /**
  * @brief The DummySink does nothing, only counting the number of snapshots received.
  * Used mostly for testing and debugging.
+ *
+ * All accessors take the internal mutex, so they may be called from any thread
+ * while the sink thread is delivering snapshots.
  */
 class DummySink : public DataSinkBase
 {
 public:
-  std::unordered_map<uint64_t, Schema> schemas;
-  std::unordered_map<uint64_t, std::string> schema_names;
-  std::unordered_map<uint64_t, long> snapshots_count;
-  Snapshot latest_snapshot;
-  Mutex schema_mutex_;
-
   ~DummySink() override { stopThread(); }
 
   void addChannel(std::string const& name, Schema const& schema) override
   {
-    std::scoped_lock lk(schema_mutex_);
-    schemas[schema.hash] = schema;
-    schema_names[schema.hash] = name;
-    snapshots_count[schema.hash] = 0;
+    std::scoped_lock lk(mutex_);
+    schemas_[schema.hash] = schema;
+    schema_names_[schema.hash] = name;
+    snapshots_count_[schema.hash] = 0;
   }
 
   bool storeSnapshot(const Snapshot& snapshot) override
   {
-    std::scoped_lock lk(schema_mutex_);
-    latest_snapshot = snapshot;
-
-    auto it = snapshots_count.find(snapshot.schema_hash);
-    if(it != snapshots_count.end())
+    std::scoped_lock lk(mutex_);
+    latest_snapshot_ = snapshot;
+    auto it = snapshots_count_.find(snapshot.schema_hash);
+    if(it != snapshots_count_.end())
     {
       it->second++;
     }
     return true;
   }
+
+  /// Copy of the most recent snapshot delivered to storeSnapshot().
+  Snapshot latestSnapshot() const
+  {
+    std::scoped_lock lk(mutex_);
+    return latest_snapshot_;
+  }
+
+  /// Number of snapshots delivered for the channel with this schema hash (0 if unknown).
+  long snapshotsCount(uint64_t hash) const
+  {
+    std::scoped_lock lk(mutex_);
+    auto it = snapshots_count_.find(hash);
+    return it == snapshots_count_.end() ? 0 : it->second;
+  }
+
+  size_t schemasCount() const
+  {
+    std::scoped_lock lk(mutex_);
+    return schemas_.size();
+  }
+
+  /// Hash of the first registered schema. Precondition: schemasCount() >= 1.
+  uint64_t firstSchemaHash() const
+  {
+    std::scoped_lock lk(mutex_);
+    return schemas_.begin()->first;
+  }
+
+  Schema schema(uint64_t hash) const
+  {
+    std::scoped_lock lk(mutex_);
+    return schemas_.at(hash);
+  }
+
+  std::string schemaName(uint64_t hash) const
+  {
+    std::scoped_lock lk(mutex_);
+    return schema_names_.at(hash);
+  }
+
+private:
+  mutable std::mutex mutex_;
+  std::unordered_map<uint64_t, Schema> schemas_;
+  std::unordered_map<uint64_t, std::string> schema_names_;
+  std::unordered_map<uint64_t, long> snapshots_count_;
+  Snapshot latest_snapshot_;
 };
 
 }  // namespace DataTamer
