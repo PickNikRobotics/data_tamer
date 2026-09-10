@@ -15,7 +15,8 @@ if(DATA_TAMER_BUILD_ROS AND gtest_vendor_FOUND AND ament_cmake_gtest_FOUND)
         alloc_counter.cpp
         alloc_counter_tests.cpp
         write_mutex_tests.cpp
-        snapshot_pool_tests.cpp)
+        snapshot_pool_tests.cpp
+        value_ptr_tests.cpp)
 
     target_include_directories(datatamer_test
         PUBLIC $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>)
@@ -42,7 +43,8 @@ else()
         alloc_counter.cpp
         alloc_counter_tests.cpp
         write_mutex_tests.cpp
-        snapshot_pool_tests.cpp)
+        snapshot_pool_tests.cpp
+        value_ptr_tests.cpp)
 
     target_include_directories(datatamer_test
         PUBLIC $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>)
