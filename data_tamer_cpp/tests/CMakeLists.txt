@@ -11,7 +11,9 @@ if(DATA_TAMER_BUILD_ROS AND gtest_vendor_FOUND AND ament_cmake_gtest_FOUND)
         parser_tests.cpp
         ros2_publisher_tests.cpp
         add_remove_sink_tests.cpp
-        trait_tests.cpp)
+        trait_tests.cpp
+        alloc_counter.cpp
+        alloc_counter_tests.cpp)
 
     target_include_directories(datatamer_test
         PUBLIC $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>)
@@ -34,7 +36,9 @@ else()
         custom_types_tests.cpp
         parser_tests.cpp
         add_remove_sink_tests.cpp
-        trait_tests.cpp)
+        trait_tests.cpp
+        alloc_counter.cpp
+        alloc_counter_tests.cpp)
 
     target_include_directories(datatamer_test
         PUBLIC $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>)
