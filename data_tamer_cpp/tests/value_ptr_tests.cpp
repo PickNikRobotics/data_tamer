@@ -156,3 +156,14 @@ TEST(ValuePtr, IsMoveOnlyAndSmall)
   // two function pointers + serializer shared_ptr + data pointer + small fields
   static_assert(sizeof(ValuePtr) <= 64, "ValuePtr grew; std::function crept back?");
 }
+
+TEST(ValuePtr, DefaultConstructedIsInertNotUB)
+{
+  ValuePtr empty;
+  ASSERT_EQ(empty.getSerializedSize(), 0u);
+  uint8_t buffer[8];
+  SerializeMe::SpanBytes span(buffer, 8);
+  empty.serialize(span);            // must not crash and must not consume bytes
+  ASSERT_EQ(span.size(), 8u);
+  ASSERT_EQ(empty.type(), BasicType::OTHER);
+}

@@ -11,10 +11,13 @@ namespace DataTamer
 {
 using SerializeMe::has_TypeDefinition;
 
+namespace details
+{
 template <typename T>
 struct is_std_atomic : std::false_type {};
 template <typename T>
 struct is_std_atomic<std::atomic<T>> : std::true_type {};
+}  // namespace details
 
 /**
  * @brief The ValuePtr is a non-owning pointer to a variable, together with
@@ -74,8 +77,8 @@ public:
 
 private:
   const void* v_ptr_ = nullptr;
-  SerializeFn serialize_fn_ = nullptr;
-  SizeFn size_fn_ = nullptr;
+  SerializeFn serialize_fn_ = &ValuePtr::serializeNone;
+  SizeFn size_fn_ = &ValuePtr::sizeNone;
   CustomSerializer::Ptr serializer_;  // keeps the custom serializer alive
   std::type_index type_index_ = typeid(void);
   BasicType type_ = BasicType::OTHER;
@@ -84,6 +87,9 @@ private:
   uint16_t array_size_ = 0;
 
   // ---- the type-erased implementations ----
+  static void serializeNone(const void*, const CustomSerializer*, SerializeMe::SpanBytes&) {}
+  static size_t sizeNone(const void*, const CustomSerializer*) { return 0; }
+
   template <typename T>
   static void serializeNumeric(const void* v, const CustomSerializer*, SerializeMe::SpanBytes& dst)
   {
@@ -193,7 +199,7 @@ inline ValuePtr::ValuePtr(const T* pointer, CustomSerializer::Ptr type_info)
   , memory_size_(sizeof(T))
   , is_vector_(false)
 {
-  static_assert(!is_std_atomic<T>::value,
+  static_assert(!details::is_std_atomic<T>::value,
                 "std::atomic<T> is supported only for numeric T (see the std::atomic<T>* constructor)");
   if(serializer_)
   {
