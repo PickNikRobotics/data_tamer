@@ -11,7 +11,8 @@ set(DATATAMER_TEST_SOURCES
     snapshot_pool_tests.cpp
     value_ptr_tests.cpp
     logged_value_tests.cpp
-    shared_state_tests.cpp)
+    shared_state_tests.cpp
+    locked_reference_tests.cpp)
 
 # look for gtest from ROS, but only when building for ROS 2
 if(DATA_TAMER_BUILD_ROS)

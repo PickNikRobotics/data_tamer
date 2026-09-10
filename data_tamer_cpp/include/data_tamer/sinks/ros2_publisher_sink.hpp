@@ -6,6 +6,7 @@
 #include "data_tamer_msgs/msg/snapshot.hpp"
 #include <unordered_map>
 #include <type_traits>
+#include <mutex>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
 #include <rclcpp/node_interfaces/node_interfaces.hpp>
@@ -79,7 +80,7 @@ private:
   }
 
   std::unordered_map<std::string, Schema> schemas_;
-  Mutex schema_mutex_;
+  std::mutex schema_mutex_;
 
   rclcpp::Publisher<data_tamer_msgs::msg::Schemas>::SharedPtr schema_publisher_;
   rclcpp::Publisher<data_tamer_msgs::msg::Snapshot>::SharedPtr data_publisher_;
