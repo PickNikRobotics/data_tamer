@@ -35,12 +35,16 @@ else()
         parser_tests.cpp
         add_remove_sink_tests.cpp
         trait_tests.cpp)
-    gtest_discover_tests(datatamer_test DISCOVERY_MODE PRE_TEST)
 
     target_include_directories(datatamer_test
         PUBLIC $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>)
 
     target_link_libraries(datatamer_test data_tamer GTest::gtest_main)
 
-    add_test(NAME datatamer_test COMMAND $<TARGET_FILE:datatamer_test>)
+    set(DATA_TAMER_TEST_WRAPPER "" CACHE FILEPATH "Optional launcher that execs the test binary (used for TSAN)")
+    if(DATA_TAMER_TEST_WRAPPER)
+        add_test(NAME datatamer_test COMMAND ${DATA_TAMER_TEST_WRAPPER} $<TARGET_FILE:datatamer_test>)
+    else()
+        gtest_discover_tests(datatamer_test DISCOVERY_MODE PRE_TEST)
+    endif()
 endif()
