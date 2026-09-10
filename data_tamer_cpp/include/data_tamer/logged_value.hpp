@@ -34,8 +34,9 @@ public:
   LoggedValue(LoggedValue const& other) = delete;
   LoggedValue& operator=(LoggedValue const& other) = delete;
 
-  LoggedValue(LoggedValue&& other) = default;
-  LoggedValue& operator=(LoggedValue&& other) = default;
+  // The channel holds a pointer to value_; moving would leave it dangling.
+  LoggedValue(LoggedValue&& other) = delete;
+  LoggedValue& operator=(LoggedValue&& other) = delete;
 
   /**
    * @brief set the value of the variable.
