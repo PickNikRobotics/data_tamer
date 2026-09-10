@@ -2,6 +2,28 @@
 Changelog for package data_tamer
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Unreleased
+----------
+* Real-time front end, steps 0–5: scalar ``LoggedValue`` values use lock-free
+  atomics; ``set()``/``get()`` are wait-free. Non-scalar updates and snapshot
+  serialization share a priority-inheriting mutex. ``LogChannel::scopedWrite()``
+  groups updates into one transaction and supports nested non-scalar ``set()``/``get()``.
+  Lone scalar updates do not promise consistency across values.
+* Added ``writeLockContended()``, ``writeLockWaitMaxNs()`` and ``stats()``.
+  Contention counts acquisitions that block after spinning; maximum wait measures
+  blocking acquisition time, excluding serialization.
+* API: ``Mutex`` now aliases exclusive ``WriteMutex`` (no ``lock_shared()``);
+  ``LoggedValue::get()`` is const; scalar ``getMutablePtr()``/``getConstPtr()``
+  are deprecated in favor of ``set()``/``get()``. Proxy ``mutex()`` is deprecated
+  and proxy boolean conversion is explicit. ``LoggedValue`` is no longer movable.
+  ``DummySink`` exposes synchronized accessors instead of public members.
+* ``MCAPSink`` and ``ROS2PublisherSink`` store private state behind a Pimpl.
+  This release changes their ABI; downstream binaries must be rebuilt.
+* Build: debug/release/asan/tsan presets, sanitizer CI, allocation-counting
+  benchmarks and the ``rt_latency`` harness, including standalone mutex/pool
+  measurements and validated CLI inputs. Conan's benchmark option exports and
+  builds the benchmark sources. Vendored MCAP builds with GCC 15.
+
 1.0.4 (2026-07-26)
 ------------------
 * Merge pull request `#68 <https://github.com/PickNikRobotics/data_tamer/issues/68>`_ from coderjake91/feature/update-ROS2PublisherSink-to-use-NodeInterfaces

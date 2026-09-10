@@ -94,6 +94,24 @@ int main()
   channel->takeSnapshot();
 }
 ```
+Scalar `LoggedValue::set()` and `get()` use relaxed atomics. Each value is
+read without tearing, but separate writes can appear in different snapshots.
+To capture several updates together, use one logged struct or a transaction:
+
+```cpp
+{
+  auto tx = channel->scopedWrite();
+  logged_real->set(3.2f);
+  value_int = 43;  // a raw registered value uses the same write mutex
+}
+channel->takeSnapshot();
+```
+
+Non-scalar `set()`/`get()` lock automatically and can be called inside
+`scopedWrite()`. Keep transactions short and take snapshots after releasing
+them. Non-scalar pointer proxies also hold the write mutex; release them before
+starting a transaction or taking a snapshot.
+
 ## How to register custom types
 
 Containers such as `std::vector` and `std::array` are supported out of the box.

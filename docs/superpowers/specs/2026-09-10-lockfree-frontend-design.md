@@ -132,9 +132,9 @@ again.
    `write_lock_wait_max_ns` from `now - t0` (clock reads only on this rare path).
    Under the lock: size pass over enabled series → ensure slot capacity (§4.6) →
    serialize enabled series into `slot->payload`. Unlock. Scalar atomics are read
-   with `load(relaxed)`; they need no lock, but being read under it makes a lone
-   scalar `set()` that happens during serialization simply land in the next
-   snapshot. The size pass is inside the section because a vector may change
+   with `load(relaxed)`; they need no lock. A lone scalar `set()` during
+   serialization may appear in this snapshot or the next; only writes inside
+   a transaction are ordered together. The size pass is inside the section because a vector may change
    length between the two passes.
 5. Fill the header: `timestamp`, cached `schema_hash`, `channel_name`
    (`string_view`), `memcpy` mask, `payload.resize(written)` (≤ capacity).
@@ -242,7 +242,7 @@ the same mutex (§3 step 4).
 ```cpp
 // user code
 {
-  auto tx = channel->scopedWrite();     // std::lock_guard<WriteMutex>; same as lock_guard(channel->writeMutex())
+  auto tx = channel->scopedWrite();     // nesting-aware guard of channel->writeMutex()
   pos->set({1, 2, 3});                  // non-scalar LoggedValue
   speed->set(3.2);                      // scalar LoggedValue: atomic store, ordered by the lock
   raw_flag = true;                      // raw registered pointer
@@ -264,19 +264,23 @@ The README states this rule next to the first `set()` example.
 
 - Non-scalar `LoggedValue<T>::set(v)` = `std::lock_guard lk(state_->write_mutex);
   value_ = v;` unless the calling thread already holds the mutex through a
-  `scopedWrite()` (detected by a thread-local "transaction depth" counter in
-  `ChannelSharedState`, so nested use does not deadlock and does not need a
-  recursive mutex).
+  `scopedWrite()` (detected through a thread-local chain of active transaction
+  guards in `ChannelSharedState`, with no allocation or fixed channel limit).
+  Guards are nonmovable and must remain on their creating thread; C++17
+  guaranteed copy elision allows `scopedWrite()` to return them by value.
 - `getMutablePtr()` on a non-scalar holds the mutex for the lifetime of the
   proxy and points at the live object — today's semantics. Holding it long
   blocks the snapshot thread for that long; documented as "keep it short".
-- `getConstPtr()` and `get()` on a non-scalar take the mutex, copy, release.
-  Bounded; no spinning.
+- `getConstPtr()` on a non-scalar holds the mutex for the proxy lifetime, as
+  `getMutablePtr()` does. `get()` takes the mutex, copies, and releases it.
+  Both pointer proxies should be kept short and acquired outside a transaction.
 - Raw pointers: `writeMutex()` keeps its signature and meaning (`Mutex&`, where
   `Mutex` is now the alias `DataTamer::WriteMutex` instead of
   `std::shared_mutex`). `std::lock_guard`, `std::unique_lock` and
   `std::scoped_lock` code compiles unchanged; only code calling `lock_shared()`
   breaks (none in-tree). `scopedWrite()` is added as the preferred spelling.
+  A plain lock guard does not establish transaction nesting: use `scopedWrite()`
+  when calling non-scalar `set()`/`get()` within a group of writes.
 - Priority inheritance requires the writer to be a POSIX thread on Linux; it
   works whether the writer is `SCHED_FIFO` or `SCHED_OTHER` (a CFS writer is
   boosted to the waiter's real-time priority while holding the lock). On
@@ -548,13 +552,14 @@ const` bundling them. On `DataSinkBase`: `storeErrors()`.
 | Symbol | Change |
 |---|---|
 | `LogChannel::writeMutex()` | signature unchanged (`Mutex&`); `Mutex` is now `DataTamer::WriteMutex` (exclusive, priority-inheriting) instead of `std::shared_mutex` — `lock_shared()` callers break, `lock_guard`/`unique_lock`/`scoped_lock` callers do not |
-| `LogChannel::scopedWrite()` | new; `std::lock_guard<WriteMutex>` sugar, the documented way to write a transaction |
+| `LogChannel::scopedWrite()` | new; nonmovable, nesting-aware `ChannelSharedState::Transaction` guard of the channel's `WriteMutex` |
 | `LogChannel::setPayloadCapacity/setPoolCapacity/setStrictMode` | new |
 | `LogChannel::poolExhausted/writeLockContended/writeLockWaitMaxNs/payloadReallocations/droppedOversize/droppedSnapshots/stats` | new |
 | `LoggedValue` move ctor / assignment | deleted |
 | `LoggedValue<T>::getMutablePtr()/getConstPtr()` for atomic-scalar `T` | deprecated (proxy semantics); use `set()`/`get()` |
 | `LoggedValue<T>::get()` | now `const` |
 | `MutablePtr/ConstPtr::mutex()` | deprecated; returns `nullptr` for scalar `LoggedValue`s |
+| `MutablePtr/ConstPtr::operator bool()` | now explicit (also applies to atomic scalar proxies) |
 | `LoggedValue<T>::getLockedPtr()` | already deprecated; unchanged |
 | `DataSinkBase::DataSinkBase(size_t queue_capacity = 1024)` | new constructor argument (default keeps old call sites compiling) |
 | `DummySink` public members `schemas`, `schema_names`, `snapshots_count`, `latest_snapshot` | replaced by mutex-protected accessors `schema(hash)`, `schemaName(hash)`, `schemasCount()`, `firstSchemaHash()`, `snapshotsCount(hash)`, `latestSnapshot()` (source-breaking for tests that read the members) |
@@ -562,6 +567,15 @@ const` bundling them. On `DataSinkBase`: `storeErrors()`.
 | `DataSinkBase::storeErrors()` | new |
 | `DataTamer::SnapshotRef` | new public type (sinks may keep one) |
 | `MCAPSink::finishQueueAndStop` | no longer sleeps |
+| `MCAPSink` / `ROS2PublisherSink` | private state moved behind an out-of-line Pimpl; one-time ABI change requires downstream rebuilds, subsequent private fields do not change the sink object layout |
+| `ROS2PublisherSink::schema_mutex_` | private `std::mutex` now lives in the Pimpl and protects the schema-change flag as well as schemas |
+
+Implemented through Plan 2: atomic scalars, nested transactions, contention
+counters and sink Pimpls. Capacity setters, the remaining counters, `SnapshotRef`
+delivery, removal of `pushSnapshot`, and removing the sleep from
+`finishQueueAndStop` belong to the subsequent plans. `write_lock_contended`
+counts blocking acquisitions after the spin budget; `write_lock_wait_max_ns`
+measures only the blocking acquisition, excluding serialization.
 
 ## 9. Testing
 

@@ -10,6 +10,39 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-10-lockfree-frontend-design.md` — §2.1–2.2 (roles, `ChannelSharedState`), §3 step 4 (locked serialization), §4.1 (atomic scalars), §4.2 (transactions), §4.4 (`LoggedValue` ↔ channel), §5.2 (`setEnabled`), §7 (counters), §8 (API delta), §9 (tests), §10 steps 4–5, §10.1 steps 4–5.
 
+## Execution status (2026-09-11)
+
+Tasks 1–4 were already committed at `40c1812`, `57df98f`, `ff477be`, and
+`18a187c` when execution resumed. Tasks 5–6 are committed as `f1cd33e` and
+`3812c2f`. Final review fixes and
+the carried-over standalone benchmarks are committed as `a14c1ff`. Task 7 is
+complete: API documentation, changelog, and all measurements are in
+`docs/benchmarks/2026-09-plan2.md`. Final review found no remaining blocking
+issues. Debug/ASAN+UBSAN/TSAN each pass 87 tests with one privileged PI skip;
+Release passes 88 with the same skip, including the CLI regression.
+
+The following corrections supersede the original implementation sketches:
+
+- Transaction nesting uses an allocation-free chain of active guards, with no
+  eight-channel limit. Guards are nonmovable; C++17 copy elision returns them.
+- Contention counts only acquisition attempts that block after the spin budget.
+  Maximum wait excludes serialization. Snapshot unlocking uses RAII, including
+  when a user serializer throws; size and serialization use the same active mask.
+- ROS Pimpl is fully defined out of line. A normalized-interface delegating
+  constructor preserves the public node-like template inputs. Its destructor
+  stops the worker before freeing private state, and schema flag access is locked.
+- The latency harness includes `--vector-writer` for spec §10.1, in addition
+  to `--transactions`.
+- Validation uses this machine's GCC 15 and ROS Lyrical. A missing `<cstdint>`
+  include in vendored MCAP was fixed in `5ae22de`. ROS validation supplies the
+  installed MCAP library path explicitly; the six ROS publisher tests and both
+  sink layout assertions were compiled and run despite the legacy gtest-vendor
+  discovery falling back to system GTest.
+- Measurements use the requested CPU affinity and repetitions, but this machine
+  differs from the historical baseline; the results document makes no controlled
+  speedup claim. LeakSanitizer runs outside the traced sandbox with leak detection
+  enabled; no suppressions are added.
+
 ## Global Constraints
 
 - Every task ends with `debug`, `asan`, `tsan` and `release` presets green: `cmake --preset <p> && cmake --build --preset <p> && ctest --preset <p>` (run from `data_tamer_cpp/`). Zero sanitizer diagnostics, zero compiler warnings (library flags: `-Wall -Wconversion -Wextra -Wsign-conversion -Werror -Wpedantic -Wno-sign-conversion`).
@@ -71,7 +104,7 @@
 
 Design note: the flags are `std::atomic<bool>` in a `std::deque` (element addresses are stable under `push_back`, and `std::atomic` is not movable, so `std::vector` cannot hold it). Registration is setup-only (spec R5), so appends never race with the snapshot thread.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `tests/shared_state_tests.cpp`:
 
@@ -182,14 +215,14 @@ TEST(ChannelSharedState, ConcurrentToggleAndReadIsRaceFree)
 }
 ```
 
-- [ ] **Step 2: Register and run to see the failure**
+- [x] **Step 2: Register and run to see the failure**
 
 Append `shared_state_tests.cpp` to `DATATAMER_TEST_SOURCES` in `tests/CMakeLists.txt`; add `include/data_tamer/details/shared_state.hpp` to the `add_library(data_tamer ...)` list in `CMakeLists.txt` next to `write_mutex.hpp`.
 
 Run: `cmake --preset debug && cmake --build --preset debug`
 Expected: FAIL — `data_tamer/details/shared_state.hpp: No such file or directory`.
 
-- [ ] **Step 3: Write the header**
+- [x] **Step 3: Write the header**
 
 `include/data_tamer/details/shared_state.hpp`:
 
@@ -265,12 +298,12 @@ private:
 }  // namespace DataTamer
 ```
 
-- [ ] **Step 4: Run under all presets**
+- [x] **Step 4: Run under all presets**
 
 Run: `cmake --build --preset debug && ctest --preset debug -R ChannelSharedState`, then the full `asan`, `tsan`, `release` presets.
 Expected: 5 new tests pass; all presets green; `ConcurrentToggleAndReadIsRaceFree` clean under TSAN.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add include/data_tamer/details/shared_state.hpp tests/shared_state_tests.cpp tests/CMakeLists.txt CMakeLists.txt
@@ -297,7 +330,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 
 Why the ROS sink line changes: `ROS2PublisherSink::schema_mutex_` is declared as `Mutex`, which becomes the PI `WriteMutex`; it only ever needs a plain mutex, and giving a backend object a PI mutex would be misleading. This is the only in-tree `Mutex` user outside the channel/`LoggedValue` pair (verified by `grep -rn "\bMutex\b" include src`).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `tests/locked_reference_tests.cpp`:
 
@@ -381,14 +414,14 @@ TEST(LockedReference, NullProxiesAreFalse)
 }
 ```
 
-- [ ] **Step 2: Register and run to see the failures**
+- [x] **Step 2: Register and run to see the failures**
 
 Append `locked_reference_tests.cpp` to `DATATAMER_TEST_SOURCES`.
 
 Run: `cmake --build --preset debug 2>&1 | grep -E "error" | head -5`
 Expected: FAIL — `AtomicProxy` not declared; `static_assert(std::is_same_v<Mutex, WriteMutex>)` fails.
 
-- [ ] **Step 3: Rewrite `locked_reference.hpp`**
+- [x] **Step 3: Rewrite `locked_reference.hpp`**
 
 ```cpp
 #pragma once
@@ -614,16 +647,16 @@ inline MutablePtr<T>::~MutablePtr()
 
 Behaviour notes: `ConstPtr` used to take a *shared* lock; with an exclusive `WriteMutex` it now excludes other readers too — required, since the snapshot thread must not serialize while a `ConstPtr` guarantees a stable value. The old move constructor of `ConstPtr` did not null the source's `mutex_`, so a moved-from `ConstPtr` unlocked the mutex a second time in its destructor; fixed here. `operator bool` is now `explicit` (the old implicit one allowed `int x = ptr;`); the in-tree uses are all `if(auto p = ...)`, which still compile.
 
-- [ ] **Step 4: Fix the one external `Mutex` user**
+- [x] **Step 4: Fix the one external `Mutex` user**
 
 In `include/data_tamer/sinks/ros2_publisher_sink.hpp`, change `Mutex schema_mutex_;` to `std::mutex schema_mutex_;` (the file already includes `<unordered_map>`; add `#include <mutex>` next to it). This file is compiled only in the ROS build; the change is by inspection, and the `ros2.yml` CI covers it.
 
-- [ ] **Step 5: Run under all presets**
+- [x] **Step 5: Run under all presets**
 
 Run: `cmake --build --preset debug && ctest --preset debug -R LockedReference`, then full `asan`, `tsan`, `release`.
 Expected: 6 new tests pass; existing `DataTamerBasic.LockedPtr` still passes (it uses `getMutablePtr()` on a `LoggedValue<float>`, unchanged until Task 3); no `-Wdeprecated-declarations` warnings in the library (the deprecated `mutex()` is not called in-tree).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add include/data_tamer/details/locked_reference.hpp include/data_tamer/sinks/ros2_publisher_sink.hpp tests/locked_reference_tests.cpp tests/CMakeLists.txt
@@ -662,7 +695,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
   ```
   Task 5 relies on `sharedState()` and on non-scalar `LoggedValue`s using `state_->write_mutex`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Replace `tests/logged_value_tests.cpp` with:
 
@@ -840,12 +873,12 @@ TEST(LoggedValue, NonScalarStillWorksThroughMutablePtr)
 
 Also update `tests/dt_tests.cpp` `DataTamerBasic.LockedPtr`: after the block that assigns `*ptr = val2;`, the comment "we should be able to get it again now that ptr is out of scope" and `EXPECT_TRUE(logged_float->getMutablePtr());` stay valid; no change needed except adding `#include <cstring>` if missing — the test compiles unchanged because `AtomicProxy<float>` has the same `operator bool`/`operator*`.
 
-- [ ] **Step 2: Run to see the failures**
+- [x] **Step 2: Run to see the failures**
 
 Run: `cmake --build --preset debug 2>&1 | grep -E "error" | head -8`
 Expected: FAIL — `is_atomic_scalar_v` not declared; `createLoggedValue<std::vector<double>>` initializer-list argument fails only if the constructor signature is wrong (it takes `T initial_value`, so `{1.0, 2.0}` converts); `channel.reset()` then `setEnabled` compiles but the current implementation silently does nothing (the `AutoEnable`/`NeedsNoChannel` tests fail at runtime).
 
-- [ ] **Step 3: Rewrite `logged_value.hpp`**
+- [x] **Step 3: Rewrite `logged_value.hpp`**
 
 ```cpp
 #pragma once
@@ -953,7 +986,7 @@ private:
 }  // namespace DataTamer
 ```
 
-- [ ] **Step 4: Add `registerValue(const std::atomic<T>*)` and `sharedState()` to `LogChannel`**
+- [x] **Step 4: Add `registerValue(const std::atomic<T>*)` and `sharedState()` to `LogChannel`**
 
 In `include/data_tamer/channel.hpp`, after the `registerValue(const std::string&, const T*)` declaration (line 78), add:
 
@@ -1078,7 +1111,7 @@ inline typename LoggedValue<T>::ConstProxy LoggedValue<T>::getConstPtr()
 
 Note on the non-scalar `set()`: Task 5 adds the "already inside a transaction on this thread" check; until then a `set()` inside `scopedWrite()` would deadlock, and no in-tree code does that yet.
 
-- [ ] **Step 5: Wire the shared state into `LogChannel::Pimpl`**
+- [x] **Step 5: Wire the shared state into `LogChannel::Pimpl`**
 
 In `src/channel.cpp`:
 
@@ -1118,7 +1151,7 @@ In `src/channel.cpp`:
 
   The size pass stays over all series (unchanged behaviour: payload is trimmed after serialization). `_p->mutex` still wraps the whole block, as today.
 
-- [ ] **Step 6: Update the T01 example comments**
+- [x] **Step 6: Update the T01 example comments**
 
 In `examples/T01_basic_example.cpp`, replace the two comment blocks around `getMutablePtr()` / `getConstPtr()` (lines 36–44) with:
 
@@ -1134,12 +1167,12 @@ In `examples/T01_basic_example.cpp`, replace the two comment blocks around `getM
   // getConstPtr() returns a copy taken now; nothing is locked.
 ```
 
-- [ ] **Step 7: Run under all presets**
+- [x] **Step 7: Run under all presets**
 
 Run: `cmake --build --preset debug && ctest --preset debug -R "LoggedValue|DataTamerBasic"`, then full `asan`, `tsan`, `release`.
 Expected: 10 `LoggedValue.*` tests pass; `ScalarWriterRacesSnapshotCleanly` is TSAN-clean (this is the race fix); every pre-existing test passes unchanged (payload sizes and masks identical).
 
-- [ ] **Step 8: Measure**
+- [x] **Step 8: Measure**
 
 ```bash
 cmake --build --preset release
@@ -1149,7 +1182,7 @@ taskset -c 0-5 ./build/release/benchmarks/rt_latency --values 1000 --sinks 1 --w
 
 Expected: `DT_LoggedValueSet` items/s up by roughly an order of magnitude versus the baseline (34 M/s); the writer-contention harness p99 no longer shows lock convoying. Paste both outputs into the commit body.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add include/data_tamer/logged_value.hpp include/data_tamer/channel.hpp src/channel.cpp tests/logged_value_tests.cpp tests/dt_tests.cpp examples/T01_basic_example.cpp
@@ -1176,7 +1209,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 **Interfaces:**
 - Produces: `[[deprecated]]` on `getMutablePtr()`/`getConstPtr()` when `kAtomic` is true (spec §4.1); non-scalar overloads undeprecated.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `tests/logged_value_tests.cpp`:
 
@@ -1206,12 +1239,12 @@ and wrap the existing scalar `getMutablePtr()`/`getConstPtr()` calls in `ScalarP
 
 Also add `-Werror=deprecated-declarations` for the test target: in `tests/CMakeLists.txt`, after `add_executable(datatamer_test ...)`, add `target_compile_options(datatamer_test PRIVATE $<$<CXX_COMPILER_ID:GNU,Clang>:-Werror=deprecated-declarations>)`.
 
-- [ ] **Step 2: Run to see the failure**
+- [x] **Step 2: Run to see the failure**
 
 Run: `cmake --preset debug && cmake --build --preset debug 2>&1 | grep -E "deprecated|error" | head`
 Expected: builds (nothing is deprecated yet) — the RED here is that `dt_tests.cpp`'s `LockedPtr` test and `T01` will fail to build once the attribute is added; Step 3 adds it and Step 4 fixes those call sites, which is the point of the `-Werror`.
 
-- [ ] **Step 3: Add the attributes**
+- [x] **Step 3: Add the attributes**
 
 In `logged_value.hpp`, split each accessor into two SFINAE overloads:
 
@@ -1233,12 +1266,12 @@ In `logged_value.hpp`, split each accessor into two SFINAE overloads:
 
 and move the four bodies from `channel.hpp` into matching out-of-class definitions (the `if constexpr` versions from Task 3 are replaced by these four). `getLockedPtr()` calls `getMutablePtr()` and inherits the deprecation for scalars, which is fine (it is already deprecated).
 
-- [ ] **Step 4: Fix in-tree scalar call sites**
+- [x] **Step 4: Fix in-tree scalar call sites**
 
 - `tests/dt_tests.cpp` `DataTamerBasic.LockedPtr`: wrap the body in the same `#pragma GCC diagnostic push/ignored/pop` as above (the test documents the proxy semantics and stays).
 - `examples/T01_basic_example.cpp`: replace the `getMutablePtr()` block with `logged_float->set(logged_float->get() + 1.1f);` and the `getConstPtr()` block with `std::cout << "logged_float = " << logged_float->get() << "\n";`, updating the comments accordingly.
 
-- [ ] **Step 5: Run under all presets and commit**
+- [x] **Step 5: Run under all presets and commit**
 
 Run: full `debug`, `asan`, `tsan`, `release`. Expected: green; no deprecation warnings anywhere in the build log (`cmake --build --preset debug 2>&1 | grep -c deprecated` prints `0`).
 
@@ -1285,7 +1318,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 
 Why a depth counter rather than a recursive mutex: `PTHREAD_PRIO_INHERIT` combines with `PTHREAD_MUTEX_RECURSIVE`, but a recursive mutex hides accidental nesting from every caller; a thread-local depth makes "am I already in a transaction" an explicit, testable question and keeps the mutex non-recursive.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `tests/transaction_tests.cpp`:
 
@@ -1479,14 +1512,14 @@ TEST(Transaction, LoneScalarSetDoesNotTakeTheMutex)
 }
 ```
 
-- [ ] **Step 2: Register and run to see the failures**
+- [x] **Step 2: Register and run to see the failures**
 
 Append `transaction_tests.cpp` to `DATATAMER_TEST_SOURCES`.
 
 Run: `cmake --build --preset debug 2>&1 | grep -E "error" | head -5`
 Expected: FAIL — no `scopedWrite`, `writeLockContended`, `stats`.
 
-- [ ] **Step 3: Transaction depth in `ChannelSharedState`**
+- [x] **Step 3: Transaction depth in `ChannelSharedState`**
 
 Add to `shared_state.hpp`, inside `ChannelSharedState`:
 
@@ -1563,11 +1596,11 @@ private:
   }
 ```
 
-- [ ] **Step 4: Non-scalar `set()`/`get()` use `Transaction`**
+- [x] **Step 4: Non-scalar `set()`/`get()` use `Transaction`**
 
 In `channel.hpp`, the non-scalar branches of `LoggedValue<T>::set` and `get` become `ChannelSharedState::Transaction tx(*state_);` instead of `std::lock_guard<WriteMutex>`.
 
-- [ ] **Step 5: `scopedWrite()`, `writeMutex()`, counters, locked serialization in `LogChannel`**
+- [x] **Step 5: `scopedWrite()`, `writeMutex()`, counters, locked serialization in `LogChannel`**
 
 `channel.hpp` — declarations:
 
@@ -1623,7 +1656,7 @@ In `channel.hpp`, the non-scalar branches of `LoggedValue<T>::set` and `get` bec
 
   Note: the first `try_lock()` is a `WriteMutex::try_lock`, and `lockWithSpin()` starts with its own `try_lock()` — the double attempt costs one extra uncontended CAS on the contended path only. `write_lock_wait_max_ns` measures lock acquisition + serialization on the contended path (t0 is before the spin, the end is after unlock); document it as "wait plus serialization, contended snapshots only". The old `_p->mutex` remains around the whole block for structure until Plan 4.
 
-- [ ] **Step 6: Benchmarks report the new counters and add a transaction writer**
+- [x] **Step 6: Benchmarks report the new counters and add a transaction writer**
 
 `benchmarks/rt_latency.cpp`: after the percentiles, print `channel->stats()`:
 
@@ -1637,12 +1670,12 @@ and add a `--transactions` flag: when set, each writer thread wraps its `set()` 
 
 `benchmarks/data_tamer_benchmark.cpp`: add `DT_SnapshotWithTransactionWriter` — same as `DT_SnapshotWithWriter` but the writer does `auto tx = channel->scopedWrite();` around each batch of 100 `set()`s; register it with `BENCHMARK(DT_SnapshotWithTransactionWriter);`.
 
-- [ ] **Step 7: Run under all presets**
+- [x] **Step 7: Run under all presets**
 
 Run: `cmake --build --preset debug && ctest --preset debug -R "Transaction|LoggedValue"`, then full `asan`, `tsan`, `release`.
 Expected: 6 `Transaction.*` tests pass; `ValuesWrittenTogetherAppearTogether` and `RawPointerUnderWriteMutexIsConsistentToo` are the consistency proofs; TSAN clean.
 
-- [ ] **Step 8: Measure**
+- [x] **Step 8: Measure**
 
 ```bash
 cmake --build --preset release
@@ -1652,7 +1685,7 @@ taskset -c 0-5 ./build/release/benchmarks/rt_latency --values 1000 --sinks 1 --w
 
 Expected: `write_lock_contended` small relative to 10 000 snapshots; `write_lock_wait_max_ns` in the tens of µs. Paste into the commit body.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add include/data_tamer/channel.hpp include/data_tamer/logged_value.hpp include/data_tamer/details/shared_state.hpp src/channel.cpp tests/transaction_tests.cpp tests/CMakeLists.txt benchmarks/
@@ -1681,7 +1714,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 **Interfaces:**
 - Produces: unchanged public API; `sizeof(MCAPSink) == sizeof(DataSinkBase) + sizeof(std::unique_ptr<void>)` pinned by a test so future fields cannot leak into the header.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `tests/abi_tests.cpp`:
 
@@ -1704,14 +1737,14 @@ TEST(ABI, SinksAreOnlyOnePointerLargerThanTheBase)
 }
 ```
 
-- [ ] **Step 2: Register and run to see the failure**
+- [x] **Step 2: Register and run to see the failure**
 
 Append `abi_tests.cpp` to `DATATAMER_TEST_SOURCES`.
 
 Run: `cmake --build --preset debug 2>&1 | grep "static assertion"`
 Expected: `static assertion failed: MCAPSink grew a member outside its Pimpl`.
 
-- [ ] **Step 3: Move `MCAPSink` state into a `Pimpl`**
+- [x] **Step 3: Move `MCAPSink` state into a `Pimpl`**
 
 `mcap_sink.hpp`: replace the whole `private:` section with
 
@@ -1764,11 +1797,11 @@ MCAPSink::MCAPSink(const std::string& filepath, bool do_compression) : _p(new Pi
 
 and the destructor keeps `stopThread();` then `std::scoped_lock lk(_p->mutex);` (as today) — `_p` is destroyed after the body, so the lock is released first. Add `#include <unordered_map>` and `#include <mutex>` to the `.cpp` if not already present.
 
-- [ ] **Step 4: Same for `ROS2PublisherSink` (by inspection; not built here)**
+- [x] **Step 4: Same for `ROS2PublisherSink` (by inspection; not built here)**
 
 `ros2_publisher_sink.hpp`: the private members `schemas_`, `schema_mutex_`, `schema_publisher_`, `data_publisher_`, `schema_changed_`, `data_msg_`, `node_interface_` move into `struct Pimpl; std::unique_ptr<Pimpl> _p;`. Because the constructor template calls `normalize_node` and `create_publishers` inline in the header, `create_publishers` must stay in the header but operate on `_p->...`, and the constructor becomes `: _p(new Pimpl{normalize_node(nodelike)})` with `Pimpl` defined in the header *inside a `details` namespace section guarded by the same includes* — i.e. for the ROS sink the PIMPL cannot hide the ROS types from the header (the constructor is a template). Rule: make `Pimpl` a nested struct **declared in the header, defined at the bottom of the header** (so the layout is still one pointer and members can be appended without changing `sizeof(ROS2PublisherSink)`), and note in a comment that full type hiding is not possible while the constructor is a template. Add the same `static_assert` to `abi_tests.cpp` under `#ifdef USING_ROS2`.
 
-- [ ] **Step 5: Run under all presets and commit**
+- [x] **Step 5: Run under all presets and commit**
 
 Run: full `debug`, `asan`, `tsan`, `release`; also `./build/release/examples/T03_mcap_writer` runs and produces a file (exercises the MCAP sink end to end). Expected: green, `ABI.*` passes.
 
@@ -1791,11 +1824,11 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 - Modify: `data_tamer_cpp/CHANGELOG.rst` (new "Unreleased" section at the top)
 - Create: `docs/benchmarks/2026-09-plan2.md`
 
-- [ ] **Step 1: Spec §8**
+- [x] **Step 1: Spec §8**
 
 Add rows (or confirm existing ones now hold): `LogChannel::scopedWrite()` new; `LogChannel::writeLockContended/writeLockWaitMaxNs/stats` new; `Mutex` alias → `WriteMutex` (`lock_shared()` breaks); `LoggedValue::get()` const; scalar `getMutablePtr/getConstPtr` deprecated; `ConstPtr`/`MutablePtr::mutex()` deprecated, `operator bool` explicit; `ROS2PublisherSink::schema_mutex_` type change (private); `MCAPSink`/`ROS2PublisherSink` PIMPL (layout change — ABI break for this release, stable afterwards).
 
-- [ ] **Step 2: CHANGELOG**
+- [x] **Step 2: CHANGELOG**
 
 Prepend to `data_tamer_cpp/CHANGELOG.rst`:
 
@@ -1814,11 +1847,11 @@ Unreleased
   ``allocs/op`` and a latency harness (``rt_latency``).
 ```
 
-- [ ] **Step 3: Results document**
+- [x] **Step 3: Results document**
 
 `docs/benchmarks/2026-09-plan2.md`: same structure as the baseline document; run the same commands (pinned, 5 repetitions, idle) at the Task 6 head and paste; add a table with baseline vs now for `DT_Doubles/1000`, `DT_LoggedValueSet/100`, `DT_SnapshotWithWriter`, and the harness 1-sink / 2-writers / 2-writers-transactions p50/p99/max plus `write_lock_contended` / `write_lock_wait_max_ns`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add ../docs/superpowers/specs/2026-09-10-lockfree-frontend-design.md CHANGELOG.rst ../docs/benchmarks/2026-09-plan2.md
@@ -1834,7 +1867,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 - **§4.1** atomic scalars, trait, relaxed ordering, proxies with write-back, `get()` const, deprecations: Tasks 2–4. The spec's "falls through to the mutex path when not lock-free" is what `is_atomic_scalar_v` does (`kAtomic == false` → `Transaction` path).
 - **§4.2** one `WriteMutex` per channel in `ChannelSharedState`, `scopedWrite()`, nested `set()` via a thread-local depth (not a recursive mutex), `writeMutex()` signature kept, raw pointers covered: Tasks 1, 5. `getMutablePtr()` on non-scalars holds the mutex: Task 2/3.
 - **§4.4** `LoggedValue` holds `shared_ptr<ChannelSharedState>`, `weak_ptr` only for the destructor, `enabled_` mirror dropped: Task 3.
-- **§3 step 4** spin-then-lock around size+serialize, `write_lock_contended`, `write_lock_wait_max_ns` measured only on the contended path: Task 5. Deviation recorded: the max includes serialization time on contended snapshots (documented in the accessor comment).
+- **§3 step 4** spin-then-lock around size+serialize, `write_lock_contended`, `write_lock_wait_max_ns` measured only on the contended path: Task 5. The implementation follows the spec: only blocking acquisition is timed, excluding serialization; see the execution-status corrections above.
 - **§5.2** `setEnabled` wait-free, no `weak_ptr::lock`, same function for channel and `LoggedValue`: Tasks 1, 3.
 - **§7/§8** counters and API delta: Tasks 5, 7. PIMPL for sinks: Task 6 (user request, not in the spec — §8 row added in Task 7).
 - **§9** transaction consistency test (writer + raw pointer variants), nested `set()` test, TSAN writer-vs-snapshot: Tasks 3, 5. PI bound test already exists (Plan 1).
