@@ -73,6 +73,8 @@ TEST(LoggedValue, ScalarSetIsSeenBySnapshotAndDoesNotAllocate)
 
 TEST(LoggedValue, ScalarProxiesWriteBackAndHoldCopies)
 {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
   auto channel = LogChannel::create("chan");
   auto v = channel->createLoggedValue<float>("f", 3.0f);
   {
@@ -85,6 +87,7 @@ TEST(LoggedValue, ScalarProxiesWriteBackAndHoldCopies)
   auto c = v->getConstPtr();
   v->set(5.0f);
   ASSERT_EQ(*c, 4.0f);  // copy taken at construction
+#pragma GCC diagnostic pop
 }
 
 TEST(LoggedValue, SetEnabledFromWriterThreadNeedsNoChannel)
@@ -200,4 +203,17 @@ TEST(LoggedValue, NonScalarProxyExcludesSnapshot)
   }
   stop = true;
   writer.join();
+}
+
+// The deprecation must be scalar-only: a non-scalar getMutablePtr() is the
+// right tool for in-place edits and must not warn. We compile this file with
+// -Werror=deprecated-declarations disabled locally only around the scalar
+// call (see the pragma), so an accidental deprecation on the vector overload
+// would fail the build.
+TEST(LoggedValue, DeprecationIsScalarOnly)
+{
+  auto channel = LogChannel::create("chan");
+  auto vec = channel->createLoggedValue<std::vector<int>>("vec");
+  auto p = vec->getMutablePtr();  // must NOT be deprecated
+  p->push_back(1);
 }

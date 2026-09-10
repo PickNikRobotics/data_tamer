@@ -31,6 +31,7 @@ else()
     include(GoogleTest)
 
     add_executable(datatamer_test ${DATATAMER_TEST_SOURCES})
+    target_compile_options(datatamer_test PRIVATE $<$<CXX_COMPILER_ID:GNU,Clang>:-Werror=deprecated-declarations>)
     target_link_libraries(datatamer_test data_tamer GTest::gtest_main)
 
     # Optional launcher for the test binary (the tsan preset uses it to run under

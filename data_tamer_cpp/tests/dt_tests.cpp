@@ -269,6 +269,8 @@ TEST(DataTamerBasic, VectorWithChangingSize)
 
 TEST(DataTamerBasic, LockedPtr)
 {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
   auto channel = LogChannel::create("chan");
   auto logged_float = channel->createLoggedValue<float>("real");
   float val = 3.14f;
@@ -292,6 +294,7 @@ TEST(DataTamerBasic, LockedPtr)
 
   // now expect that our assignment to the locked pointer took place
   EXPECT_EQ(logged_float->get(), val2);
+#pragma GCC diagnostic pop
 }
 
 TEST(DataTamerBasic, FinishQueue)

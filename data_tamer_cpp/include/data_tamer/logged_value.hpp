@@ -63,8 +63,10 @@ protected:
 public:
   static constexpr bool kAtomic = is_atomic_scalar_v<T>;
   using Storage = std::conditional_t<kAtomic, std::atomic<T>, T>;
+  /// Return type of the (deprecated) getLockedPtr(); getMutablePtr() itself
+  /// returns the concrete AtomicProxy<T>/MutablePtr<T> directly, so this
+  /// alias only still exists for that one caller.
   using MutableProxy = std::conditional_t<kAtomic, AtomicProxy<T>, MutablePtr<T>>;
-  using ConstProxy = std::conditional_t<kAtomic, AtomicConstProxy<T>, ConstPtr<T>>;
 
   ~LoggedValue();
 
@@ -100,11 +102,21 @@ public:
    * transaction mutex for its lifetime, blocking the snapshot thread: keep it
    * short and allocation-free.
    */
-  [[nodiscard]] MutableProxy getMutablePtr();
+  template <typename U = T, std::enable_if_t<is_atomic_scalar_v<U>, bool> = true>
+  [[deprecated("for scalar values use set()/get(); the returned proxy writes back on destruction")]]
+  [[nodiscard]] AtomicProxy<T> getMutablePtr();
+
+  template <typename U = T, std::enable_if_t<!is_atomic_scalar_v<U>, bool> = true>
+  [[nodiscard]] MutablePtr<T> getMutablePtr();
 
   /// Read-only access. For scalars: a copy taken now. For other types: the
   /// transaction mutex is held for the proxy's lifetime.
-  [[nodiscard]] ConstProxy getConstPtr();
+  template <typename U = T, std::enable_if_t<is_atomic_scalar_v<U>, bool> = true>
+  [[deprecated("for scalar values use get(); the returned proxy holds a copy")]]
+  [[nodiscard]] AtomicConstProxy<T> getConstPtr();
+
+  template <typename U = T, std::enable_if_t<!is_atomic_scalar_v<U>, bool> = true>
+  [[nodiscard]] ConstPtr<T> getConstPtr();
 
   /// @brief Disabling a LoggedValue means that we will not record it in the snapshot.
   /// Wait-free; callable from any thread, even after the channel is destroyed.

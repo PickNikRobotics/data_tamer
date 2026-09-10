@@ -33,19 +33,11 @@ int main()
   // you can modify logged_float like this
   logged_float->set(6.28f);
 
-  // For a scalar, getMutablePtr() returns a write-back proxy: the new value
-  // is stored (atomically) when ptr goes out of scope. Prefer set() for
-  // single assignments.
-  if(auto ptr = logged_float->getMutablePtr())
-  {
-    *ptr += 1.1f;
-  }
+  // For a scalar, set()/get() are wait-free single relaxed store/load; prefer
+  // them over getMutablePtr()/getConstPtr(), which are for non-scalar types.
+  logged_float->set(logged_float->get() + 1.1f);
 
-  // getConstPtr() returns a copy taken now; nothing is locked.
-  if(auto ptr = logged_float->getConstPtr())
-  {
-    std::cout << "logged_float = " << *ptr << "\n";
-  }
+  std::cout << "logged_float = " << logged_float->get() << "\n";
 
   // You can disable a value like this
   channel->setEnabled(id1, false);

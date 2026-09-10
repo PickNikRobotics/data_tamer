@@ -425,29 +425,31 @@ inline T LoggedValue<T>::get() const
 }
 
 template <typename T>
-inline typename LoggedValue<T>::MutableProxy LoggedValue<T>::getMutablePtr()
+template <typename U, std::enable_if_t<is_atomic_scalar_v<U>, bool>>
+inline AtomicProxy<T> LoggedValue<T>::getMutablePtr()
 {
-  if constexpr(kAtomic)
-  {
-    return AtomicProxy<T>(&value_);
-  }
-  else
-  {
-    return MutablePtr<T>(&value_, &state_->write_mutex);
-  }
+  return AtomicProxy<T>(&value_);
 }
 
 template <typename T>
-inline typename LoggedValue<T>::ConstProxy LoggedValue<T>::getConstPtr()
+template <typename U, std::enable_if_t<!is_atomic_scalar_v<U>, bool>>
+inline MutablePtr<T> LoggedValue<T>::getMutablePtr()
 {
-  if constexpr(kAtomic)
-  {
-    return AtomicConstProxy<T>(&value_);
-  }
-  else
-  {
-    return ConstPtr<T>(&value_, &state_->write_mutex);
-  }
+  return MutablePtr<T>(&value_, &state_->write_mutex);
+}
+
+template <typename T>
+template <typename U, std::enable_if_t<is_atomic_scalar_v<U>, bool>>
+inline AtomicConstProxy<T> LoggedValue<T>::getConstPtr()
+{
+  return AtomicConstProxy<T>(&value_);
+}
+
+template <typename T>
+template <typename U, std::enable_if_t<!is_atomic_scalar_v<U>, bool>>
+inline ConstPtr<T> LoggedValue<T>::getConstPtr()
+{
+  return ConstPtr<T>(&value_, &state_->write_mutex);
 }
 
 }  // namespace DataTamer
