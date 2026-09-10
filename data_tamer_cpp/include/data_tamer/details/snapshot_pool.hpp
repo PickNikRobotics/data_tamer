@@ -3,6 +3,7 @@
 #include "data_tamer/data_sink.hpp"
 
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 
@@ -11,6 +12,11 @@ namespace DataTamer
 
 /// One pre-allocated snapshot plus its intrusive reference count.
 /// refs == 0 means free. Only the snapshot thread makes the 0 -> 1 transition.
+///
+/// The counter is the only field touched concurrently by sinks (release) and
+/// the snapshot thread (acquire); it gets its own cache line so that traffic
+/// never invalidates the snapshot data next to it. The snapshot itself is
+/// written only by the snapshot thread while refs == 1.
 struct PoolSlot
 {
   Snapshot snapshot;
@@ -48,7 +54,10 @@ public:
   {
     for(size_t n = 0; n < capacity_; n++)
     {
-      scan_from_ = (scan_from_ + 1) % capacity_;
+      if(++scan_from_ == capacity_)
+      {
+        scan_from_ = 0;
+      }
       PoolSlot& slot = slots_[scan_from_];
       // acquire: synchronizes with the last release() by a consumer, so that
       // consumer's reads of the slot happen-before our next writes into it.

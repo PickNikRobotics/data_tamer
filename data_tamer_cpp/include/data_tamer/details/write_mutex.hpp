@@ -16,6 +16,47 @@
 
 namespace DataTamer
 {
+namespace details
+{
+#if DATA_TAMER_HAS_PI_MUTEX
+/// pthread mutex created with PTHREAD_PRIO_INHERIT. The only place that
+/// touches the platform primitive.
+class PriorityInheritingMutex
+{
+public:
+  PriorityInheritingMutex()
+  {
+    pthread_mutexattr_t attr;
+    pthread_mutexattr_init(&attr);
+    int rc = pthread_mutexattr_setprotocol(&attr, PTHREAD_PRIO_INHERIT);
+    if(rc == 0)
+    {
+      rc = pthread_mutex_init(&mutex_, &attr);
+    }
+    pthread_mutexattr_destroy(&attr);
+    if(rc != 0)
+    {
+      throw std::system_error(rc, std::generic_category(),
+                              "WriteMutex: priority-inheriting mutex not available");
+    }
+  }
+  ~PriorityInheritingMutex() { pthread_mutex_destroy(&mutex_); }
+
+  PriorityInheritingMutex(const PriorityInheritingMutex&) = delete;
+  PriorityInheritingMutex& operator=(const PriorityInheritingMutex&) = delete;
+
+  void lock() { pthread_mutex_lock(&mutex_); }
+  bool try_lock() { return pthread_mutex_trylock(&mutex_) == 0; }
+  void unlock() { pthread_mutex_unlock(&mutex_); }
+
+private:
+  pthread_mutex_t mutex_;
+};
+using PlatformWriteMutex = PriorityInheritingMutex;
+#else
+using PlatformWriteMutex = std::mutex;
+#endif
+}  // namespace details
 
 /**
  * @brief Exclusive mutex with priority inheritance (PTHREAD_PRIO_INHERIT) where
@@ -36,63 +77,16 @@ public:
   /// only reached when a writer was preempted mid-transaction.
   static constexpr std::int64_t kLockSpinNs = 2000;
 
-  WriteMutex()
-  {
-#if DATA_TAMER_HAS_PI_MUTEX
-    pthread_mutexattr_t attr;
-    pthread_mutexattr_init(&attr);
-    int rc = pthread_mutexattr_setprotocol(&attr, PTHREAD_PRIO_INHERIT);
-    if(rc == 0)
-    {
-      rc = pthread_mutex_init(&mutex_, &attr);
-    }
-    pthread_mutexattr_destroy(&attr);
-    if(rc != 0)
-    {
-      throw std::system_error(rc, std::generic_category(),
-                              "WriteMutex: priority-inheriting mutex not available");
-    }
-#endif
-  }
-
-  ~WriteMutex()
-  {
-#if DATA_TAMER_HAS_PI_MUTEX
-    pthread_mutex_destroy(&mutex_);
-#endif
-  }
+  WriteMutex() = default;
 
   WriteMutex(const WriteMutex&) = delete;
   WriteMutex& operator=(const WriteMutex&) = delete;
   WriteMutex(WriteMutex&&) = delete;
   WriteMutex& operator=(WriteMutex&&) = delete;
 
-  void lock()
-  {
-#if DATA_TAMER_HAS_PI_MUTEX
-    pthread_mutex_lock(&mutex_);
-#else
-    mutex_.lock();
-#endif
-  }
-
-  bool try_lock()
-  {
-#if DATA_TAMER_HAS_PI_MUTEX
-    return pthread_mutex_trylock(&mutex_) == 0;
-#else
-    return mutex_.try_lock();
-#endif
-  }
-
-  void unlock()
-  {
-#if DATA_TAMER_HAS_PI_MUTEX
-    pthread_mutex_unlock(&mutex_);
-#else
-    mutex_.unlock();
-#endif
-  }
+  void lock() { mutex_.lock(); }
+  bool try_lock() { return mutex_.try_lock(); }
+  void unlock() { mutex_.unlock(); }
 
   /**
    * @brief Spin on try_lock() for at most spin_ns, then block in lock().
@@ -105,24 +99,27 @@ public:
     {
       return false;
     }
+    // The clock is read once per kTriesPerClockCheck attempts: a try_lock is a
+    // few ns, a clock read tens of ns, so checking every iteration would spend
+    // most of the budget on the clock instead of on the lock.
+    constexpr int kTriesPerClockCheck = 16;
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::nanoseconds(spin_ns);
-    while(std::chrono::steady_clock::now() < deadline)
+    do
     {
-      if(try_lock())
+      for(int i = 0; i < kTriesPerClockCheck; i++)
       {
-        return false;
+        if(try_lock())
+        {
+          return false;
+        }
       }
-    }
+    } while(std::chrono::steady_clock::now() < deadline);
     lock();
     return true;
   }
 
 private:
-#if DATA_TAMER_HAS_PI_MUTEX
-  pthread_mutex_t mutex_;
-#else
-  std::mutex mutex_;
-#endif
+  details::PlatformWriteMutex mutex_;
 };
 
 }  // namespace DataTamer

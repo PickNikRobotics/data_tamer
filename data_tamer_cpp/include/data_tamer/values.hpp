@@ -34,7 +34,9 @@ public:
 
   ValuePtr() = default;
 
-  template <typename T, bool = true>
+  /// Plain value (numeric, or custom type with a serializer). std::atomic<T>
+  /// is excluded here so it can only match the dedicated constructor below.
+  template <typename T, std::enable_if_t<!details::is_std_atomic<T>::value, bool> = true>
   ValuePtr(const T* pointer, CustomSerializer::Ptr type_info = {});
 
   /// Atomic scalar: serialized with a relaxed load. Same BasicType and wire
@@ -82,7 +84,6 @@ private:
   CustomSerializer::Ptr serializer_;  // keeps the custom serializer alive
   std::type_index type_index_ = typeid(void);
   BasicType type_ = BasicType::OTHER;
-  std::uint8_t memory_size_ = 0;
   bool is_vector_ = false;
   uint16_t array_size_ = 0;
 
@@ -190,17 +191,14 @@ private:
 //------------------------------------------------------------
 //------------------------------------------------------------
 
-template <typename T, bool>
+template <typename T, std::enable_if_t<!details::is_std_atomic<T>::value, bool>>
 inline ValuePtr::ValuePtr(const T* pointer, CustomSerializer::Ptr type_info)
   : v_ptr_(pointer)
   , serializer_(std::move(type_info))
   , type_index_(typeid(T))
   , type_(GetBasicType<T>())
-  , memory_size_(sizeof(T))
   , is_vector_(false)
 {
-  static_assert(!details::is_std_atomic<T>::value,
-                "std::atomic<T> is supported only for numeric T (see the std::atomic<T>* constructor)");
   if(serializer_)
   {
     serialize_fn_ = &ValuePtr::serializeCustom;
@@ -220,7 +218,6 @@ inline ValuePtr::ValuePtr(const std::atomic<T>* pointer)
   , size_fn_(&ValuePtr::sizeNumeric<T>)
   , type_index_(typeid(T))  // identical identity to the plain T, on purpose
   , type_(GetBasicType<T>())
-  , memory_size_(sizeof(T))
   , is_vector_(false)
 {
   static_assert(std::atomic<T>::is_always_lock_free, "atomic scalar must be lock-free");
@@ -234,7 +231,6 @@ inline ValuePtr::ValuePtr(const Container<T, TArgs...>* vect)
   , size_fn_(&ValuePtr::sizeContainer<Container<T, TArgs...>>)
   , type_index_(typeid(Container<T, TArgs...>))
   , type_(GetBasicType<T>())
-  , memory_size_(sizeof(T))
   , is_vector_(true)
 {}
 
@@ -247,7 +243,6 @@ inline ValuePtr::ValuePtr(const Container<T, TArgs...>* vect, CustomSerializer::
   , serializer_(std::move(type_info))
   , type_index_(typeid(Container<T, TArgs...>))
   , type_(GetBasicType<T>())
-  , memory_size_(sizeof(T))
   , is_vector_(true)
 {}
 
