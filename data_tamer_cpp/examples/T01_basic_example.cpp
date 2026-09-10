@@ -33,15 +33,15 @@ int main()
   // you can modify logged_float like this
   logged_float->set(6.28f);
 
-  // if you want to modify it in a thread-safe manner, you can modify it like this
-  // while ptr exists, its mutex will be locked, so make sure you destruct it as soon as you're done!
+  // For a scalar, getMutablePtr() returns a write-back proxy: the new value
+  // is stored (atomically) when ptr goes out of scope. Prefer set() for
+  // single assignments.
   if(auto ptr = logged_float->getMutablePtr())
   {
     *ptr += 1.1f;
   }
 
-  // If you want to access logged_float by reference, but you are not planning to modify its value,
-  // you should use getConstPtr(), instead. In this way, you will reduce mutex contention.
+  // getConstPtr() returns a copy taken now; nothing is locked.
   if(auto ptr = logged_float->getConstPtr())
   {
     std::cout << "logged_float = " << *ptr << "\n";

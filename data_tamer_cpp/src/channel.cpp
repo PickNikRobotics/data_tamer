@@ -1,6 +1,7 @@
 #include "data_tamer/channel.hpp"
 #include "data_tamer/data_sink.hpp"
 #include "data_tamer/contrib/SerializeMe.hpp"
+#include "data_tamer/details/shared_state.hpp"
 
 #include <unordered_map>
 #include <unordered_set>
@@ -13,7 +14,6 @@ struct LogChannel::Pimpl
   struct ValueHolder
   {
     std::string name;
-    bool enabled = true;
     bool registered = true;
     ValuePtr holder;
   };
@@ -25,7 +25,7 @@ struct LogChannel::Pimpl
   std::vector<ValueHolder> series;
   std::unordered_map<std::string, size_t> registered_values;
 
-  bool mask_dirty = true;
+  std::shared_ptr<ChannelSharedState> shared = std::make_shared<ChannelSharedState>();
 
   Snapshot snapshot;
   Schema schema;
@@ -45,7 +45,7 @@ RegistrationID LogChannel::registerValueImpl(const std::string& name,
   }
 
   std::lock_guard const lock(_p->mutex);
-  _p->mask_dirty = true;
+  _p->shared->mask_dirty.store(true, std::memory_order_release);
 
   // check if this name exists already
   auto it = _p->registered_values.find(name);
@@ -66,6 +66,7 @@ RegistrationID LogChannel::registerValueImpl(const std::string& name,
     instance.name = name;
     instance.holder = std::move(value_ptr);
     _p->series.emplace_back(std::move(instance));
+    _p->shared->addSeries();
 
     const size_t index = _p->series.size() - 1;
 
@@ -110,7 +111,7 @@ RegistrationID LogChannel::registerValueImpl(const std::string& name,
   {
     instance.registered = true;
   }
-  instance.enabled = true;
+  _p->shared->setEnabled(index, true);
   instance.holder = std::move(value_ptr);
   return { index, 1 };
 }
@@ -136,16 +137,7 @@ LogChannel::~LogChannel() {}
 
 void LogChannel::setEnabled(const RegistrationID& id, bool enable)
 {
-  std::lock_guard const lock(_p->mutex);
-  for(size_t i = 0; i < id.fields_count; i++)
-  {
-    auto& instance = _p->series[id.first_index + i];
-    if(instance.enabled != enable)
-    {
-      instance.enabled = enable;
-      _p->mask_dirty = true;
-    }
-  }
+  _p->shared->setEnabled(id, enable);
 }
 
 void LogChannel::unregister(const RegistrationID& id)
@@ -155,8 +147,8 @@ void LogChannel::unregister(const RegistrationID& id)
   {
     auto& instance = _p->series[id.first_index + i];
     instance.registered = false;
-    instance.enabled = false;
   }
+  _p->shared->setEnabled(id, false);
 }
 
 void LogChannel::addDataSink(std::shared_ptr<DataSinkBase> sink)
@@ -195,6 +187,11 @@ Mutex& LogChannel::writeMutex()
   return _p->mutex;
 }
 
+std::shared_ptr<ChannelSharedState> LogChannel::sharedState() const
+{
+  return _p->shared;
+}
+
 void LogChannel::addCustomType(const std::string& custom_type_name,
                                const FieldsVector& fields)
 {
@@ -215,59 +212,61 @@ bool LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
     std::lock_guard const lock(_p->mutex);
 
     // update the _p->snapshot.active_mask if necessary
-    if(_p->mask_dirty)
+    if(_p->shared->mask_dirty.exchange(false, std::memory_order_acq_rel))
     {
-      _p->mask_dirty = false;
       auto& mask = _p->snapshot.active_mask;
-      mask.clear();
-      const auto vect_size = (_p->series.size() + 7) / 8;  // ceiling size
-      mask.resize(vect_size, 0xFF);
+      mask.assign((_p->series.size() + 7) / 8, 0xFF);  // ceiling size
       for(size_t i = 0; i < _p->series.size(); i++)
       {
-        auto const& instance = _p->series[i];
-        if(!instance.enabled)
+        if(!_p->shared->isEnabled(i))
         {
           SetBit(mask, i, false);
         }
       }
     }
 
-    size_t payload_size = 0;
-    for(size_t i = 0; i < _p->series.size(); i++)
     {
-      auto const& instance = _p->series[i];
-      payload_size += instance.holder.getSerializedSize();
-    }
-    _p->snapshot.payload.resize(payload_size);
+      // Excludes non-scalar LoggedValue writers and scopedWrite() transactions
+      // (Task 5 turns this into spin-then-lock with contention counters).
+      std::lock_guard<WriteMutex> write_lock(_p->shared->write_mutex);
 
-    // set up the channel if we haven't begun logging
-    if(!_p->logging_started)
-    {
-      _p->snapshot.schema_hash = _p->schema.hash;
-
-      std::lock_guard const lock_sinks(_p->sinks_mutex);
-      // start logging inside the sinks_mutex so that addDataSink does not have an incorrect value due to a race condition
-      _p->logging_started = true;
-      for(auto const& sink : _p->sinks)
+      size_t payload_size = 0;
+      for(size_t i = 0; i < _p->series.size(); i++)
       {
-        sink->addChannel(_p->channel_name, _p->schema);
+        auto const& instance = _p->series[i];
+        payload_size += instance.holder.getSerializedSize();
       }
-    }
+      _p->snapshot.payload.resize(payload_size);
 
-    _p->snapshot.timestamp = timestamp;
-    _p->snapshot.channel_name = channelName();
-
-    // serialize data into _p->snapshot.payload
-    SerializeMe::SpanBytes payload_buffer(_p->snapshot.payload);
-
-    for(auto const& entry : _p->series)
-    {
-      if(entry.enabled)
+      // set up the channel if we haven't begun logging
+      if(!_p->logging_started)
       {
-        entry.holder.serialize(payload_buffer);
+        _p->snapshot.schema_hash = _p->schema.hash;
+
+        std::lock_guard const lock_sinks(_p->sinks_mutex);
+        // start logging inside the sinks_mutex so that addDataSink does not have an incorrect value due to a race condition
+        _p->logging_started = true;
+        for(auto const& sink : _p->sinks)
+        {
+          sink->addChannel(_p->channel_name, _p->schema);
+        }
       }
+
+      _p->snapshot.timestamp = timestamp;
+      _p->snapshot.channel_name = channelName();
+
+      // serialize data into _p->snapshot.payload
+      SerializeMe::SpanBytes payload_buffer(_p->snapshot.payload);
+
+      for(size_t i = 0; i < _p->series.size(); i++)
+      {
+        if(GetBit(_p->snapshot.active_mask, i))
+        {
+          _p->series[i].holder.serialize(payload_buffer);
+        }
+      }
+      _p->snapshot.payload.resize(_p->snapshot.payload.size() - payload_buffer.size());
     }
-    _p->snapshot.payload.resize(_p->snapshot.payload.size() - payload_buffer.size());
   }
 
   bool all_pushed = true;

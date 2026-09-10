@@ -3,6 +3,7 @@
 #include "data_tamer/values.hpp"
 #include "data_tamer/data_sink.hpp"
 #include "data_tamer/logged_value.hpp"
+#include "data_tamer/details/shared_state.hpp"
 
 #include <chrono>
 #include <memory>
@@ -76,6 +77,13 @@ public:
    */
   template <typename T, bool = true>
   RegistrationID registerValue(const std::string& name, const T* value);
+
+  /**
+   * @brief registerValue for an atomic scalar. The value is read with a
+   * relaxed load when the snapshot is taken; it serializes exactly like T.
+   */
+  template <typename T, std::enable_if_t<IsNumericType<T>(), bool> = true>
+  RegistrationID registerValue(const std::string& name, const std::atomic<T>* value);
 
   /**
    * @brief registerValue add a vectors of values.
@@ -198,6 +206,9 @@ public:
   */
   Mutex& writeMutex();
 
+  /// State shared with this channel's LoggedValues (enable flags, write mutex).
+  [[nodiscard]] std::shared_ptr<ChannelSharedState> sharedState() const;
+
 private:
   struct Pimpl;
   std::unique_ptr<Pimpl> _p;
@@ -292,6 +303,13 @@ inline RegistrationID LogChannel::registerValue(const std::string& name,
   }
 }
 
+template <typename T, std::enable_if_t<IsNumericType<T>(), bool>>
+inline RegistrationID LogChannel::registerValue(const std::string& name,
+                                                const std::atomic<T>* value_ptr)
+{
+  return registerValueImpl(name, ValuePtr(value_ptr), {});
+}
+
 template <typename T>
 inline RegistrationID LogChannel::registerCustomValue(const std::string& name,
                                                       const T* value_ptr,
@@ -347,7 +365,10 @@ LogChannel::createLoggedValue(std::string const& name, T initial_value)
 template <typename T>
 inline LoggedValue<T>::LoggedValue(const std::shared_ptr<LogChannel>& channel,
                                    const std::string& name, T initial_value)
-  : channel_(channel), value_(initial_value), id_(channel->registerValue(name, &value_))
+  : state_(channel->sharedState())
+  , channel_(channel)
+  , value_(initial_value)
+  , id_(channel->registerValue(name, &value_))
 {}
 
 template <typename T>
@@ -362,64 +383,71 @@ inline LoggedValue<T>::~LoggedValue()
 template <typename T>
 inline void LoggedValue<T>::setEnabled(bool enabled)
 {
-  // lock the shared mutex in "write" mode
-  std::lock_guard lk(rw_mutex_);
-  if(auto channel = channel_.lock())
-  {
-    channel->setEnabled(id_, enabled);
-  }
-  enabled_ = enabled;
+  state_->setEnabled(id_, enabled);
+}
+
+template <typename T>
+inline bool LoggedValue<T>::isEnabled() const
+{
+  return state_->isEnabled(id_.first_index);
 }
 
 template <typename T>
 inline void LoggedValue<T>::set(const T& val, bool auto_enable)
 {
-  // lock the shared mutex in "write" mode
-  std::lock_guard lk(rw_mutex_);
-  if(auto channel = channel_.lock())
+  if constexpr(kAtomic)
   {
-    value_ = val;
-    if(!enabled_ && auto_enable)
-    {
-      channel->setEnabled(id_, true);
-      enabled_ = true;
-    }
+    value_.store(val, std::memory_order_relaxed);
   }
   else
   {
+    std::lock_guard<WriteMutex> lk(state_->write_mutex);
     value_ = val;
-    enabled_ |= auto_enable;
   }
-}
-
-template <typename T>
-inline T LoggedValue<T>::get()
-{
-  // lock the shared mutex in "read" mode
-  rw_mutex_.lock_shared();
-  T tmp = value_;
-  rw_mutex_.unlock_shared();
-  return tmp;
-}
-
-template <typename T>
-inline MutablePtr<T> LoggedValue<T>::getMutablePtr()
-{
-  if(auto channel = channel_.lock())
+  if(auto_enable && !isEnabled())
   {
-    return MutablePtr<T>(&value_, &channel->writeMutex());
+    setEnabled(true);
   }
-  return MutablePtr<T>(&value_, nullptr);
 }
 
 template <typename T>
-inline ConstPtr<T> LoggedValue<T>::getConstPtr()
+inline T LoggedValue<T>::get() const
 {
-  if(auto channel = channel_.lock())
+  if constexpr(kAtomic)
   {
-    return ConstPtr<T>(&value_, &channel->writeMutex());
+    return value_.load(std::memory_order_relaxed);
   }
-  return ConstPtr<T>(&value_, nullptr);
+  else
+  {
+    std::lock_guard<WriteMutex> lk(state_->write_mutex);
+    return value_;
+  }
+}
+
+template <typename T>
+inline typename LoggedValue<T>::MutableProxy LoggedValue<T>::getMutablePtr()
+{
+  if constexpr(kAtomic)
+  {
+    return AtomicProxy<T>(&value_);
+  }
+  else
+  {
+    return MutablePtr<T>(&value_, &state_->write_mutex);
+  }
+}
+
+template <typename T>
+inline typename LoggedValue<T>::ConstProxy LoggedValue<T>::getConstPtr()
+{
+  if constexpr(kAtomic)
+  {
+    return AtomicConstProxy<T>(&value_);
+  }
+  else
+  {
+    return ConstPtr<T>(&value_, &state_->write_mutex);
+  }
 }
 
 }  // namespace DataTamer
