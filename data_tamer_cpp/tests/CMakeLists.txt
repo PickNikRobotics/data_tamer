@@ -1,13 +1,16 @@
-# look for gtest from ROS, but do not fail if it is not found
-find_package(gtest_vendor QUIET)
-find_package(ament_cmake_gtest QUIET)
+# look for gtest from ROS, but only when building for ROS 2
+if(DATA_TAMER_BUILD_ROS)
+    find_package(gtest_vendor QUIET)
+    find_package(ament_cmake_gtest QUIET)
+endif()
 
-if(gtest_vendor_FOUND AND ament_cmake_gtest_FOUND)
+if(DATA_TAMER_BUILD_ROS AND gtest_vendor_FOUND AND ament_cmake_gtest_FOUND)
     ament_add_gtest(datatamer_test
         dt_tests.cpp
         custom_types_tests.cpp
         parser_tests.cpp
         ros2_publisher_tests.cpp
+        add_remove_sink_tests.cpp
         trait_tests.cpp)
 
     target_include_directories(datatamer_test
@@ -30,7 +33,8 @@ else()
         dt_tests.cpp
         custom_types_tests.cpp
         parser_tests.cpp
-        add_remove_sink_tests.cpp)
+        add_remove_sink_tests.cpp
+        trait_tests.cpp)
     gtest_discover_tests(datatamer_test DISCOVERY_MODE PRE_TEST)
 
     target_include_directories(datatamer_test
