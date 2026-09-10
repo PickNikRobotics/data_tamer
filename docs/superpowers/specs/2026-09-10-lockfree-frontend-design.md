@@ -504,8 +504,12 @@ ref, 1024 entries is 16 KB, so err on the large side.
   `storeSnapshot` calls are under `store_mutex`); `finishQueueAndStop` =
   `stopAcceptingSnapshots(); processQueuedSnapshots(); stopRecording();` (the
   250 µs sleep is removed).
-- `ROS2PublisherSink`, `DummySink`, benchmark `NullSink`: unchanged apart from the
+- `ROS2PublisherSink`, benchmark `NullSink`: unchanged apart from the
   constructor forwarding `queue_capacity` if they expose it.
+- `DummySink`: constructor forwards `queue_capacity` the same way; in
+  addition its public data members (`schemas`, `schema_names`,
+  `snapshots_count`, `latest_snapshot`) are replaced by mutex-protected
+  accessors — see §8 — so callers that read the members directly break.
 
 ### 6.4 Latency, idle, memory
 
@@ -553,6 +557,7 @@ const` bundling them. On `DataSinkBase`: `storeErrors()`.
 | `MutablePtr/ConstPtr::mutex()` | deprecated; returns `nullptr` for scalar `LoggedValue`s |
 | `LoggedValue<T>::getLockedPtr()` | already deprecated; unchanged |
 | `DataSinkBase::DataSinkBase(size_t queue_capacity = 1024)` | new constructor argument (default keeps old call sites compiling) |
+| `DummySink` public members `schemas`, `schema_names`, `snapshots_count`, `latest_snapshot` | replaced by mutex-protected accessors `schema(hash)`, `schemaName(hash)`, `schemasCount()`, `firstSchemaHash()`, `snapshotsCount(hash)`, `latestSnapshot()` (source-breaking for tests that read the members) |
 | `DataSinkBase::pushSnapshot` | removed |
 | `DataSinkBase::storeErrors()` | new |
 | `DataTamer::SnapshotRef` | new public type (sinks may keep one) |
