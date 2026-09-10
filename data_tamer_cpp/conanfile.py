@@ -30,6 +30,7 @@ class DataTamerConan(ConanFile):
         "include/*",
         "src/*",
         "examples/*",
+        "benchmarks/*",
         "tests/*",
         "CMakeLists.txt",
         "data_tamerConfig.cmake.in"
@@ -65,7 +66,8 @@ class DataTamerConan(ConanFile):
         cmake.configure(
             {
                 "DATA_TAMER_BUILD_TESTS": self.options.tests,
-                "DATA_TAMER_BUILD_EXAMPLES": self.options.examples
+                "DATA_TAMER_BUILD_EXAMPLES": self.options.examples,
+                "DATA_TAMER_BUILD_BENCHMARKS": self.options.benchmarks
             }
         )
         cmake.build()

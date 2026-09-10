@@ -4,9 +4,27 @@
 
 #include <atomic>
 #include <mutex>
+#include <thread>
 #include <type_traits>
 
 using namespace DataTamer;
+
+namespace
+{
+bool canLockFromAnotherThread(WriteMutex& mutex)
+{
+  bool acquired = false;
+  std::thread probe([&] {
+    acquired = mutex.try_lock();
+    if(acquired)
+    {
+      mutex.unlock();
+    }
+  });
+  probe.join();
+  return acquired;
+}
+}  // namespace
 
 TEST(LockedReference, MutexAliasIsTheWriteMutex)
 {
@@ -22,7 +40,7 @@ TEST(LockedReference, MutablePtrLocksExclusivelyForItsLifetime)
   {
     MutablePtr<int> p(&value, &m);
     ASSERT_TRUE(p);
-    ASSERT_FALSE(m.try_lock());  // held by p
+    ASSERT_FALSE(canLockFromAnotherThread(m));  // held by p
     *p = 2;
   }
   ASSERT_TRUE(m.try_lock());
@@ -37,7 +55,7 @@ TEST(LockedReference, ConstPtrAlsoLocksExclusively)
   {
     ConstPtr<int> p(&value, &m);
     ASSERT_EQ(*p, 7);
-    ASSERT_FALSE(m.try_lock());
+    ASSERT_FALSE(canLockFromAnotherThread(m));
   }
   ASSERT_TRUE(m.try_lock());
   m.unlock();

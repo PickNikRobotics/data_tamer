@@ -12,3 +12,11 @@ find_package(Threads REQUIRED)
 
 CompileBenchmark(data_tamer_benchmark benchmark::benchmark)
 CompileBenchmark(rt_latency Threads::Threads)
+
+if(DATA_TAMER_BUILD_TESTS)
+    add_test(
+        NAME rt_latency.invalid_cli
+        COMMAND ${CMAKE_COMMAND}
+            -DRT_LATENCY=$<TARGET_FILE:rt_latency>
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/rt_latency_cli_test.cmake)
+endif()

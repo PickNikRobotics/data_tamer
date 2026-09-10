@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <charconv>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -46,13 +47,31 @@ static Options parse(int argc, char** argv)
   Options o;
   for(int i = 1; i < argc; i++)
   {
-    auto next = [&](int& dst) { dst = std::atoi(argv[++i]); };
-    if(!std::strcmp(argv[i], "--values")) next(o.values);
-    else if(!std::strcmp(argv[i], "--sinks")) next(o.sinks);
-    else if(!std::strcmp(argv[i], "--writers")) next(o.writers);
-    else if(!std::strcmp(argv[i], "--seconds")) next(o.seconds);
-    else if(!std::strcmp(argv[i], "--rate")) next(o.rate_hz);
-    else if(!std::strcmp(argv[i], "--mcap")) o.mcap = argv[++i];
+    auto nextArgument = [&]() -> const char* {
+      if(++i == argc)
+      {
+        std::fprintf(stderr, "invalid option %s: missing value\n", argv[i - 1]);
+        std::exit(1);
+      }
+      return argv[i];
+    };
+    auto nextInteger = [&](int& dst) {
+      const char* value = nextArgument();
+      const char* end = value + std::strlen(value);
+      const auto result = std::from_chars(value, end, dst);
+      if(result.ec != std::errc{} || result.ptr != end)
+      {
+        std::fprintf(stderr, "invalid option %s: expected an integer, got %s\n", argv[i - 1],
+                     value);
+        std::exit(1);
+      }
+    };
+    if(!std::strcmp(argv[i], "--values")) nextInteger(o.values);
+    else if(!std::strcmp(argv[i], "--sinks")) nextInteger(o.sinks);
+    else if(!std::strcmp(argv[i], "--writers")) nextInteger(o.writers);
+    else if(!std::strcmp(argv[i], "--seconds")) nextInteger(o.seconds);
+    else if(!std::strcmp(argv[i], "--rate")) nextInteger(o.rate_hz);
+    else if(!std::strcmp(argv[i], "--mcap")) o.mcap = nextArgument();
     else if(!std::strcmp(argv[i], "--fifo")) o.fifo = true;
     else if(!std::strcmp(argv[i], "--transactions")) o.transactions = true;
     else if(!std::strcmp(argv[i], "--vector-writer")) o.vector_writer = true;
@@ -62,13 +81,15 @@ static Options parse(int argc, char** argv)
       std::exit(1);
     }
   }
+  if(o.values < 0 || o.sinks < 0 || o.writers < 0 || o.seconds <= 0 || o.rate_hz <= 0)
+  {
+    std::fprintf(stderr,
+                 "invalid option values: counts must be nonnegative; seconds and rate must be positive\n");
+    std::exit(1);
+  }
   if(o.values < 2)
   {
     o.values = 2;  // half plain, half LoggedValue: need at least one of each
-  }
-  if(o.rate_hz < 1)
-  {
-    o.rate_hz = 1;
   }
   return o;
 }
