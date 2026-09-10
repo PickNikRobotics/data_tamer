@@ -4,12 +4,9 @@
 
 #include <mutex>
 #include <unordered_map>
-#include <shared_mutex>
 
 namespace DataTamer
 {
-
-using Mutex = std::shared_mutex;
 
 /**
  * @brief The DummySink does nothing, only counting the number of snapshots received.
