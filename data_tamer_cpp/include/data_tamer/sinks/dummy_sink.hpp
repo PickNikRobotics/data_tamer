@@ -47,6 +47,20 @@ public:
     return latest_snapshot_;
   }
 
+  /// Size in bytes of the latest snapshot's payload (no copy).
+  size_t latestPayloadSize() const
+  {
+    std::scoped_lock lk(mutex_);
+    return latest_snapshot_.payload.size();
+  }
+
+  /// Copy of the latest snapshot's active mask (small; avoids copying the payload).
+  ActiveMask latestActiveMask() const
+  {
+    std::scoped_lock lk(mutex_);
+    return latest_snapshot_.active_mask;
+  }
+
   /// Number of snapshots delivered for the channel with this schema hash (0 if unknown).
   long snapshotsCount(uint64_t hash) const
   {

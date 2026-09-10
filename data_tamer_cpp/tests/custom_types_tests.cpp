@@ -81,7 +81,7 @@ TEST(DataTamerCustom, CustomType1)
                        sizeof(uint32_t) + 4 * sizeof(Point3D) + sizeof(TestType::Color) +
                        3 * sizeof(Pose);
 
-  ASSERT_EQ(sink->latestSnapshot().payload.size(), expected_size);
+  ASSERT_EQ(sink->latestPayloadSize(), expected_size);
 
   //-------------------------------------------------
   // check that the schema includes the Point3D definition
@@ -157,7 +157,7 @@ TEST(DataTamerCustom, CustomType2)
 
   std::cout << schema_txt << std::endl;
 
-  ASSERT_EQ(sink->latestSnapshot().payload.size(), expected_size);
+  ASSERT_EQ(sink->latestPayloadSize(), expected_size);
   ASSERT_EQ(schema.custom_types.count("Point3D"), 1);
   ASSERT_EQ(schema.custom_types.count("Quaternion"), 1);
 
@@ -250,7 +250,7 @@ TEST(DataTamerCustom, CustomType3)
 
   std::cout << schema_txt << std::endl;
 
-  ASSERT_EQ(sink->latestSnapshot().payload.size(), expected_size);
+  ASSERT_EQ(sink->latestPayloadSize(), expected_size);
   ASSERT_EQ(schema.custom_types.size(), 0);
   ASSERT_EQ(schema.custom_schemas.size(), 1);
 
@@ -289,7 +289,7 @@ TEST(DataTamerCustom, RegisterConstMethods)
 
   std::cout << schema_txt << std::endl;
 
-  ASSERT_EQ(sink->latestSnapshot().payload.size(), expected_size);
+  ASSERT_EQ(sink->latestPayloadSize(), expected_size);
   ASSERT_EQ(schema.custom_types.size(), 1);
   ASSERT_EQ(schema.custom_schemas.size(), 0);
 

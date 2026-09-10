@@ -8,6 +8,7 @@
 #include "data_tamer/data_tamer.hpp"
 #include "data_tamer/sinks/mcap_sink.hpp"
 #include "alloc_counter.hpp"
+#include "null_sink.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -25,14 +26,6 @@
 #include <time.h>
 
 using namespace DataTamer;
-
-class NullSink : public DataSinkBase
-{
-public:
-  ~NullSink() override { stopThread(); }
-  void addChannel(std::string const&, Schema const&) override {}
-  bool storeSnapshot(const Snapshot&) override { return true; }
-};
 
 struct Options
 {
@@ -160,6 +153,7 @@ int main(int argc, char** argv)
   std::size_t allocations = 0;
   size_t failed = 0;
 
+  const size_t plain_size = plain.size();
   timespec next{};
   clock_gettime(CLOCK_MONOTONIC, &next);
   for(size_t i = 0; i < total; i++)
@@ -172,7 +166,7 @@ int main(int argc, char** argv)
     }
     clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &next, nullptr);
 
-    plain[i % plain.size()] = double(i);
+    plain[i % plain_size] = double(i);
     DataTamerTest::AllocCounter::Scope scope;
     const auto t0 = std::chrono::steady_clock::now();
     const bool ok = channel->takeSnapshot();

@@ -14,17 +14,20 @@ using DataTamerTest::AllocCounter;
 
 namespace
 {
-void* countedAlloc(std::size_t size)
+/// Counts (when enabled) and allocates; never throws. Shared by every
+/// operator new overload so the size-0 rule and the counting live in one place.
+void* countedMalloc(std::size_t size) noexcept
 {
   if(AllocCounter::enabled)
   {
     ++AllocCounter::allocations;
   }
-  if(size == 0)
-  {
-    size = 1;
-  }
-  void* p = std::malloc(size);
+  return std::malloc(size == 0 ? 1 : size);
+}
+
+void* countedAllocOrThrow(std::size_t size)
+{
+  void* p = countedMalloc(size);
   if(p == nullptr)
   {
     throw std::bad_alloc();
@@ -42,24 +45,10 @@ void countedFree(void* p) noexcept
 }
 }  // namespace
 
-void* operator new(std::size_t size) { return countedAlloc(size); }
-void* operator new[](std::size_t size) { return countedAlloc(size); }
-void* operator new(std::size_t size, const std::nothrow_t&) noexcept
-{
-  if(AllocCounter::enabled)
-  {
-    ++AllocCounter::allocations;
-  }
-  return std::malloc(size == 0 ? 1 : size);
-}
-void* operator new[](std::size_t size, const std::nothrow_t&) noexcept
-{
-  if(AllocCounter::enabled)
-  {
-    ++AllocCounter::allocations;
-  }
-  return std::malloc(size == 0 ? 1 : size);
-}
+void* operator new(std::size_t size) { return countedAllocOrThrow(size); }
+void* operator new[](std::size_t size) { return countedAllocOrThrow(size); }
+void* operator new(std::size_t size, const std::nothrow_t&) noexcept { return countedMalloc(size); }
+void* operator new[](std::size_t size, const std::nothrow_t&) noexcept { return countedMalloc(size); }
 
 void operator delete(void* p) noexcept { countedFree(p); }
 void operator delete[](void* p) noexcept { countedFree(p); }

@@ -3,19 +3,29 @@
 #include "data_tamer/data_tamer.hpp"
 #include "../examples/geometry_types.hpp"
 #include "alloc_counter.hpp"
+#include "null_sink.hpp"
 
 #include <atomic>
 #include <thread>
 
 using namespace DataTamer;
 
-class NullSink : public DataSinkBase
+/// Warm up, then time takeSnapshot() while counting the allocations it makes
+/// on this thread; reports them as the "allocs/op" counter.
+static void measureSnapshots(benchmark::State& state, LogChannel& channel)
 {
-public:
-  ~NullSink() override { stopThread(); }
-  void addChannel(std::string const&, Schema const&) override {}
-  bool storeSnapshot(const Snapshot&) override { return true; }
-};
+  channel.takeSnapshot();  // warm-up: buffers reach their steady-state capacity
+  channel.takeSnapshot();
+
+  std::size_t allocs = 0;
+  for(auto _ : state)
+  {
+    DataTamerTest::AllocCounter::Scope scope;
+    channel.takeSnapshot();
+    allocs += scope.allocations();
+  }
+  state.counters["allocs/op"] = double(allocs) / double(state.iterations());
+}
 
 static void DT_Doubles(benchmark::State& state)
 {
@@ -24,17 +34,7 @@ static void DT_Doubles(benchmark::State& state)
   auto channel = registry.getChannel("channel");
   channel->addDataSink(std::make_shared<NullSink>());
   channel->registerValue("values", &values);
-  channel->takeSnapshot();  // warm-up
-  channel->takeSnapshot();
-
-  std::size_t allocs = 0;
-  for(auto _ : state)
-  {
-    DataTamerTest::AllocCounter::Scope scope;
-    channel->takeSnapshot();
-    allocs += scope.allocations();
-  }
-  state.counters["allocs/op"] = double(allocs) / double(state.iterations());
+  measureSnapshots(state, *channel);
 }
 
 static void DT_PoseType(benchmark::State& state)
@@ -44,17 +44,7 @@ static void DT_PoseType(benchmark::State& state)
   auto channel = registry.getChannel("channel");
   channel->addDataSink(std::make_shared<NullSink>());
   channel->registerValue("values", &poses);
-  channel->takeSnapshot();
-  channel->takeSnapshot();
-
-  std::size_t allocs = 0;
-  for(auto _ : state)
-  {
-    DataTamerTest::AllocCounter::Scope scope;
-    channel->takeSnapshot();
-    allocs += scope.allocations();
-  }
-  state.counters["allocs/op"] = double(allocs) / double(state.iterations());
+  measureSnapshots(state, *channel);
 }
 
 // 1000 doubles, N sinks
@@ -68,17 +58,7 @@ static void DT_MultiSink(benchmark::State& state)
     channel->addDataSink(std::make_shared<NullSink>());
   }
   channel->registerValue("values", &values);
-  channel->takeSnapshot();
-  channel->takeSnapshot();
-
-  std::size_t allocs = 0;
-  for(auto _ : state)
-  {
-    DataTamerTest::AllocCounter::Scope scope;
-    channel->takeSnapshot();
-    allocs += scope.allocations();
-  }
-  state.counters["allocs/op"] = double(allocs) / double(state.iterations());
+  measureSnapshots(state, *channel);
 }
 
 // LoggedValue<double>::set from the calling thread
@@ -117,7 +97,6 @@ static void DT_SnapshotWithWriter(benchmark::State& state)
   }
   std::vector<double> plain(1000);
   channel->registerValue("plain", &plain);
-  channel->takeSnapshot();
 
   std::atomic_bool run{ true };
   std::thread writer([&] {
@@ -132,16 +111,9 @@ static void DT_SnapshotWithWriter(benchmark::State& state)
     }
   });
 
-  std::size_t allocs = 0;
-  for(auto _ : state)
-  {
-    DataTamerTest::AllocCounter::Scope scope;
-    channel->takeSnapshot();
-    allocs += scope.allocations();
-  }
+  measureSnapshots(state, *channel);
   run = false;
   writer.join();
-  state.counters["allocs/op"] = double(allocs) / double(state.iterations());
 }
 
 BENCHMARK(DT_Doubles)->Arg(125)->Arg(250)->Arg(500)->Arg(1000)->Arg(2000);

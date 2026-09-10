@@ -124,11 +124,11 @@ TEST(DataTamerBasic, TestRegistration)
 
   // adding a new value after takeSnapshot is not valid (would change the schema)
   ASSERT_ANY_THROW(channel->registerValue("i3", &i3););
-  ASSERT_EQ(sink->latestSnapshot().active_mask.size(), 1);
+  ASSERT_EQ(sink->latestActiveMask().size(), 1);
 
   // payload should contain v1, v2, i1 and i2
   auto expected_size = sizeof(double) * 2 + sizeof(int32_t) * 2;
-  ASSERT_EQ(sink->latestSnapshot().payload.size(), expected_size);
+  ASSERT_EQ(sink->latestPayloadSize(), expected_size);
 
   //-----------------------------------------------------------------
   // Unregister or disable some values. This should reduce the size of the snapshot
@@ -140,7 +140,7 @@ TEST(DataTamerBasic, TestRegistration)
 
   // payload should contain v2, and i2
   auto reduced_size = sizeof(double) + sizeof(int32_t);
-  ASSERT_EQ(sink->latestSnapshot().payload.size(), reduced_size);
+  ASSERT_EQ(sink->latestPayloadSize(), reduced_size);
 
   //-----------------------------------------------------------------
   // Register and enable again
@@ -150,7 +150,7 @@ TEST(DataTamerBasic, TestRegistration)
   channel->takeSnapshot();
   std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
-  ASSERT_EQ(sink->latestSnapshot().payload.size(), expected_size);
+  ASSERT_EQ(sink->latestPayloadSize(), expected_size);
 }
 
 TEST(DataTamerBasic, Vector)
@@ -167,7 +167,7 @@ TEST(DataTamerBasic, Vector)
 
   channel->takeSnapshot();
   std::this_thread::sleep_for(std::chrono::milliseconds(10));
-  ASSERT_EQ(sink->latestSnapshot().payload.size(), expected_size);
+  ASSERT_EQ(sink->latestPayloadSize(), expected_size);
 }
 
 TEST(DataTamerBasic, Disable)
@@ -197,8 +197,8 @@ TEST(DataTamerBasic, Disable)
 
   channel->takeSnapshot();
   std::this_thread::sleep_for(std::chrono::milliseconds(10));
-  ASSERT_EQ(sink->latestSnapshot().payload.size(), expected_size);
-  ASSERT_EQ(sink->latestSnapshot().active_mask[0], 0b11111111);
+  ASSERT_EQ(sink->latestPayloadSize(), expected_size);
+  ASSERT_EQ(sink->latestActiveMask()[0], 0b11111111);
 
   auto checkSize = [&](const auto& id, size_t size) {
     channel->setEnabled(id, false);
@@ -207,29 +207,29 @@ TEST(DataTamerBasic, Disable)
     channel->setEnabled(id, true);
 
     size_t expected = expected_size - size;
-    ASSERT_EQ(sink->latestSnapshot().payload.size(), expected);
+    ASSERT_EQ(sink->latestPayloadSize(), expected);
   };
 
   checkSize(id_v1, sizeof(v1));
-  ASSERT_EQ(sink->latestSnapshot().active_mask[0], 0b11111110);
+  ASSERT_EQ(sink->latestActiveMask()[0], 0b11111110);
 
   checkSize(id_v2, sizeof(v2));
-  ASSERT_EQ(sink->latestSnapshot().active_mask[0], 0b11111101);
+  ASSERT_EQ(sink->latestActiveMask()[0], 0b11111101);
 
   checkSize(id_v3, sizeof(v3));
-  ASSERT_EQ(sink->latestSnapshot().active_mask[0], 0b11111011);
+  ASSERT_EQ(sink->latestActiveMask()[0], 0b11111011);
 
   checkSize(id_v4, sizeof(v4));
-  ASSERT_EQ(sink->latestSnapshot().active_mask[0], 0b11110111);
+  ASSERT_EQ(sink->latestActiveMask()[0], 0b11110111);
 
   checkSize(id_v5, sizeof(v5));
-  ASSERT_EQ(sink->latestSnapshot().active_mask[0], 0b11101111);
+  ASSERT_EQ(sink->latestActiveMask()[0], 0b11101111);
 
   checkSize(id_v6, 3 * sizeof(double));
-  ASSERT_EQ(sink->latestSnapshot().active_mask[0], 0b11011111);
+  ASSERT_EQ(sink->latestActiveMask()[0], 0b11011111);
 
   checkSize(id_v7, 4 * sizeof(float) + sizeof(uint32_t));
-  ASSERT_EQ(sink->latestSnapshot().active_mask[0], 0b10111111);
+  ASSERT_EQ(sink->latestActiveMask()[0], 0b10111111);
 }
 
 TEST(DataTamerBasic, VectorWithChangingSize)
@@ -243,7 +243,7 @@ TEST(DataTamerBasic, VectorWithChangingSize)
 
   channel->takeSnapshot();
   std::this_thread::sleep_for(std::chrono::milliseconds(10));
-  ASSERT_EQ(sink->latestSnapshot().payload.size(),
+  ASSERT_EQ(sink->latestPayloadSize(),
             vect.size() * sizeof(float) + sizeof(uint32_t));
 
   // if we push more elements into the vector, it should
@@ -255,7 +255,7 @@ TEST(DataTamerBasic, VectorWithChangingSize)
 
   channel->takeSnapshot();
   std::this_thread::sleep_for(std::chrono::milliseconds(10));
-  ASSERT_EQ(sink->latestSnapshot().payload.size(),
+  ASSERT_EQ(sink->latestPayloadSize(),
             vect.size() * sizeof(float) + sizeof(uint32_t));
 
   // same is the vector size is reduced
@@ -263,7 +263,7 @@ TEST(DataTamerBasic, VectorWithChangingSize)
 
   channel->takeSnapshot();
   std::this_thread::sleep_for(std::chrono::milliseconds(10));
-  ASSERT_EQ(sink->latestSnapshot().payload.size(),
+  ASSERT_EQ(sink->latestPayloadSize(),
             vect.size() * sizeof(float) + sizeof(uint32_t));
 }
 
