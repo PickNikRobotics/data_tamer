@@ -7,12 +7,6 @@
 #include <functional>
 #include <future>
 #include <thread>
-#include <fstream>
-#include "wait_for_sleeping_thread.hpp"
-#if defined(__linux__)
-#include <sys/syscall.h>
-#include <unistd.h>
-#endif
 
 using namespace DataTamer;
 
@@ -282,9 +276,10 @@ TEST(ChannelControl, BlockedAddChannelDoesNotBlockExistingSnapshots)
   EXPECT_FALSE(added->snapshots.empty());
 }
 
-// Proves queued and retained references survive a removal request; the
-// removal/reader overlap itself is covered by RemovalWaitsForReaderHoldingUnpublishedSinkLink.
-TEST(ChannelControl, QueuedAndRetainedReferencesSurviveRemovalRequestedDuringSerialization)
+// The paused serializer parks the reader inside its epoch, after loading the sink
+// links and before pushing: removal must wait, and the push must still reach the
+// unpublished link. Queued and retained references then outlive channel and sink.
+TEST(ChannelControl, RemovalWaitsForPausedReaderAndReferencesSurvive)
 {
   auto channel = LogChannel::create("control");
   auto sink = std::make_shared<ControlSink>();
@@ -297,62 +292,22 @@ TEST(ChannelControl, QueuedAndRetainedReferencesSurviveRemovalRequestedDuringSer
   serializer->gate = &gate;
   auto snapshot = std::async(std::launch::async, [&] { return channel->takeSnapshot(); });
   EXPECT_TRUE(gate.wait());
-  std::promise<void> started;
-  auto removal = std::async(std::launch::async, [&] {
-    started.set_value();
-    channel->removeDataSink(sink);
-  });
-  started.get_future().wait();
+  auto removal = std::async(std::launch::async, [&] { channel->removeDataSink(sink); });
+  EXPECT_EQ(removal.wait_for(std::chrono::milliseconds(50)), std::future_status::timeout);
   gate.release();
-  snapshot.get();
+  EXPECT_TRUE(snapshot.get());
   removal.get();
   EXPECT_EQ(channel->getNumberOfSinks(), 0u);
   channel.reset();
   SnapshotRef retained;
   sink->on_store = [&] { retained = sink->retainSnapshot(); };
   sink->processQueuedSnapshots();
+  EXPECT_EQ(sink->snapshots.size(), 2u);
   checkPayloads(*sink, 1);
   sink.reset();
   ASSERT_TRUE(retained);
   EXPECT_EQ(retained->channel_name, "control");
   EXPECT_EQ(retained->payload.size(), 8u);
-}
-
-// Holding the write mutex parks the reader after it has loaded the sink links
-// and before it publishes to them, so removal is observed waiting for that reader
-// and the unpublished link is still alive when the push happens.
-TEST(ChannelControl, RemovalWaitsForReaderHoldingUnpublishedSinkLink)
-{
-#if defined(__linux__)
-  if(!std::ifstream("/proc/self/stat")) GTEST_SKIP() << "needs readable procfs";
-  auto channel = LogChannel::create("control");
-  auto sink = std::make_shared<ControlSink>();
-  uint64_t value = 42;
-  channel->registerValue("value", &value);
-  channel->addDataSink(sink);
-  ASSERT_TRUE(channel->takeSnapshot());
-  std::atomic<pid_t> tid{0};
-  std::atomic<bool> finished{false};
-  std::unique_lock hold(channel->writeMutex());
-  auto snapshot = std::async(std::launch::async, [&] {
-    tid = static_cast<pid_t>(syscall(SYS_gettid));
-    const bool ok = channel->takeSnapshot();
-    finished = true;
-    return ok;
-  });
-  ASSERT_TRUE(DataTamerTest::waitForSleepingThread(tid, finished));
-  auto removal = std::async(std::launch::async, [&] { channel->removeDataSink(sink); });
-  EXPECT_EQ(removal.wait_for(std::chrono::milliseconds(50)), std::future_status::timeout);
-  hold.unlock();
-  EXPECT_TRUE(snapshot.get());
-  removal.get();
-  EXPECT_EQ(channel->getNumberOfSinks(), 0u);
-  sink->processQueuedSnapshots();
-  EXPECT_EQ(sink->snapshots.size(), 2u);
-  checkPayloads(*sink, 1);
-#else
-  GTEST_SKIP() << "observing a blocked reader requires Linux procfs";
-#endif
 }
 
 TEST(ChannelControl, FailedFreezeRetriesAllLinksAndStillFreezesSchema)
