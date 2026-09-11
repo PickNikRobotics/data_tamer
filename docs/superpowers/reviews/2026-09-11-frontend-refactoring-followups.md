@@ -12,6 +12,44 @@ See the [completed plan](../plans/2026-09-11-lockfree-frontend-plan-4.md),
 [measurements](../../benchmarks/2026-09-plan4.md), and
 [independent design audit](2026-09-11-simpler-design-audit.md).
 
+## Decisions after review (2026-09-11, later)
+
+Each follow-up was checked against the code and, where cheap, measured.
+
+| Follow-up | Decision | Basis |
+|---|---|---|
+| Profile the latency regression | **Closed: not reproducible.** | Interleaved pinned A/B below; Plan 3 `df16cef` and final runtime are within run-to-run noise. The earlier single pinned pair used CPUs 0–5 on a loaded desktop. |
+| Immediate PI blocking instead of the spin | **Rejected.** | Same A/B: medians tied, blocking acquisitions 1.5–2× higher without the spin. No gain to pay for. |
+| Deterministic sink-unpublication overlap test | **Adopted.** | `ChannelControl.RemovalWaitsForReaderHoldingUnpublishedSinkLink`: a test thread holds the write mutex, so the reader parks *inside* its epoch between loading the sink links and pushing. Removal is then observed not completing, and the push lands on the still-alive unpublished link. No production hook needed. Mutation check: deleting `waitQuiescent()` from `removeDataSink()` makes the test fail on the first run. |
+| Weaker atomic ordering | **Rejected.** | On x86-64, SC loads compile to plain loads and the SC RMWs (two epoch increments, one mask exchange) are locked instructions either way. There is nothing to win here on the target we ship; the proof burden is all cost. |
+| Control-call ergonomics, capacity API | **Deferred (YAGNI).** | No caller needs them. |
+| Stop/join/drain/restart backend | **Rejected as a simplification.** | Public API already allows `finishQueueAndStop()` then `restartRecording()`, so a worker restart path is required, plus thread-creation failure handling and stop-state memory. That is more lifecycle code than the two delivery mutexes it removes. Revisit only if the handoff misbehaves. |
+
+### A/B measurement
+
+Same machine as the Plan 4 record, Release builds, `taskset -c 2-7`, no builds or
+tests running, three interleaved repetitions of `rt_latency --sinks 2 --writers 2
+--transactions --seconds 8` (8,000 timed calls each). "no-spin" is the final
+runtime with `kLockSpinNs = 0`.
+
+| Runtime | rep | p50 (ns) | p99 (ns) | p99.9 (ns) | max (ns) | Blocking acquisitions |
+|---|---:|---:|---:|---:|---:|---:|
+| Plan 3 `df16cef` | 1 | 33,633 | 77,204 | 176,564 | 255,127 | 121 |
+| Final | 1 | 30,025 | 72,275 | 144,606 | 223,737 | 119 |
+| no-spin | 1 | 35,227 | 85,883 | 174,988 | 237,833 | 224 |
+| Plan 3 `df16cef` | 2 | 33,031 | 102,368 | 181,581 | 206,675 | 160 |
+| Final | 2 | 32,813 | 78,610 | 173,817 | 217,839 | 146 |
+| no-spin | 2 | 28,870 | 74,168 | 142,534 | 224,910 | 206 |
+| Plan 3 `df16cef` | 3 | 35,139 | 81,616 | 182,754 | 242,686 | 168 |
+| Final | 3 | 36,192 | 96,759 | 217,281 | 264,265 | 189 |
+| no-spin | 3 | 31,385 | 80,508 | 168,092 | 217,519 | 238 |
+
+Without writers (`--sinks 1 --writers 0 --seconds 6`, two reps each): Plan 3
+p50 28,504 / 29,198 ns, final 28,733 / 29,762 ns.
+
+All final and no-spin runs reported zero allocations, zero false returns and
+zero drops. The rest of this document is kept as the original backlog text.
+
 ## Suggested order
 
 | Priority | Follow-up | Trigger or reason |
