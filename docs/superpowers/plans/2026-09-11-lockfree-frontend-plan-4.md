@@ -10,8 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-10-lockfree-frontend-design.md`
 
-**Status:** Runtime and measurements complete. Final documentation, whole-branch
-review and remote delivery are in progress.
+**Status:** Implementation, documentation, final review and verification
+complete. Remote delivery is pending.
 
 ## Global Constraints
 
@@ -163,8 +163,8 @@ build/release/benchmarks/rt_latency --values 1000 --sinks 1 --seconds 60 --mcap 
 ```
 
 - [x] **Step 2: Write measured results and user documentation.** Explain first-call initialization and reservation, variable growth/strict drop semantics, bounded slot count versus variable byte count, per-attachment drops versus global pool exhaustion, 64-slot compression-stall sizing, eight sinks, queue block rounding, retained-ref starvation, same-name re-registration, control/write-guard restrictions, and scalar versus transaction consistency. Publish a baseline/final table with hardware caveats and actual maxima. Update every stale planned/bridge claim in the spec and API table, preserving historical Plan 1–3 records. Do not claim universal hard deadlines or no-throw custom serialization.
-- [ ] **Step 3: Review task documentation against actual APIs and supplied evidence, then commit:** `docs: publish final frontend guarantees and measurements`.
-- [ ] **Step 4: Whole-branch review.** Review from feature merge-base `e761f4f153b7a88138d99c843e59392c57b346da`; include all R1–R8, remaining steps 7–9 and the simpler-design audit. Use one final fix wave and one scoped re-review if necessary, with covering verification for any changed code.
+- [x] **Step 3: Review task documentation against actual APIs and supplied evidence, then commit:** `docs: publish final frontend guarantees and measurements`.
+- [x] **Step 4: Whole-branch review.** Review from feature merge-base `e761f4f153b7a88138d99c843e59392c57b346da`; include all R1–R8, remaining steps 7–9 and the simpler-design audit. Use one final fix wave and one scoped re-review if necessary, with covering verification for any changed code.
 - [ ] **Step 5: Finish.** Confirm all requirements implemented, required tests passing, docs accurate, working tree clean. Commit completion status, push `lockfree-frontend` to its existing `origin` tracking branch, and verify local and remote HEAD match. Mark the active goal complete only after the push is confirmed. Preserve all rulings in the final report and delete only this plan's SDD scratch directory.
 
 ## Plan self-review
@@ -213,3 +213,20 @@ Rulings recorded during execution, in order:
    the shared SC epoch proof and control stress complement it; its pre-call
    signal does not prove unpublication. Cost if wrong: a sink-specific overlap
    regression may require a targeted internal test seam later.
+
+Final whole-feature review covered `e761f4f..ea2d918`. Its portability finding,
+PI comment corrections, allocation/churn progress check and documentation
+corrections were resolved in `4dfe9a9`; a final Debug run exposed an old
+sink-registry sleep assumption, repaired with explicit test-only draining in
+`340632c`. One combined scoped re-review approved `ea2d918..340632c`, including
+Task 3 spec compliance and quality. The removal-test coverage limitation above
+is the only accepted residual review item; no open blocking finding remains.
+
+Final verification at `340632c`: Debug 125 passed/one privileged skip out of
+126 discovered; ASAN+UBSAN with leak detection, TSAN, Release and ROS each
+124 passed/one privileged skip out of 125. Builds completed without compiler
+or sanitizer diagnostics. The final exact-count MCAP confirmation recorded
+zero allocations and false returns across 60,000 timed calls, zero pool/growth/
+oversize/attachment counters, and 60,010 messages passing official MCAP checks.
+Native macOS/Windows builds and privileged FIFO execution were unavailable;
+the recorded fallback checks and scheduling limitations remain explicit.
