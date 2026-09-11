@@ -12,6 +12,7 @@ find_package(Threads REQUIRED)
 
 CompileBenchmark(data_tamer_benchmark benchmark::benchmark)
 CompileBenchmark(rt_latency Threads::Threads)
+CompileBenchmark(sink_latency Threads::Threads)
 
 if(DATA_TAMER_BUILD_TESTS)
     add_test(
