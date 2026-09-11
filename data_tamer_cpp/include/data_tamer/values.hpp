@@ -69,6 +69,15 @@ public:
   [[nodiscard]] bool operator==(const ValuePtr& other) const;
   [[nodiscard]] bool operator!=(const ValuePtr& other) const { return !(*this == other); }
 
+  /// Release serialization ownership after quiescence, retaining slot type identity.
+  void detach()
+  {
+    v_ptr_ = nullptr;
+    serialize_fn_ = &ValuePtr::serializeNone;
+    size_fn_ = &ValuePtr::sizeNone;
+    serializer_.reset();
+  }
+
   void serialize(SerializeMe::SpanBytes& dest) const;
 
   [[nodiscard]] size_t getSerializedSize() const;

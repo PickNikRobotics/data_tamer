@@ -90,7 +90,7 @@ TEST(ChannelSharedState, ConcurrentToggleAndReadIsRaceFree)
   });
   for(int n = 0; n < 100000; n++)
   {
-    if(state.mask_dirty.exchange(false, std::memory_order_acq_rel))
+    if(state.mask_dirty.exchange(false, std::memory_order_seq_cst))
     {
       for(size_t i = 0; i < 16; i++)
       {
@@ -101,4 +101,22 @@ TEST(ChannelSharedState, ConcurrentToggleAndReadIsRaceFree)
   }
   stop = true;
   toggler.join();
+}
+
+TEST(ChannelSharedState, EnableUpdatesNeverRestoreRegistration)
+{
+  ChannelSharedState state;
+  state.addSeries();
+  state.setRegistered(0, false);
+  EXPECT_FALSE(state.isRegistered(0));
+  for(bool enabled : {false, true, false, true})
+  {
+    state.setEnabled(0, enabled);
+    EXPECT_FALSE(state.isEnabled(0));
+    EXPECT_FALSE(state.isRegistered(0));
+  }
+  state.setRegistered(0, true);
+  EXPECT_TRUE(state.isRegistered(0));
+  EXPECT_TRUE(state.isEnabled(0));
+  EXPECT_TRUE(state.mask_dirty.exchange(false, std::memory_order_seq_cst));
 }

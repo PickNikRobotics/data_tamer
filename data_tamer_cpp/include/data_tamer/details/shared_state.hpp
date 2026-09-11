@@ -74,39 +74,47 @@ public:
   /// thread holds it for serialization. Priority-inheriting where available.
   WriteMutex write_mutex;
 
-  /// Set (release) by any enable/disable; consumed (acq_rel exchange) by the
-  /// snapshot thread when it rebuilds its private active mask.
+  /// SC publication pairs with the snapshot's SC exchange and reader epoch.
   std::atomic<bool> mask_dirty{ true };
 
-  void addSeries() { enabled_.emplace_back(true); }
+  void addSeries() { flags_.emplace_back(kRegistered | kEnabled); }
 
-  size_t seriesCount() const { return enabled_.size(); }
+  size_t seriesCount() const { return flags_.size(); }
 
   bool isEnabled(size_t index) const
   {
-    return enabled_[index].load(std::memory_order_relaxed);
+    return flags_[index].load(std::memory_order_seq_cst) == (kRegistered | kEnabled);
   }
 
-  /// Wait-free; callable from any thread, including inside a transaction.
+  bool isRegistered(size_t index) const
+  {
+    return flags_[index].load(std::memory_order_seq_cst) & kRegistered;
+  }
+
+  /// Controller only: initialize the holder before publishing registration;
+  /// clear registration and wait for the reader before detaching it.
+  void setRegistered(size_t index, bool registered)
+  {
+    if(registered)
+      flags_[index].store(kRegistered | kEnabled, std::memory_order_seq_cst);
+    else
+      flags_[index].fetch_and(uint8_t(~kRegistered), std::memory_order_seq_cst);
+    mask_dirty.store(true, std::memory_order_seq_cst);
+  }
+
+  /// Lock-free; changes requested enablement only, never registration liveness.
   void setEnabled(size_t index, bool enable)
   {
-    if(enabled_[index].exchange(enable, std::memory_order_relaxed) != enable)
-    {
-      mask_dirty.store(true, std::memory_order_release);
-    }
+    const auto old = enable ? flags_[index].fetch_or(kEnabled, std::memory_order_seq_cst)
+                            : flags_[index].fetch_and(uint8_t(~kEnabled), std::memory_order_seq_cst);
+    if(bool(old & kEnabled) != enable)
+      mask_dirty.store(true, std::memory_order_seq_cst);
   }
 
   void setEnabled(const RegistrationID& id, bool enable)
   {
-    bool changed = false;
     for(size_t i = 0; i < id.fields_count; i++)
-    {
-      changed |= enabled_[id.first_index + i].exchange(enable, std::memory_order_relaxed) != enable;
-    }
-    if(changed)
-    {
-      mask_dirty.store(true, std::memory_order_release);
-    }
+      setEnabled(id.first_index + i, enable);
   }
 
   [[nodiscard]] bool inTransactionOnThisThread() const noexcept
@@ -123,7 +131,10 @@ public:
   }
 
 private:
-  std::deque<std::atomic<bool>> enabled_;
+  static constexpr uint8_t kRegistered = 1;
+  static constexpr uint8_t kEnabled = 2;
+  static_assert(std::atomic<uint8_t>::is_always_lock_free, "series flags must be lock-free");
+  std::deque<std::atomic<uint8_t>> flags_;
 };
 
 }  // namespace DataTamer

@@ -8,6 +8,7 @@
 #include <chrono>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 
 namespace DataTamer
 {
@@ -177,7 +178,9 @@ public:
    * @brief takeSnapshot copies the current value of all your registered values
    *  and send an instance of Snapshot to all your Sinks.
    *
-   * Call from one snapshot producer thread per channel.
+   * Call from one snapshot producer thread per channel. Control operations
+   * (registration, unregister, sink changes) must run outside writer guards
+   * and serializer callbacks; they may wait for an active snapshot to finish.
    * @param timestamp is the time since epoch, by default.
    *
    * @return true is succesfully pushed to all its sinks.
@@ -190,7 +193,8 @@ public:
    * Therefore the vector size will be ceiling(series_count/8).
    *
    * Even if technically we may use vector<bool>, this data structure
-   * is already serialized.
+   * is already serialized. This snapshot-thread-only view is the last rebuilt
+   * mask, valid until the next snapshot or channel destruction.
    */
   [[nodiscard]] const ActiveMask& getActiveFlags();
 
@@ -241,6 +245,10 @@ private:
   std::unique_ptr<Pimpl> _p;
 
   TypesRegistry _type_registry;
+
+  std::mutex& controlMutex();
+  bool schemaFrozen() const;
+  bool hasCustomType(const std::string& type_name) const;
 
   template <typename T>
   void updateTypeRegistry();
@@ -298,6 +306,12 @@ inline void LogChannel::updateTypeRegistry()
 
   FieldsVector fields;
   const std::string type_name(CustomTypeName<T>::get());
+  if(schemaFrozen())
+  {
+    if(!hasCustomType(type_name))
+      throw std::runtime_error("Can't add a custom type after recording started");
+    return;
+  }
   if(auto added_serializer = _type_registry.addType<T>(type_name, true))
   {
     auto func = [this, &fields](const char* field_name, const auto* member) {
@@ -315,6 +329,7 @@ template <typename T, bool>
 inline RegistrationID LogChannel::registerValue(const std::string& name,
                                                 const T* value_ptr)
 {
+  std::lock_guard const lock(controlMutex());
   using namespace SerializeMe;
   static_assert(has_TypeDefinition<T>() || IsNumericType<T>(), "Missing TypeDefinition");
 
@@ -334,6 +349,7 @@ template <typename T, std::enable_if_t<IsNumericType<T>(), bool>>
 inline RegistrationID LogChannel::registerValue(const std::string& name,
                                                 const std::atomic<T>* value_ptr)
 {
+  std::lock_guard const lock(controlMutex());
   return registerValueImpl(name, ValuePtr(value_ptr), {});
 }
 
@@ -342,6 +358,7 @@ inline RegistrationID LogChannel::registerCustomValue(const std::string& name,
                                                       const T* value_ptr,
                                                       CustomSerializer::Ptr serializer)
 {
+  std::lock_guard const lock(controlMutex());
   static_assert(!IsNumericType<T>(), "This method should be used only for custom types");
 
   return registerValueImpl(name, ValuePtr(value_ptr, serializer), serializer);
@@ -352,6 +369,7 @@ template <template <class, class> class Container, class T, class... TArgs,
 inline RegistrationID LogChannel::registerValue(const std::string& prefix,
                                                 const Container<T, TArgs...>* vect)
 {
+  std::lock_guard const lock(controlMutex());
   if constexpr(IsNumericType<T>())
   {
     return registerValueImpl(prefix, ValuePtr(vect), {});
@@ -369,6 +387,7 @@ template <typename T, size_t N,
 inline RegistrationID LogChannel::registerValue(const std::string& prefix,
                                                 const std::array<T, N>* vect)
 {
+  std::lock_guard const lock(controlMutex());
   if constexpr(IsNumericType<T>())
   {
     return registerValueImpl(prefix, ValuePtr(vect), {});
