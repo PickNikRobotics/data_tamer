@@ -3,18 +3,22 @@
 
 #include <gtest/gtest.h>
 #include <string>
-#include <thread>
 
 using namespace DataTamer;
 
-void take_snapshots(std::shared_ptr<LogChannel> channel, int count)
+class DrainingDummySink : public DummySink
+{
+public:
+  using DataSinkBase::processQueuedSnapshots;
+};
+
+void take_snapshots(std::shared_ptr<LogChannel> channel, DrainingDummySink& sink, int count)
 {
   for(int i = 0; i < count; i++)
   {
     channel->takeSnapshot();
-    std::this_thread::sleep_for(std::chrono::microseconds(50));
   }
-  std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  sink.processQueuedSnapshots();
 }
 
 TEST(DataTamerSinkRegistry, AddSinkIncreasesCountAndRef)
@@ -32,14 +36,14 @@ TEST(DataTamerSinkRegistry, AddSinkIncreasesCountAndRef)
 TEST(DataTamerSinkRegistry, SnapshotsAreRecordedWhileSinkPresent)
 {
   auto channel = LogChannel::create("chan");
-  auto sink = std::make_shared<DummySink>();
+  auto sink = std::make_shared<DrainingDummySink>();
   channel->addDataSink(sink);
 
   std::vector<double> dummyData = { 10, 11, 12 };
   channel->registerValue("valsA", &dummyData);
 
   const int snapshot_count = 10;
-  take_snapshots(channel, snapshot_count);
+  take_snapshots(channel, *sink, snapshot_count);
 
   const auto hash = channel->getSchema().hash;
   ASSERT_EQ(sink->snapshotsCount(hash), snapshot_count);
@@ -48,14 +52,14 @@ TEST(DataTamerSinkRegistry, SnapshotsAreRecordedWhileSinkPresent)
 TEST(DataTamerSinkRegistry, RemoveSinkStopsRecording)
 {
   auto channel = LogChannel::create("chan");
-  auto sink = std::make_shared<DummySink>();
+  auto sink = std::make_shared<DrainingDummySink>();
   channel->addDataSink(sink);
 
   std::vector<double> dummyData = { 10, 11, 12 };
   channel->registerValue("valsA", &dummyData);
 
   const int snapshot_count = 10;
-  take_snapshots(channel, snapshot_count);
+  take_snapshots(channel, *sink, snapshot_count);
 
   const auto hash = channel->getSchema().hash;
   ASSERT_EQ(sink->snapshotsCount(hash), snapshot_count);
@@ -65,7 +69,7 @@ TEST(DataTamerSinkRegistry, RemoveSinkStopsRecording)
   ASSERT_EQ(channel->getNumberOfSinks(), 0);
 
   // Taking more snapshots, should not be recorded in the sink (i.e does not increase snapshots_count)
-  take_snapshots(channel, snapshot_count);
+  take_snapshots(channel, *sink, snapshot_count);
 
   ASSERT_EQ(sink->snapshotsCount(hash), snapshot_count);
 }
