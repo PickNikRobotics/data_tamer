@@ -10,8 +10,11 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-10-lockfree-frontend-design.md`, §§2, 6–10, especially delivery step 6 and measurement step 6.
 
-**Status:** Tasks 1 and 2 complete; Task 3 validation and documentation complete,
-with final whole-branch review pending.
+**Status:** Complete. All three tasks and final whole-branch review passed.
+Runtime implementation is `df16cef`; measured results are recorded in
+`docs/benchmarks/2026-09-plan3.md`. The final review's FIFO wording correction
+was committed in `2897aa0` and approved in scoped re-review. No findings remain.
+Plan 4's channel control and direct serialization work remains separate.
 
 ## Global Constraints
 
@@ -95,7 +98,7 @@ with final whole-branch review pending.
 - [x] With builds/tests idle, rerun the same pinned Task 1 measurements. Run `rt_latency` with 1000 values, one/two/four sinks and two transaction writers for 10 seconds each; record allocation counts, failures, wait counters and distributions. A valid before/after delivery comparison uses Task 1's same-machine output, not the older machine's historical baseline.
 - [x] Measure syscalls on the snapshot thread using `strace -c` without `-f` (main thread publishes); report its periodic scheduling syscalls separately from futex wakeups. Trace before/after binaries if available. If strace/perf access is restricted, record the exact limitation and available evidence, without claiming unmeasured counts. Capture idle context switches externally if useful to distinguish a sub-tick CPU result from zero wakeups.
 - [x] Correct spec §§3/6 pseudocode for RAII failure ownership, acceptance barrier, dequeue/callback ordering, retained channel-name storage, callback retention API, and timeout qualifications. Replace the hard-coded 16-byte reference assumption with `sizeof(SnapshotRef)` (24 bytes on this build if confirmed). Update API delta and changelog with `pushSnapshot` removal, queue sizing, drop/error counters and derived-sink lifecycle requirements.
-- [ ] Run the final whole-branch review, resolve required findings, record measured results and remaining Plan 4 scope. Commit `docs: record pooled delivery validation and measurements`.
+- [x] Run the final whole-branch review, resolve required findings, record measured results and remaining Plan 4 scope. Commit `docs: record pooled delivery validation and measurements`.
 
 ## Self-review
 
