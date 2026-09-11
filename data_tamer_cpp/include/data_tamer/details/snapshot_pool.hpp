@@ -32,11 +32,13 @@ class SnapshotPool
 public:
   static constexpr size_t kDefaultCapacity = 64;
 
-  SnapshotPool(size_t capacity, size_t payload_capacity, size_t mask_bytes)
-    : capacity_(capacity), slots_(new PoolSlot[capacity])
+  SnapshotPool(size_t capacity, size_t payload_capacity, size_t mask_bytes,
+               std::string channel_name = {})
+    : capacity_(capacity), channel_name_(std::move(channel_name)), slots_(new PoolSlot[capacity])
   {
     for(size_t i = 0; i < capacity_; i++)
     {
+      slots_[i].snapshot.channel_name = channel_name_;
       slots_[i].snapshot.payload.reserve(payload_capacity);
       slots_[i].snapshot.active_mask.resize(mask_bytes);
     }
@@ -95,6 +97,7 @@ public:
 
 private:
   const size_t capacity_;
+  const std::string channel_name_;
   std::unique_ptr<PoolSlot[]> slots_;
   size_t scan_from_ = 0;  // snapshot thread only
   std::atomic<uint64_t> exhausted_{ 0 };

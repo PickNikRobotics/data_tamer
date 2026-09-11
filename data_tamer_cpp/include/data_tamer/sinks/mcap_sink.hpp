@@ -25,7 +25,8 @@ public:
    * @param filepath   path of the file to be saved. Should have extension ".mcap"
    * @param do_compression if true, compress the data on the fly.
    */
-  explicit MCAPSink(std::string const& filepath, bool do_compression = false);
+  explicit MCAPSink(std::string const& filepath, bool do_compression = false,
+                    size_t queue_capacity = 1024);
 
   ~MCAPSink() override;
 
@@ -48,7 +49,7 @@ public:
   void stopRecording();
 
   /// Stop taking snapshots, finish the existing queue, then `stopRecording`
-  /// will block for at least 250 us to ensure the queue is empty
+  /// Waits for admitted publications and callbacks before closing the file.
   void finishQueueAndStop();
 
   /**

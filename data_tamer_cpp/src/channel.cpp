@@ -2,9 +2,10 @@
 #include "data_tamer/data_sink.hpp"
 #include "data_tamer/contrib/SerializeMe.hpp"
 #include "data_tamer/details/shared_state.hpp"
+#include "data_tamer/details/snapshot_pool.hpp"
+#include "ConcurrentQueue/concurrentqueue.h"
 
 #include <unordered_map>
-#include <unordered_set>
 
 namespace DataTamer
 {
@@ -30,11 +31,20 @@ struct LogChannel::Pimpl
   std::atomic<uint64_t> write_lock_wait_max_ns{ 0 };
 
   Snapshot snapshot;
+  std::shared_ptr<SnapshotPool> pool;
+  std::atomic<uint64_t> pool_exhausted{0};
   Schema schema;
   bool logging_started = false;
 
   mutable Mutex sinks_mutex;
-  std::unordered_set<std::shared_ptr<DataSinkBase>> sinks;
+  struct SinkLink
+  {
+    // Members are destroyed in reverse order: token must die before its sink.
+    std::shared_ptr<DataSinkBase> sink;
+    std::unique_ptr<moodycamel::ProducerToken> token;
+    uint64_t dropped = 0;
+  };
+  std::unordered_map<DataSinkBase*, SinkLink> sinks;
 };
 
 RegistrationID LogChannel::registerValueImpl(const std::string& name,
@@ -157,19 +167,23 @@ void LogChannel::addDataSink(std::shared_ptr<DataSinkBase> sink)
 {
   std::lock_guard const lock_sinks(_p->sinks_mutex);
 
+  if(_p->sinks.count(sink.get())) return;
+  auto token = sink->makeProducerToken();
+
   // if we haven't already started logging, then takeSnapshot() handles adding the channel
   // otherwise it must be done here so the sink knows about the existing schema
   if(_p->logging_started)
   {
     sink->addChannel(_p->channel_name, _p->schema);
   }
-  _p->sinks.insert(sink);
+  auto* key = sink.get();
+  _p->sinks.emplace(key, Pimpl::SinkLink{std::move(sink), std::move(token), 0});
 }
 
 void LogChannel::removeDataSink(std::shared_ptr<DataSinkBase> sink)
 {
   std::lock_guard const lock(_p->sinks_mutex);
-  _p->sinks.erase(sink);
+  _p->sinks.erase(sink.get());
 }
 
 size_t LogChannel::getNumberOfSinks() const
@@ -206,7 +220,19 @@ uint64_t LogChannel::writeLockWaitMaxNs() const
 
 LogChannel::Stats LogChannel::stats() const
 {
-  return { writeLockContended(), writeLockWaitMaxNs() };
+  return { writeLockContended(), writeLockWaitMaxNs(), poolExhausted() };
+}
+
+uint64_t LogChannel::poolExhausted() const
+{
+  return _p->pool_exhausted.load(std::memory_order_relaxed);
+}
+
+uint64_t LogChannel::droppedSnapshots(const std::shared_ptr<DataSinkBase>& sink) const
+{
+  std::lock_guard const lock(_p->sinks_mutex);
+  auto it = _p->sinks.find(sink.get());
+  return it == _p->sinks.end() ? 0 : it->second.dropped;
 }
 
 std::shared_ptr<ChannelSharedState> LogChannel::sharedState() const
@@ -230,6 +256,7 @@ bool LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
     }
   }
 
+  SnapshotRef parent;
   {
     std::lock_guard const lock(_p->mutex);
 
@@ -257,7 +284,7 @@ bool LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
       _p->logging_started = true;
       for(auto const& sink : _p->sinks)
       {
-        sink->addChannel(_p->channel_name, _p->schema);
+        sink.second.sink->addChannel(_p->channel_name, _p->schema);
       }
     }
 
@@ -301,15 +328,38 @@ bool LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
     }
 
     _p->snapshot.timestamp = timestamp;
-    _p->snapshot.channel_name = channelName();
+    if(!_p->pool)
+    {
+      _p->pool = std::make_shared<SnapshotPool>(SnapshotPool::kDefaultCapacity,
+          _p->snapshot.payload.size(), _p->snapshot.active_mask.size(), _p->channel_name);
+    }
+    auto* slot = _p->pool->tryAcquire();
+    if(!slot)
+    {
+      _p->pool_exhausted.fetch_add(1, std::memory_order_relaxed);
+      return false;
+    }
+    parent = SnapshotRef(_p->pool, slot);
+    // Preserve the pool-owned channel_name view when copying the legacy buffer.
+    slot->snapshot.payload = _p->snapshot.payload;
+    slot->snapshot.active_mask = _p->snapshot.active_mask;
+    slot->snapshot.schema_hash = _p->snapshot.schema_hash;
+    slot->snapshot.timestamp = _p->snapshot.timestamp;
   }
 
   bool all_pushed = true;
   {
     std::lock_guard const lock_sinks(_p->sinks_mutex);
-    for(auto& sink : _p->sinks)
+    if(_p->sinks.empty()) return false;
+    for(auto& entry : _p->sinks)
     {
-      all_pushed &= sink->pushSnapshot(_p->snapshot);
+      auto& link = entry.second;
+      auto delivery = parent.clone();
+      if(!link.sink->tryPush(*link.token, std::move(delivery)))
+      {
+        ++link.dropped;
+        all_pushed = false;
+      }
     }
   }
   return all_pushed;

@@ -18,6 +18,8 @@ namespace DataTamer
 class DummySink : public DataSinkBase
 {
 public:
+  explicit DummySink(size_t queue_capacity = 1024) : DataSinkBase(queue_capacity) {}
+
   ~DummySink() override { stopThread(); }
 
   void addChannel(std::string const& name, Schema const& schema) override

@@ -4,7 +4,7 @@
 
 **Goal:** Deliver one pooled snapshot to every sink through preallocated queues, wake consumers on enqueue, and reliably drain accepted work without polling sleeps.
 
-**Architecture:** Keep the existing channel serialization and structure locks for this stage. Copy the finished snapshot into one `SnapshotPool` slot, then enqueue move-only `SnapshotRef` clones through one explicit producer token per channel/sink pair. `DataSinkBase` owns the blocking queue and serializes dequeue plus callback with one mutex. Plan 4 removes the temporary copy and channel structure locks.
+**Architecture:** Keep the existing channel serialization and structure locks for this stage. Copy the finished snapshot into one `SnapshotPool` slot, then enqueue move-only `SnapshotRef` clones through one explicit producer token per channel/sink pair. `DataSinkBase` owns the blocking queue and serializes dequeue plus callback with a store mutex; a handoff mutex lets a waiting manual drainer take its turn. Plan 4 removes the temporary copy and channel structure locks.
 
 **Tech Stack:** C++17, existing vendored moodycamel queue/semaphore, CMake presets, GoogleTest, existing per-thread allocation counter. No new dependencies.
 
@@ -53,7 +53,9 @@
 
   ```cpp
   while (run.load()) {
+    std::unique_lock handoff(handoff_mutex);
     std::unique_lock lock(store_mutex);
+    handoff.unlock();
     if (!run.load()) break;
     if (queue.wait_dequeue_timed(current_ref, std::chrono::milliseconds(50))) {
       deliver(self); // catches callback exceptions, then current_ref.reset()
@@ -61,7 +63,7 @@
   }
   ```
 
-  `processQueuedSnapshots()` holds the same mutex through the entire nonblocking drain. `stopThread()` stores false and joins without taking that mutex. The timeout bounds only the semaphore wait, not callback duration, mutex fairness, or OS scheduling.
+  `processQueuedSnapshots()` acquires handoff then store mutex and holds both through the entire nonblocking drain. The worker releases handoff before its timed wait, allowing the drainer to claim handoff while waiting for the current delivery; the worker cannot barge back into the store mutex. This was added after focused testing exposed an 8.69-second `FinishQueue` delay and a concurrent drainer stalled over 20 seconds. `stopThread()` stores false and joins without either mutex. The timeout bounds only the semaphore wait, not callback duration or OS scheduling.
 
 - [ ] Gate producer admission with one atomic closed/count word. A successful CAS increment admits the producer; an RAII decrement follows `queue.try_enqueue(token, std::move(ref))`. Failure does not manually decrement slot references. `stopAcceptingSnapshots()` sets the closed bit and waits for the active count to become zero; `startAcceptingSnapshots()` clears the closed bit. Neither worker nor drainer tests acceptance after dequeue.
 - [ ] Replace the channel sink set with ownership of a sink and its token (sink destroyed after token), keeping `sinks_mutex` around insertion, removal and publication. Duplicate attachment does not create another producer. On first finished serialization create the 64-slot pool sized to payload and mask. Acquire a slot, copy payload/mask/hash/timestamp while the channel snapshot mutex is held, and keep a parent `SnapshotRef` until every enqueue attempt has finished:

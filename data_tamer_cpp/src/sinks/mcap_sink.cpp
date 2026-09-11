@@ -5,7 +5,6 @@
 #include <mutex>
 #include <sstream>
 #include <string>
-#include <thread>
 #include <unordered_map>
 
 #ifndef USING_ROS2
@@ -53,12 +52,13 @@ struct MCAPSink::Pimpl
   std::chrono::seconds reset_time = std::chrono::seconds(60 * 10);
   std::chrono::system_clock::time_point start_time;
 
+  std::vector<uint8_t> merged_payload;
   bool forced_stop_recording = false;
   std::recursive_mutex mutex;
 };
 
-MCAPSink::MCAPSink(const std::string& filepath, bool do_compression)
-  : _p(std::make_unique<Pimpl>())
+MCAPSink::MCAPSink(const std::string& filepath, bool do_compression, size_t queue_capacity)
+  : DataSinkBase(queue_capacity), _p(std::make_unique<Pimpl>())
 {
   _p->filepath = filepath;
   _p->compression = do_compression;
@@ -123,7 +123,7 @@ bool MCAPSink::storeSnapshot(const Snapshot& snapshot)
     return false;
   }
   // the payload must contain both the ActiveMask and the other data
-  thread_local std::vector<uint8_t> merged_payload;
+  auto& merged_payload = _p->merged_payload;
   const auto size_mask = snapshot.active_mask.size();
   const auto size_data = snapshot.payload.size();
 
@@ -185,10 +185,6 @@ void MCAPSink::finishQueueAndStop()
   // finish any that are queued
   processQueuedSnapshots();
 
-  // sleep and process any that were missed by previous processing
-  std::this_thread::sleep_for(std::chrono::microseconds(250));
-  processQueuedSnapshots();
-
   // now stop the recording as normal
   stopRecording();
 }
@@ -218,8 +214,11 @@ void MCAPSink::restartRecordingImpl(const std::string& filepath, bool do_compres
     addChannel(name, schema);
   }
 
-  // start accepting snapshots again in case they were stopped
-  startAcceptingSnapshots();
+  if(new_file)
+  {
+    _p->forced_stop_recording = false;
+    startAcceptingSnapshots();
+  }
 }
 
 }  // namespace DataTamer

@@ -177,6 +177,7 @@ public:
    * @brief takeSnapshot copies the current value of all your registered values
    *  and send an instance of Snapshot to all your Sinks.
    *
+   * Call from one snapshot producer thread per channel.
    * @param timestamp is the time since epoch, by default.
    *
    * @return true is succesfully pushed to all its sinks.
@@ -217,10 +218,17 @@ public:
   /// Longest blocking mutex acquisition after spin exhaustion, in nanoseconds.
   [[nodiscard]] uint64_t writeLockWaitMaxNs() const;
 
+  /// Snapshot attempts that could not acquire a free pool slot.
+  [[nodiscard]] uint64_t poolExhausted() const;
+
+  /// Failed publications to this attachment; zero if sink is not attached.
+  [[nodiscard]] uint64_t droppedSnapshots(const std::shared_ptr<DataSinkBase>& sink) const;
+
   struct Stats
   {
     uint64_t write_lock_contended = 0;
     uint64_t write_lock_wait_max_ns = 0;
+    uint64_t pool_exhausted = 0;
   };
 
   [[nodiscard]] Stats stats() const;

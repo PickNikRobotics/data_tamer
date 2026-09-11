@@ -9,6 +9,7 @@ set(DATATAMER_TEST_SOURCES
     alloc_counter_tests.cpp
     write_mutex_tests.cpp
     snapshot_pool_tests.cpp
+    sink_queue_tests.cpp
     value_ptr_tests.cpp
     logged_value_tests.cpp
     shared_state_tests.cpp
@@ -48,3 +49,9 @@ endif()
 
 target_include_directories(datatamer_test
     PUBLIC $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>)
+
+if(USE_VENDORED_MCAP)
+    target_include_directories(datatamer_test PRIVATE ${PROJECT_SOURCE_DIR}/3rdparty/mcap/include)
+elseif(NOT DATA_TAMER_BUILD_ROS)
+    target_link_libraries(datatamer_test mcap::mcap)
+endif()

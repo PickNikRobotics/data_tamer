@@ -199,3 +199,14 @@ TEST(SnapshotPool, ProducerAndConsumersUnderContention)
   ASSERT_EQ(pool->inUse(), 0u);
   ASSERT_EQ(pool->exhausted(), uint64_t(dropped));
 }
+
+TEST(SnapshotPool, OwnsChannelNameBeyondSourceLifetime)
+{
+  SnapshotRef survivor;
+  {
+    std::string name(128, 'x');
+    auto pool = std::make_shared<SnapshotPool>(1, 8, 1, name);
+    survivor = SnapshotRef(pool, pool->tryAcquire());
+  }
+  EXPECT_EQ(survivor->channel_name, std::string(128, 'x'));
+}
