@@ -210,3 +210,18 @@ TEST(SnapshotPool, OwnsChannelNameBeyondSourceLifetime)
   }
   EXPECT_EQ(survivor->channel_name, std::string(128, 'x'));
 }
+
+TEST(SnapshotPool, ParentPinsSlotBetweenCompletedAndPendingFanout)
+{
+  auto pool = std::make_shared<SnapshotPool>(1, 8, 1);
+  SnapshotRef parent(pool, pool->tryAcquire());
+  auto first = parent.clone();
+  first.reset();  // A fast consumer finishes before the next clone is made.
+  EXPECT_EQ(pool->tryAcquire(), nullptr);
+  auto second = parent.clone();
+  parent.reset();
+  EXPECT_EQ(pool->tryAcquire(), nullptr);
+  second.reset();
+  SnapshotRef reused(pool, pool->tryAcquire());
+  EXPECT_TRUE(reused);
+}

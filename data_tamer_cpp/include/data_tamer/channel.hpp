@@ -225,6 +225,24 @@ public:
   /// Snapshot attempts that could not acquire a free pool slot.
   [[nodiscard]] uint64_t poolExhausted() const;
 
+  /// Configure before the first snapshot (even one without sinks).
+  /// Each slot reserves max(bytes, 2 * initial payload size, 256); zero is automatic.
+  void setPayloadCapacity(size_t bytes);
+
+  /// Number of retained/in-flight snapshots; default 64. Zero is invalid.
+  void setPoolCapacity(size_t count);
+
+  /// May change at runtime. Oversize snapshots return false instead of growing
+  /// the acquired slot. Existing per-slot capacity is preserved. Serializer and
+  /// allocator exceptions still propagate; strict mode is not a no-throw API.
+  void setStrictMode(bool strict);
+
+  /// Successful per-slot payload growth allocations after initial reservation.
+  [[nodiscard]] uint64_t payloadReallocations() const;
+
+  /// Snapshot attempts dropped because strict mode disallowed payload growth.
+  [[nodiscard]] uint64_t droppedOversize() const;
+
   /// Failed publications to this attachment; zero if sink is not attached.
   [[nodiscard]] uint64_t droppedSnapshots(const std::shared_ptr<DataSinkBase>& sink) const;
 
@@ -233,6 +251,8 @@ public:
     uint64_t write_lock_contended = 0;
     uint64_t write_lock_wait_max_ns = 0;
     uint64_t pool_exhausted = 0;
+    uint64_t payload_reallocations = 0;
+    uint64_t dropped_oversize = 0;
   };
 
   [[nodiscard]] Stats stats() const;

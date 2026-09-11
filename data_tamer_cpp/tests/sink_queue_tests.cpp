@@ -396,3 +396,36 @@ TEST(SinkQueue, McapAutomaticRolloverDoesNotReopenClosedAcceptance)
   EXPECT_EQ(count, 8u);
   std::filesystem::remove_all(directory);
 }
+
+TEST(SinkQueue, FastConsumerCannotReleaseParentBeforeSecondFanout)
+{
+  uint64_t value = 0;
+  auto first = std::make_shared<QueueSink>(1024, true);
+  auto second = std::make_shared<QueueSink>(1024, true);
+  auto channel = channelWith(first, &value);
+  channel->addDataSink(second);
+  channel->setPoolCapacity(2);
+  std::vector<uint64_t> received[2];
+  for(int i = 0; i < 2; ++i)
+  {
+    auto sink = i == 0 ? first : second;
+    sink->callback = [&, i](const Snapshot& snapshot) {
+      uint64_t decoded = 0;
+      std::memcpy(&decoded, snapshot.payload.data(), sizeof(decoded));
+      received[i].push_back(decoded);
+      return true;
+    };
+  }
+  size_t accepted = 0;
+  for(value = 0; value < 10000; ++value)
+    accepted += channel->takeSnapshot();
+  first->stopThread();
+  second->stopThread();
+  first->processQueuedSnapshots();
+  second->processQueuedSnapshots();
+  EXPECT_GT(accepted, 0u);
+  EXPECT_EQ(channel->droppedSnapshots(first), 0u);
+  EXPECT_EQ(channel->droppedSnapshots(second), 0u);
+  EXPECT_EQ(received[0].size(), accepted);
+  EXPECT_EQ(received[0], received[1]);
+}

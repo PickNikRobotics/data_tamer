@@ -92,7 +92,7 @@ Move the registration lock outside each public registration template so `_type_r
 **Files:**
 - Modify: `data_tamer_cpp/src/channel.cpp`, `data_tamer_cpp/include/data_tamer/channel.hpp`
 - Create: `data_tamer_cpp/tests/channel_capacity_tests.cpp`
-- Modify: `data_tamer_cpp/tests/CMakeLists.txt`, `data_tamer_cpp/tests/sink_queue_tests.cpp`
+- Modify: `data_tamer_cpp/tests/CMakeLists.txt`, `data_tamer_cpp/tests/sink_queue_tests.cpp`, `data_tamer_cpp/tests/snapshot_pool_tests.cpp`
 - Modify: `data_tamer_cpp/benchmarks/rt_latency.cpp`, `data_tamer_cpp/benchmarks/rt_latency_cli_test.cmake`
 
 **Interfaces:** Consume Task 1's control mutex, epoch guard, atomic sink links, shared liveness/dirty mask, and existing pool/ref ownership. Add `void setPayloadCapacity(size_t bytes)`, `void setPoolCapacity(size_t n)`, `void setStrictMode(bool strict)`, `uint64_t payloadReallocations() const`, `uint64_t droppedOversize() const`; extend `Stats` with `payload_reallocations` and `dropped_oversize`. Capacity setters throw after freeze; zero pool capacity throws `std::invalid_argument`; zero payload hint is valid (automatic minimum). Strict mode is atomic and may change at runtime.
@@ -113,7 +113,7 @@ EXPECT_TRUE(channel->takeSnapshot());
 EXPECT_EQ(channel->payloadReallocations(), 1u);
 ```
 
-Use the allocation hook around only snapshot calls after initialization, with manually drained sinks: at least 10,000 calls with two sinks, both allocation and deallocation counts zero. Include dirty mask changes and concurrent control churn; control-thread allocations are outside the hook. Retain a fast-consumer/two-sink fanout regression to protect the producer's parent hold. Test all eight attachments and existing queue-full behavior. Keep synchronization deterministic; do not require every tight-loop publish to succeed when intentionally racing slow consumers.
+Use the allocation hook around only snapshot calls after initialization, with manually drained sinks: at least 10,000 calls with two sinks, both allocation and deallocation counts zero. Include dirty mask changes and concurrent control churn; control-thread allocations are outside the hook. Add a deterministic one-slot ref regression: release the first delivery before cloning the second, prove the parent prevents reacquisition, then prove the second delivery pins the slot after parent release. Retain channel two-sink fanout coverage to protect that ownership boundary in integration. Test all eight attachments and existing queue-full behavior. Keep synchronization deterministic; do not require every tight-loop publish to succeed when intentionally racing slow consumers.
 
 - [ ] **Step 2: Record expected compile/test failures for absent APIs, then implement.** At freeze, under the control and write mutexes, build the initial mask, compute size, and reserve each pool slot to `max(user_hint, 2 * size, 256)`. Check addition/doubling against vector limits before arithmetic; reject an impossible hint/count safely. Keep pool construction exception-safe. Cache schema hash and mask with independent snapshot-thread-owned storage; delete `Pimpl::snapshot` and the payload-copy bridge.
 
@@ -136,7 +136,7 @@ slot->snapshot.payload.resize(size);
 
 Acquire the slot before mask rebuild, writer-lock acquisition, and size/serialize work. Keep parent ownership until every sink attempt ends, including failures. Count only successful growth allocations. Preserve exception propagation for user serializers/allocator failure; strict mode prevents capacity allocation, not arbitrary callback exceptions. Runtime strict toggles use existing per-slot capacity, including any previous non-strict growth.
 
-- [ ] **Step 3: Extend latency output with all channel counters and aggregate attachment drops.** Keep CLI validation; reject sink counts above eight with a normal diagnostic instead of an uncaught exception. Preserve allocation scope and existing benchmark semantics. Do not change backend lifecycle.
+- [ ] **Step 3: Extend latency output with all channel counters and aggregate attachment drops.** Keep CLI validation; reject sink counts above eight with a normal diagnostic instead of an uncaught exception. Preserve allocation scope and existing benchmark semantics. After writers join and outside the timed loop, explicitly call `MCAPSink::finishQueueAndStop()` for MCAP sinks so the measured file contains every accepted record. Do not change backend lifecycle implementation.
 - [ ] **Step 4: Run focused tests and full Debug; controller runs ASAN+UBSAN, TSAN, Release and ROS shared gates.** Inspect the final function for control locks, allocations outside non-strict growth, extra payload copies, and exception leaks.
 - [ ] **Step 5: Commit:** `feat: serialize directly into configurable snapshot pools`.
 

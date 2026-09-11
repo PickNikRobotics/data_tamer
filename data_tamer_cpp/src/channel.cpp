@@ -7,11 +7,21 @@
 
 #include <algorithm>
 #include <array>
+#include <limits>
 #include <thread>
 #include <unordered_map>
 
 namespace DataTamer
 {
+namespace
+{
+size_t checkedDouble(size_t size)
+{
+  if(size > std::vector<uint8_t>().max_size() / 2)
+    throw std::length_error("Snapshot payload is too large to reserve");
+  return 2 * size;
+}
+}  // namespace
 
 struct LogChannel::Pimpl
 {
@@ -27,12 +37,43 @@ struct LogChannel::Pimpl
   std::shared_ptr<ChannelSharedState> shared = std::make_shared<ChannelSharedState>();
   std::atomic<uint64_t> write_lock_contended{0};
   std::atomic<uint64_t> write_lock_wait_max_ns{0};
-  Snapshot snapshot;
+  size_t schema_hash = 0;
+  ActiveMask active_mask;  // Snapshot-thread-owned, independent of retained slots.
+  size_t payload_capacity = 0;
+  size_t pool_capacity = SnapshotPool::kDefaultCapacity;
+  std::atomic<bool> strict_mode{false};
+  std::atomic<uint64_t> payload_reallocations{0};
+  std::atomic<uint64_t> dropped_oversize{0};
   std::shared_ptr<SnapshotPool> pool;
   std::atomic<uint64_t> pool_exhausted{0};
   Schema schema;
   bool schema_frozen = false;  // control_mutex held
   bool logging_started = false;  // snapshot thread, or control_mutex held
+
+  void rebuildMask()
+  {
+    std::fill(active_mask.begin(), active_mask.end(), 0xFF);
+    for(size_t i = 0; i < series.size(); ++i)
+      if(!shared->isEnabled(i)) SetBit(active_mask, i, false);
+  }
+
+  // Caller holds write_mutex; size and serialization use this same cached mask.
+  size_t payloadSize() const
+  {
+    size_t size = 0;
+    const auto limit = std::vector<uint8_t>().max_size();
+    for(size_t i = 0; i < series.size(); ++i)
+    {
+      if(GetBit(active_mask, i))
+      {
+        const auto field_size = series[i].holder.getSerializedSize();
+        if(field_size > limit - size)
+          throw std::length_error("Snapshot payload is too large");
+        size += field_size;
+      }
+    }
+    return size;
+  }
 
   struct SinkLink
   {
@@ -218,12 +259,47 @@ uint64_t LogChannel::writeLockWaitMaxNs() const
 
 LogChannel::Stats LogChannel::stats() const
 {
-  return {writeLockContended(), writeLockWaitMaxNs(), poolExhausted()};
+  return {writeLockContended(), writeLockWaitMaxNs(), poolExhausted(),
+          payloadReallocations(), droppedOversize()};
 }
 
 uint64_t LogChannel::poolExhausted() const
 {
   return _p->pool_exhausted.load(std::memory_order_relaxed);
+}
+
+void LogChannel::setPayloadCapacity(size_t bytes)
+{
+  std::lock_guard const lock(_p->control_mutex);
+  if(_p->schema_frozen) throw std::runtime_error("Payload capacity is frozen");
+  if(bytes > std::vector<uint8_t>().max_size())
+    throw std::length_error("Snapshot payload capacity is too large");
+  _p->payload_capacity = bytes;
+}
+
+void LogChannel::setPoolCapacity(size_t count)
+{
+  std::lock_guard const lock(_p->control_mutex);
+  if(_p->schema_frozen) throw std::runtime_error("Pool capacity is frozen");
+  if(count == 0) throw std::invalid_argument("Pool capacity must be positive");
+  if(count > std::numeric_limits<std::ptrdiff_t>::max() / sizeof(PoolSlot))
+    throw std::length_error("Snapshot pool capacity is too large");
+  _p->pool_capacity = count;
+}
+
+void LogChannel::setStrictMode(bool strict)
+{
+  _p->strict_mode.store(strict, std::memory_order_relaxed);
+}
+
+uint64_t LogChannel::payloadReallocations() const
+{
+  return _p->payload_reallocations.load(std::memory_order_relaxed);
+}
+
+uint64_t LogChannel::droppedOversize() const
+{
+  return _p->dropped_oversize.load(std::memory_order_relaxed);
 }
 
 uint64_t LogChannel::droppedSnapshots(const std::shared_ptr<DataSinkBase>& sink) const
@@ -249,7 +325,7 @@ bool LogChannel::hasCustomType(const std::string& type_name) const
   return _p->schema.custom_types.count(type_name) != 0;
 }
 
-const ActiveMask& LogChannel::getActiveFlags() { return _p->snapshot.active_mask; }
+const ActiveMask& LogChannel::getActiveFlags() { return _p->active_mask; }
 
 bool LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
 {
@@ -259,8 +335,19 @@ bool LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
   {
     std::lock_guard const lock(_p->control_mutex);
     _p->schema_frozen = true;
-    _p->snapshot.schema_hash = _p->schema.hash;
-    _p->snapshot.active_mask.resize((_p->series.size() + 7) / 8);
+    _p->schema_hash = _p->schema.hash;
+    if(!_p->pool)
+    {
+      std::lock_guard<WriteMutex> write_lock(_p->shared->write_mutex);
+      _p->active_mask.resize(_p->series.size() / 8 + (_p->series.size() % 8 != 0));
+      _p->shared->mask_dirty.exchange(false, std::memory_order_seq_cst);
+      _p->rebuildMask();
+      const auto capacity = std::max({ _p->payload_capacity,
+                                      checkedDouble(_p->payloadSize()), size_t(256) });
+      // Publish the pool only after every slot has reserved successfully.
+      _p->pool = std::make_shared<SnapshotPool>(_p->pool_capacity, capacity,
+                                               _p->active_mask.size(), _p->channel_name);
+    }
     for(auto& link : _p->sinks)
     {
       if(link && !link->schema_registered)
@@ -293,29 +380,20 @@ bool LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
   }
   if(!has_sinks) return false;
 
-  SnapshotRef parent;
-  PoolSlot* slot = nullptr;
-  if(_p->pool)
+  auto* slot = _p->pool->tryAcquire();
+  if(!slot)
   {
-    slot = _p->pool->tryAcquire();
-    if(!slot)
-    {
-      _p->pool_exhausted.fetch_add(1, std::memory_order_relaxed);
-      return false;
-    }
-    parent = SnapshotRef(_p->pool, slot);
+    _p->pool_exhausted.fetch_add(1, std::memory_order_relaxed);
+    return false;
   }
+  SnapshotRef parent(_p->pool, slot);
+  auto& snapshot = slot->snapshot;
 
   // An old cached mask requires an SC exchange before unregistration's dirty
   // store, so that reader is covered by waitQuiescent(). A rebuilt active bit
   // acquires registration's initialized holder through its SC flag load.
   if(_p->shared->mask_dirty.exchange(false, std::memory_order_seq_cst))
-  {
-    auto& mask = _p->snapshot.active_mask;
-    std::fill(mask.begin(), mask.end(), 0xFF);
-    for(size_t i = 0; i < _p->series.size(); i++)
-      if(!_p->shared->isEnabled(i)) SetBit(mask, i, false);
-  }
+    _p->rebuildMask();
 
   {
     auto& write_mutex = _p->shared->write_mutex;
@@ -331,32 +409,28 @@ bool LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
                 previous, blocked_wait_ns, std::memory_order_relaxed))
       {}
     }
-    size_t payload_size = 0;
+    const auto payload_size = _p->payloadSize();
+    if(payload_size > snapshot.payload.capacity())
+    {
+      if(_p->strict_mode.load(std::memory_order_relaxed))
+      {
+        _p->dropped_oversize.fetch_add(1, std::memory_order_relaxed);
+        return false;
+      }
+      snapshot.payload.reserve(checkedDouble(payload_size));
+      _p->payload_reallocations.fetch_add(1, std::memory_order_relaxed);
+    }
+    snapshot.payload.resize(payload_size);
+    SerializeMe::SpanBytes payload_buffer(snapshot.payload);
     for(size_t i = 0; i < _p->series.size(); i++)
-      if(GetBit(_p->snapshot.active_mask, i))
-        payload_size += _p->series[i].holder.getSerializedSize();
-    _p->snapshot.payload.resize(payload_size);
-    SerializeMe::SpanBytes payload_buffer(_p->snapshot.payload);
-    for(size_t i = 0; i < _p->series.size(); i++)
-      if(GetBit(_p->snapshot.active_mask, i))
+      if(GetBit(_p->active_mask, i))
         _p->series[i].holder.serialize(payload_buffer);
-    _p->snapshot.payload.resize(_p->snapshot.payload.size() - payload_buffer.size());
+    snapshot.payload.resize(snapshot.payload.size() - payload_buffer.size());
   }
 
-  _p->snapshot.timestamp = timestamp;
-  // Temporary bridge: the first serialized payload still establishes capacity.
-  // Task 2 moves reservation into freeze and serializes directly to pool slots.
-  if(!_p->pool)
-  {
-    _p->pool = std::make_shared<SnapshotPool>(SnapshotPool::kDefaultCapacity,
-        _p->snapshot.payload.size(), _p->snapshot.active_mask.size(), _p->channel_name);
-    slot = _p->pool->tryAcquire();
-    parent = SnapshotRef(_p->pool, slot);
-  }
-  slot->snapshot.payload = _p->snapshot.payload;
-  slot->snapshot.active_mask = _p->snapshot.active_mask;
-  slot->snapshot.schema_hash = _p->snapshot.schema_hash;
-  slot->snapshot.timestamp = _p->snapshot.timestamp;
+  snapshot.active_mask = _p->active_mask;
+  snapshot.schema_hash = _p->schema_hash;
+  snapshot.timestamp = timestamp;
 
   bool all_pushed = true;
   for(auto* link : links)

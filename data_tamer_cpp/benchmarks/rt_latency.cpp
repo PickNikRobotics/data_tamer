@@ -1,6 +1,6 @@
 // Latency-distribution harness: a periodic loop calling takeSnapshot() and
 // recording every call's duration. Prints p50/p99/p99.9/max, allocation
-// count per call after warm-up, and the channel's counters (when available).
+// count per call after warm-up, and the channel's counters.
 //
 // usage: rt_latency [--values N] [--sinks K] [--writers W] [--seconds S]
 //                   [--rate HZ] [--mcap PATH] [--fifo] [--transactions]
@@ -85,6 +85,11 @@ static Options parse(int argc, char** argv)
   {
     std::fprintf(stderr,
                  "invalid option values: counts must be nonnegative; seconds and rate must be positive\n");
+    std::exit(1);
+  }
+  if(o.sinks > 8)
+  {
+    std::fprintf(stderr, "invalid option --sinks: at most eight sinks are supported\n");
     std::exit(1);
   }
   if(o.values < 2)
@@ -240,11 +245,22 @@ int main(int argc, char** argv)
     t.join();
   }
 
+  for(const auto& sink : sinks)
+    if(auto mcap = std::dynamic_pointer_cast<MCAPSink>(sink))
+      mcap->finishQueueAndStop();
+
   printPercentiles(durations);
   const auto stats = channel->stats();
   std::printf("write_lock_contended=%llu write_lock_wait_max_ns=%llu\n",
               (unsigned long long)stats.write_lock_contended,
               (unsigned long long)stats.write_lock_wait_max_ns);
+  uint64_t attachment_drops = 0;
+  for(const auto& sink : sinks) attachment_drops += channel->droppedSnapshots(sink);
+  std::printf("pool_exhausted=%llu payload_reallocations=%llu dropped_oversize=%llu attachment_drops=%llu\n",
+              (unsigned long long)stats.pool_exhausted,
+              (unsigned long long)stats.payload_reallocations,
+              (unsigned long long)stats.dropped_oversize,
+              (unsigned long long)attachment_drops);
   std::printf("allocations per call after warm-up: %.4f\n", double(allocations) / double(total));
   std::printf("takeSnapshot returned false: %zu / %zu\n", failed, total);
   std::printf("fifo=%d\n", int(fifo_ok));
