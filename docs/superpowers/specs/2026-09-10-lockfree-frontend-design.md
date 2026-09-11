@@ -1,8 +1,13 @@
 # Lock-free, allocation-free front end for `LogChannel`
 
-**Date:** 2026-09-10 (revised: snapshot pool instead of per-edge rings; PI write mutex instead of seqlock)
+**Date:** 2026-09-10 (revised through Plan 3 on 2026-09-11)
 **Scope:** `data_tamer_cpp` — `LogChannel`, `LoggedValue`, `ValuePtr`, `DataSinkBase`, in-tree sinks
-**Status:** approved design. Implementation plans: `docs/superpowers/plans/2026-09-10-lockfree-frontend-plan-1.md` (steps 0–3); plans 2–4 (steps 4–5, 6–7, 8–9) are written as each previous plan lands.
+**Status:** approved design. Plan 1 implemented steps 0–3, Plan 2 steps 4–5,
+and Plan 3 step 6. Plan 4 retains steps 7–9. The
+Plan 3 channel-to-sink bridge still uses the channel structure locks and copies
+the serialized legacy snapshot into pooled storage. Channel epoch publication,
+direct pooled serialization, capacity/strict-mode APIs and the complete warm-up
+contract remain Plan 4 work.
 
 ## 1. Goal
 
@@ -38,7 +43,7 @@ the alternative in §11); any change to `signal_logger`.
 
 | Role | Who | May lock | May allocate |
 |---|---|---|---|
-| Snapshot thread | caller of `takeSnapshot()` | the channel `WriteMutex` (priority-inheriting), for the serialization only; waits at most one writer critical section | never after the first snapshot (one counted exception, §4.6) |
+| Snapshot thread | caller of `takeSnapshot()` | through Plan 3: the channel snapshot and sink-set mutexes plus the channel `WriteMutex`; after Plan 4: only the `WriteMutex` during serialization | Plan 3 proves zero allocation only for a warmed, fixed-size bridge; the complete guarantee remains Plan 4 |
 | Writer threads | `LoggedValue::set()/getMutablePtr()/setEnabled()`, raw values under `scopedWrite()`, `LogChannel::setEnabled()` | the channel `WriteMutex` (shared with other writers and the snapshot thread); critical sections must be short and allocation-free | no |
 | Control threads | `registerValue*`, `createLoggedValue`, `unregister`, `~LoggedValue`, `addDataSink`, `removeDataSink`, capacity setters | `control_mutex`, sink `store_mutex`; may wait one snapshot duration | yes |
 | Sink threads | one per `DataSinkBase` | `store_mutex` | yes |
@@ -59,18 +64,21 @@ depend on the channel object at all (§2.2 `ChannelSharedState`, §5.2).
 | `WriteMutex` | `include/data_tamer/details/write_mutex.hpp` | `Lockable` wrapper over `pthread_mutex_t` created with `PTHREAD_PRIO_INHERIT` (Linux); falls back to `std::mutex` elsewhere with a compile-time warning. `lock()`, `try_lock()`, `unlock()` |
 | `ChannelSharedState` | `include/data_tamer/details/shared_state.hpp` | `WriteMutex write_mutex`; per-series `atomic<bool> enabled[]` (sized at freeze, append-only before); `atomic<bool> mask_dirty`. Owned by `shared_ptr` from the channel **and** from every `LoggedValue`, so writer-side operations never need the channel object |
 | `SnapshotPool` | `include/data_tamer/details/snapshot_pool.hpp` | K pre-allocated `Snapshot` slots, each with an intrusive `atomic<uint32_t> refs`. `tryAcquire()` (snapshot thread only) scans for `refs == 0`. One pool per channel, owned by `shared_ptr` |
-| `SnapshotRef` | same file | Move-only handle `{ shared_ptr<SnapshotPool> pool; Snapshot* slot; }`; copy = `refs++`, destruction = `refs--` (release). Keeps both the slot and the pool alive |
-| `SinkLink` | `src/channel.cpp` | `{ DataSinkBase* sink; moodycamel::ProducerToken token; atomic<uint64_t> dropped; }` — one per (channel, sink); the token belongs to the sink's queue |
-| `SinkSlot` | `src/channel.cpp` | `{ atomic<SinkLink*> link; shared_ptr<DataSinkBase> sink; unique_ptr<SinkLink> owner; }`, `kMaxSinks` of them |
-| `LogChannel::Pimpl` | `src/channel.cpp` | frozen series array, `shared_ptr<ChannelSharedState>`, `shared_ptr<SnapshotPool>`, private `ActiveMask`, `epoch`, `control_mutex`, `SinkSlot[kMaxSinks]`, counters |
-| `DataSinkBase::Pimpl` | `src/data_sink.cpp` | thread; `moodycamel::BlockingConcurrentQueue<SnapshotRef> queue` (pre-sized); `std::mutex store_mutex` serializing `storeSnapshot` calls; `atomic<bool> run, accept` |
+| `SnapshotRef` | same file | Move-only handle `{ shared_ptr<SnapshotPool> pool; PoolSlot* slot; }`; explicit `clone()` increments `refs`, destruction/reset decrements it. Keeps both the slot and pool alive |
+| `SinkLink` | `src/channel.cpp` | Through Plan 3: `{ shared_ptr<DataSinkBase> sink; unique_ptr<ProducerToken> token; uint64_t dropped; }` — one per (channel, sink), stored under `sinks_mutex`; token declaration order makes it die before the sink |
+| `SinkSlot` | `src/channel.cpp` | Planned for Plan 4: atomic publication of fixed sink links removes `sinks_mutex` from the snapshot path |
+| `LogChannel::Pimpl` | `src/channel.cpp` | Through Plan 3: legacy snapshot buffer and mutex, 64-slot pool created after the first serialization, sink map and per-link counters. Plan 4 adds epoch publication and direct pooled serialization |
+| `DataSinkBase::Pimpl` | `src/data_sink.cpp` | thread; pre-sized `BlockingConcurrentQueue<SnapshotRef>`; handoff and store mutexes; current callback ref; packed closed-bit/active-producer admission word; run and error counters |
 | `LoggedValue<T>` | `include/data_tamer/logged_value.hpp`, `channel.hpp` | scalar `T` → `std::atomic<T>`; non-scalar → plain `T`; both hold `shared_ptr<ChannelSharedState>` and a `weak_ptr<LogChannel>` used only by the destructor |
 | `ValuePtr` | `include/data_tamer/values.hpp` | function pointers instead of `std::function`; new constructor for `std::atomic<T>` |
 
-Constants: `kMaxSinks = 8`, `kLockSpinNs = 2000` (spin on `try_lock` before
-sleeping), default `pool_capacity = 64` slots per channel (≈ 64 ms of stall
-absorption at 1 kHz — enough for a zstd chunk flush in `MCAPSink`), default sink
-`queue_capacity = 1024` refs, sink thread wake timeout `50 ms`.
+Constants through Plan 3: `kLockSpinNs = 2000` (spin on `try_lock` before
+sleeping), fixed `pool_capacity = 64` slots per channel (≈ 64 ms of stall
+absorption at 1 kHz), and default sink
+`queue_capacity = 1024` refs, sink thread wait timeout `50 ms`. The queue rounds
+capacity to internal 32-entry blocks, so the argument is a minimum rather than
+an exact limit. Plan 4 adds configurable pool/payload capacity and the fixed
+`kMaxSinks = 8` publication array.
 
 ### 2.3 Ownership
 
@@ -79,16 +87,19 @@ absorption at 1 kHz — enough for a zstd chunk flush in `MCAPSink`), default si
   be destroyed while sinks still hold snapshots.
 - A **slot** is free when `refs == 0`. Only the snapshot thread transitions
   `0 → 1`; sinks and the snapshot thread itself only decrement from `≥ 1`.
-- A **`ProducerToken`** is bound to the sink's queue; the channel's `SinkSlot`
-  holds a `shared_ptr<DataSinkBase>`, so the sink (and its queue) outlives the
-  token by construction.
-- The snapshot thread sees only the raw `SinkSlot::link` pointer, cleared before
-  the channel destroys the `SinkLink`, and that destruction happens only after an
-  epoch wait (§5.1).
+- A **`ProducerToken`** is bound to the sink's queue. Through Plan 3 each
+  `SinkLink` declares its `shared_ptr<DataSinkBase>` before its token, so reverse
+  member destruction destroys the token first. The sink and queue therefore
+  outlive the token by construction. Plan 4 keeps the same ordering inside its
+  fixed `SinkSlot` owners.
+- Through Plan 3 the channel holds `sinks_mutex` while publishing and while a
+  link is inserted or removed. Plan 4 replaces this with the raw
+  `SinkSlot::link` publication and epoch reclamation described in §5.1.
 
 ### 2.4 Removed
 
-`Pimpl::mutex` and `sinks_mutex` as snapshot-side locks; `Pimpl::snapshot`;
+After Plan 4: `Pimpl::mutex` and `sinks_mutex` as snapshot-side locks and
+`Pimpl::snapshot`. Already removed through Plan 3:
 `moodycamel::ConcurrentQueue<Snapshot>` (by value) in `DataSinkBase`;
 `DataSinkBase::pushSnapshot()`; `LoggedValue::rw_mutex_`; `LoggedValue` move
 constructor/assignment; the sink thread's 250 µs polling loop.
@@ -97,11 +108,34 @@ constructor/assignment; the sink thread's 250 µs polling loop.
 
 `Snapshot`; `DataSinkBase::addChannel/storeSnapshot` signatures; `ChannelsRegistry`;
 schema, hash and wire format; all `registerValue` overloads and their
-"throws after logging started" rule; `MCAPSink`/`ROS2PublisherSink` public API;
+"throws after logging started" rule; existing `MCAPSink`/`ROS2PublisherSink`
+call sites (the MCAP constructor only adds a final defaulted queue-capacity argument);
 the vendored moodycamel headers (now used as intended: pre-sized,
 explicit-producer, `try_enqueue`).
 
 ## 3. Hot path — `takeSnapshot(timestamp)`
+
+The direct-to-pool algorithm below is the Plan 4 target. Plan 3 implements the
+delivery half while retaining the legacy channel locks and buffer:
+
+1. Under the channel snapshot mutex, rebuild the mask if dirty, serialize into
+   `Pimpl::snapshot` under the channel `WriteMutex`, and fill its timestamp and
+   schema hash.
+2. After the first completed serialization, create a 64-slot `SnapshotPool`
+   sized to that payload and mask. The pool owns a copy of the channel name and
+   every slot's `Snapshot::channel_name` views that storage.
+3. Acquire a slot and copy payload, mask, hash and timestamp from the legacy
+   snapshot while the snapshot mutex is still held. If no slot is free,
+   increment `pool_exhausted` and return `false`.
+4. Hold a parent `SnapshotRef` while publishing under `sinks_mutex`. For each
+   link, clone it and call `tryPush(token, std::move(delivery))`. A failed
+   enqueue leaves `delivery` owning its reference; ordinary RAII releases it
+   exactly once. Increment that link's drop counter and return `false` after all
+   links have been attempted if any failed.
+
+This bridge serializes once but performs one payload/mask copy into the pool.
+It does not yet provide the complete frontend reservation or lock-free channel
+structure contract.
 
 ### Step 0 — freeze (first call only; takes `control_mutex`)
 
@@ -138,11 +172,20 @@ again.
    length between the two passes.
 5. Fill the header: `timestamp`, cached `schema_hash`, `channel_name`
    (`string_view`), `memcpy` mask, `payload.resize(written)` (≤ capacity).
-6. Publish to every sink. For each non-null link:
-   `refs.fetch_add(1, relaxed)`; `ok = link->sink->tryPush(link->token,
-   SnapshotRef(pool, slot))` (= `queue.try_enqueue(token, ref)`, never allocates,
-   signals the sink's semaphore); if `!ok`: the moved-from ref is inert, so
-   `refs.fetch_sub(1, relaxed)`, `link->dropped++`.
+6. Publish to every sink. For each non-null link, keep the parent reference and
+   use explicit clone ownership:
+
+   ```cpp
+   auto delivery = parent.clone();
+   if (!link->sink->tryPush(link->token, std::move(delivery))) {
+     ++link->dropped;
+     all_pushed = false;
+   }
+   ```
+
+   With an explicit producer token, `try_enqueue` neither allocates nor waits.
+   On failure it leaves the move-only reference intact, so `delivery` releases
+   it by RAII. There is no manual refcount decrement on this path.
 7. Release the snapshot thread's own hold: `refs.fetch_sub(1, release)`. If no
    sink accepted, this returns the slot to the pool immediately.
 8. `epoch.fetch_add(1, release)` → even. Return `true` iff every sink accepted.
@@ -152,7 +195,7 @@ holds its own reference (step 2) until *every* `tryPush` is done (step 7), so a
 fast sink can never return the slot to the pool while it is still being offered
 to a later sink.
 
-### Cost per call
+### Cost per call after Plan 4
 
 Two atomic RMWs (epoch), one `exchange` (mask), ≤ `kMaxSinks` acquire loads,
 ≤ `pool_capacity` acquire loads in the worst-case free scan, one uncontended
@@ -160,6 +203,11 @@ Two atomic RMWs (epoch), one `exchange` (mask), ≤ `kMaxSinks` acquire loads,
 sink: two refcount RMWs plus one moodycamel explicit-producer `try_enqueue`
 (store-only fast path) and one semaphore increment. No memcpy of the payload for
 any number of sinks. No allocation except §4.6.
+
+Through Plan 3, add the legacy channel/sink mutexes and one payload/mask copy to
+the costs above. The zero-allocation regression covers warmed fixed-size
+publication, including queue-full failure and fanout. Variable payload growth,
+control changes, and direct serialization are not covered by that claim.
 
 Worst case when a writer holds the mutex: remaining writer critical section
 (µs, under your control) + PI boost (~1 µs) + one futex sleep/wake round-trip
@@ -332,7 +380,7 @@ If the serialized size exceeds the acquired slot's capacity:
 `strict_mode` is an `std::atomic<bool>` and may be toggled at runtime.
 `setPayloadCapacity(bytes)` before freeze avoids both paths.
 
-## 5. Control path
+## 5. Control path — Plan 4 target
 
 All control operations serialize on `control_mutex` (`std::mutex`), never taken
 by the snapshot thread after freeze.
@@ -432,32 +480,42 @@ relaxed RMW on the snapshot thread and relaxed loads elsewhere.
 ```cpp
 class SnapshotPool {
  public:
-  SnapshotPool(size_t capacity, size_t payload_capacity, size_t mask_bytes);
-  Snapshot* tryAcquire();            // snapshot thread only: scan for refs==0, set refs=1
+  SnapshotPool(size_t capacity, size_t payload_capacity, size_t mask_bytes,
+               std::string channel_name = {});
+  PoolSlot* tryAcquire();            // snapshot thread only: scan for refs==0, set refs=1
   // slots are returned implicitly when refs reaches 0
-  std::atomic<uint64_t> exhausted{0};
  private:
-  struct Slot { Snapshot snapshot; alignas(64) std::atomic<uint32_t> refs{0}; };
-  std::vector<Slot> slots_;          // payload.reserve(payload_capacity); active_mask.resize(mask_bytes)
+  const std::string channel_name_;   // backs every slot's channel_name view
+  std::unique_ptr<PoolSlot[]> slots_;
   size_t scan_from_ = 0;             // round-robin start, snapshot thread only
+  std::atomic<uint64_t> exhausted_{0};
 };
 
 class SnapshotRef {                  // move-only; copy via explicit clone()
  public:
-  SnapshotRef(std::shared_ptr<SnapshotPool>, Snapshot*);   // takes one existing count
+  SnapshotRef(std::shared_ptr<SnapshotPool>, PoolSlot*);   // takes one existing count
   SnapshotRef(SnapshotRef&&) noexcept; SnapshotRef& operator=(SnapshotRef&&) noexcept;
   ~SnapshotRef();                    // if slot: refs.fetch_sub(1, release)
+  SnapshotRef clone() const;         // refs.fetch_add(1, relaxed)
+  void reset();
   const Snapshot& operator*() const; const Snapshot* operator->() const;
   explicit operator bool() const;
  private:
-  std::shared_ptr<SnapshotPool> pool_; Snapshot* slot_ = nullptr;
+  std::shared_ptr<SnapshotPool> pool_; PoolSlot* slot_ = nullptr;
 };
 ```
 
-`SnapshotRef` is what a sink is allowed to keep: holding one past
-`storeSnapshot()` is safe and merely starves the pool (visible as
-`pool_exhausted`). The pool `shared_ptr` inside the ref is what lets a channel be
-destroyed while sinks still hold its snapshots.
+The pool owns the channel-name string because `Snapshot::channel_name` remains a
+`string_view`. A retained reference therefore remains valid after the original
+name and channel are destroyed. The pool `shared_ptr` inside the ref likewise
+keeps all slots alive.
+
+The legacy callback still receives `const Snapshot&`. A derived sink that needs
+to retain its current queued delivery calls protected `retainSnapshot()` from
+inside `storeSnapshot()` on that callback thread. It explicitly clones the
+current reference. Outside that context it asserts in Debug and returns an
+empty handle in Release; a direct public call to a derived `storeSnapshot()`
+cannot retain queue ownership.
 
 Memory ordering: sinks release with `fetch_sub(1, release)`; the snapshot thread
 acquires a free slot with `load(acquire) == 0`, which synchronizes with the last
@@ -466,48 +524,76 @@ next writes into it.
 
 ### 6.2 `DataSinkBase::Pimpl`
 
-Members: `thread`, `atomic<bool> run, accept`,
+Members: `thread`, `atomic<bool> run`, a packed atomic admission word,
 `moodycamel::BlockingConcurrentQueue<SnapshotRef> queue(queue_capacity)`,
-`std::mutex store_mutex`, `atomic<uint64_t> store_errors`.
+`handoff_mutex`, `store_mutex`, `current_ref`, and
+`atomic<uint64_t> store_errors`.
 
 Thread loop:
 
-```
-while (run) {
-  SnapshotRef ref;
-  if (!queue.wait_dequeue_timed(ref, 50 ms)) continue;      // wakes on enqueue or timeout
-  std::lock_guard lk(store_mutex);
-  if (accept) { try { storeSnapshot(*ref); } catch (...) { store_errors++; } }
-}                                                             // ref destroyed here → slot released
+```cpp
+while (run.load()) {
+  std::unique_lock handoff(handoff_mutex);
+  std::unique_lock lock(store_mutex);
+  handoff.unlock();
+  if (!run.load()) break;
+  if (queue.wait_dequeue_timed(current_ref, 50ms)) {
+    deliver(self); // catch callback exception; increment store_errors; reset current_ref
+  }
+}
 ```
 
-- `tryPush(token, SnapshotRef&&)` (called by channels): `return
-  queue.try_enqueue(token, std::move(ref));` — with an explicit producer token
-  this never allocates and never blocks; on failure the ref is left intact for
-  the caller to discard.
-- `stopThread()`: `run = false; join()`; the timed wait bounds the join to 50 ms.
-- `stopAcceptingSnapshots()`, `startAcceptingSnapshots()` unchanged.
-  `processQueuedSnapshots()`: on the calling thread, `while (queue.try_dequeue(ref))
-  { lock store_mutex; storeSnapshot(*ref); }` — concurrent `try_dequeue` with the
-  sink thread is safe (MPMC), and `store_mutex` serializes `storeSnapshot`.
-- `pushSnapshot()` removed. `queue()` exposed to `LogChannel` (friend or
-  `details` accessor) for token creation.
+- `tryPush(token, SnapshotRef&&)` first admits the producer with a CAS increment
+  of the active count unless the high closed bit is set. An RAII guard always
+  decrements the count after `queue.try_enqueue(token, std::move(ref))`.
+  Explicit-token enqueue neither allocates nor waits; failure leaves `ref`
+  intact for its owner to release.
+- `stopAcceptingSnapshots()` sets the closed bit and waits until the active
+  producer count reaches zero. This is the admission barrier: every accepted
+  enqueue is visible before a control thread drains. `startAcceptingSnapshots()`
+  clears the bit. Control start/stop/drain calls require external serialization
+  and must not run from a callback.
+- The worker and manual drainer never test admission after dequeue. Closing
+  admission prevents new work; all previously accepted references still run.
+- `processQueuedSnapshots()` locks `handoff_mutex` and then `store_mutex`, and
+  holds both while nonblocking dequeue and callback repeat. The worker takes the
+  same lock order but releases handoff before its timed wait. This prevents the
+  worker from repeatedly barging ahead of a waiting drainer; the prior ordering
+  produced a measured 50.389-second focused-test stall.
+- The shared delivery helper catches callback exceptions, increments
+  `store_errors`, and resets `current_ref` before releasing `store_mutex`.
+  Per-producer queue order is therefore also callback order when worker and
+  drainer overlap. Different channels use different producer tokens, so no
+  global cross-channel timestamp order is promised. MCAP validation found zero
+  per-channel inversions but 497 global inversions in the two-channel writer
+  example; consumers that require a timestamp merge must perform one.
+- `stopThread()` stores false and joins without either mutex. The 50 ms timeout
+  applies only to an idle semaphore wait. Callback duration, mutex scheduling
+  and OS scheduling mean it is not a hard upper bound on `join()`.
+- `pushSnapshot()` is removed. Private friend methods create the producer token
+  and publish references; vendored queue types remain out of the public API.
 - Destructor asserts `!thread.joinable()` in debug; in release joins and prints to
-  stderr. Derived sinks must still call `stopThread()` in their destructors.
-  Destroying the queue destroys any remaining refs, releasing their slots.
+  stderr. Derived destructors must call `stopThread()` before destroying callback
+  state. During constructor unwinding the base performs cleanup without masking
+  the original exception. Destroying the queue releases any remaining refs.
 
 Queue sizing: `queue_capacity` is a *minimum* total across all producer tokens
 (moodycamel allocates blocks of 32 up front and hands them to explicit producers
 on demand; explicit producers keep the blocks they have used). With many
-channels on one sink, size it as `channels × per-channel depth`. At 16 bytes per
-ref, 1024 entries is 16 KB, so err on the large side.
+channels on one sink, size it as `channels × per-channel depth` and allow for
+block rounding. Use `sizeof(SnapshotRef)` when estimating storage; it is 24
+bytes on the measured x86-64 GCC 15 build (`Snapshot` is 80 bytes and
+`PoolSlot` is 192 bytes), rather than the earlier assumed 16 bytes.
 
 ### 6.3 In-tree sink ports
 
 - `MCAPSink`: `thread_local merged_payload` → reserved member (safe: all
   `storeSnapshot` calls are under `store_mutex`); `finishQueueAndStop` =
   `stopAcceptingSnapshots(); processQueuedSnapshots(); stopRecording();` (the
-  250 µs sleep is removed).
+  250 µs sleep and redundant second drain are removed). Explicit
+  `restartRecording()` clears the forced-stop state and reopens admission after
+  rebuilding channels. Automatic rollover runs through the internal restart
+  path without either action, so it cannot undo a concurrent finish closure.
 - `ROS2PublisherSink`, benchmark `NullSink`: unchanged apart from the
   constructor forwarding `queue_capacity` if they expose it.
 - `DummySink`: constructor forwards `queue_capacity` the same way; in
@@ -517,35 +603,42 @@ ref, 1024 entries is 16 KB, so err on the large side.
 
 ### 6.4 Latency, idle, memory
 
-Snapshot → `storeSnapshot`: one futex wake when the sink thread is asleep
-(issued inside `try_enqueue` only if a waiter exists), otherwise the next
-dequeue. Idle wakeups: 20/s (timeout only).
+Snapshot → `storeSnapshot` uses the blocking queue semaphore; the syscall and
+idle behavior is measured rather than assumed in the Plan 3 benchmark report.
+The 50 ms timeout permits about 20 idle waits/s, but process CPU tick resolution
+and scheduler context switches are reported separately from work done.
 Memory per channel = `pool_capacity × (payload_capacity + mask_bytes +
 sizeof(Snapshot) + 64)`; defaults give ≈ 1 MB for a 1000-double channel,
-independent of the number of sinks. Memory per sink = `queue_capacity × 16 B`
-plus moodycamel block overhead.
+independent of the number of sinks. Memory per sink is based on
+`queue_capacity × sizeof(SnapshotRef)` plus moodycamel block overhead and
+32-entry rounding; `sizeof(SnapshotRef) == 24` on the measured build.
 
 ## 7. Errors and counters
 
 | Situation | Thread | Behaviour |
 |---|---|---|
-| Register after freeze, name with spaces, type change on re-register, > `kMaxSinks`, capacity setter after freeze | control | `throw std::runtime_error` |
+| Register after freeze, name with spaces, type change on re-register | control | `throw std::runtime_error` |
 | Pool has no free slot | snapshot | no work, `pool_exhausted++`, return `false` (all sinks miss this snapshot) |
 | Sink queue full | snapshot | that sink skipped, `link.dropped++`, return `false` |
 | No sinks | snapshot | no work, return `false` |
 | `WriteMutex` held by a writer at snapshot time | snapshot | spin ≤ 2 µs, then block (PI-bounded); `write_lock_contended++`, `write_lock_wait_max_ns` updated; snapshot proceeds normally |
-| Payload > capacity | snapshot | non-strict: reserve ×2, `payload_reallocations++`; strict: slot returned, `dropped_oversize++`, return `false` |
+| Payload > current bridge capacity (Plan 3) | snapshot | vector copy may grow the slot and allocate; fixed-size warm publication is the only tested zero-allocation case |
+| Payload > configured capacity (Plan 4) | snapshot | planned non-strict growth counter or strict drop policy |
 | `storeSnapshot` throws | sink | caught, `store_errors++`, ref destroyed (slot released) |
-| Sink keeps a `SnapshotRef` indefinitely | sink | pool starves → `pool_exhausted` grows; no UB |
+| Sink retains a callback `SnapshotRef` indefinitely | sink | pool starves → `pool_exhausted` grows; no UB |
 | `DataSinkBase` destroyed with live thread | control | debug assert; release: join + stderr |
 
-Nothing on the snapshot path throws. `takeSnapshot()` returns `true` iff every
-sink accepted the snapshot.
+Through Plan 3, payload growth in the temporary copy bridge can still allocate
+and throw. The final no-throw path depends on Plan 4's reservation/strict-mode
+work. `takeSnapshot()` returns `true` iff every attached sink's queue accepted
+the snapshot; a callback's `false` return is distinct from an enqueue failure.
 
-Accessors on `LogChannel`: `poolExhausted()`, `writeLockContended()`,
-`writeLockWaitMaxNs()`, `payloadReallocations()`, `droppedOversize()`,
-`droppedSnapshots(const std::shared_ptr<DataSinkBase>&)`, and `Stats stats()
-const` bundling them. On `DataSinkBase`: `storeErrors()`.
+Implemented accessors through Plan 3 are `LogChannel::poolExhausted()`,
+`writeLockContended()`, `writeLockWaitMaxNs()`,
+`droppedSnapshots(const std::shared_ptr<DataSinkBase>&)`, and `stats()` (whose
+fields currently bundle the two write-lock counters and `pool_exhausted`).
+`DataSinkBase::storeErrors()` counts thrown callbacks. Plan 4 adds the payload
+growth/oversize counters and their `Stats` fields.
 
 ## 8. Public API delta
 
@@ -553,8 +646,9 @@ const` bundling them. On `DataSinkBase`: `storeErrors()`.
 |---|---|
 | `LogChannel::writeMutex()` | signature unchanged (`Mutex&`); `Mutex` is now `DataTamer::WriteMutex` (exclusive, priority-inheriting) instead of `std::shared_mutex` — `lock_shared()` callers break, `lock_guard`/`unique_lock`/`scoped_lock` callers do not |
 | `LogChannel::scopedWrite()` | new; nonmovable, nesting-aware `ChannelSharedState::Transaction` guard of the channel's `WriteMutex` |
-| `LogChannel::setPayloadCapacity/setPoolCapacity/setStrictMode` | new |
-| `LogChannel::poolExhausted/writeLockContended/writeLockWaitMaxNs/payloadReallocations/droppedOversize/droppedSnapshots/stats` | new |
+| `LogChannel::setPayloadCapacity/setPoolCapacity/setStrictMode` | planned for Plan 4 |
+| `LogChannel::poolExhausted/writeLockContended/writeLockWaitMaxNs/droppedSnapshots/stats` | new through Plan 3; `Stats` currently contains the two lock counters and `pool_exhausted` |
+| `LogChannel::payloadReallocations/droppedOversize` | planned for Plan 4 |
 | `LoggedValue` move ctor / assignment | deleted |
 | `LoggedValue<T>::getMutablePtr()/getConstPtr()` for atomic-scalar `T` | deprecated (proxy semantics); use `set()`/`get()` |
 | `LoggedValue<T>::get()` | now `const` |
@@ -562,22 +656,30 @@ const` bundling them. On `DataSinkBase`: `storeErrors()`.
 | `MutablePtr/ConstPtr::operator bool()` | now explicit (also applies to atomic scalar proxies) |
 | `LoggedValue<T>::getLockedPtr()` | already deprecated; unchanged |
 | `DataSinkBase::DataSinkBase(size_t queue_capacity = 1024)` | new constructor argument (default keeps old call sites compiling) |
+| `DummySink(size_t queue_capacity = 1024)` / `MCAPSink(..., size_t queue_capacity = 1024)` | new final defaulted arguments; capacity is a block-rounded minimum shared by all producers |
 | `DummySink` public members `schemas`, `schema_names`, `snapshots_count`, `latest_snapshot` | replaced by mutex-protected accessors `schema(hash)`, `schemaName(hash)`, `schemasCount()`, `firstSchemaHash()`, `snapshotsCount(hash)`, `latestSnapshot()` (source-breaking for tests that read the members) |
 | `DataSinkBase::pushSnapshot` | removed |
 | `DataSinkBase::storeErrors()` | new |
-| `DataTamer::SnapshotRef` | new public type (sinks may keep one) |
-| `MCAPSink::finishQueueAndStop` | no longer sleeps |
+| `DataSinkBase::retainSnapshot()` | new protected callback-only ownership clone; keeps the legacy virtual callback signature unchanged |
+| `DataTamer::SnapshotRef` | new move-only handle, defined in `details/snapshot_pool.hpp`; derived callbacks obtain one only through `retainSnapshot()` |
+| `MCAPSink::finishQueueAndStop` | closes admission, waits for admitted enqueues, drains accepted work once, and no longer sleeps |
+| `MCAPSink::restartRecording` | explicit restart clears forced-stop and reopens admission; automatic rollover preserves admission closure |
+| Derived `DataSinkBase` lifecycle | destructor must call `stopThread()` before callback state is destroyed; normal Debug destruction diagnoses violations, and construction unwinding preserves the original exception |
 | `MCAPSink` / `ROS2PublisherSink` | private state moved behind an out-of-line Pimpl; one-time ABI change requires downstream rebuilds, subsequent private fields do not change the sink object layout |
 | `ROS2PublisherSink::schema_mutex_` | private `std::mutex` now lives in the Pimpl and protects the schema-change flag as well as schemas |
 
-Implemented through Plan 2: atomic scalars, nested transactions, contention
-counters and sink Pimpls. Capacity setters, the remaining counters, `SnapshotRef`
-delivery, removal of `pushSnapshot`, and removing the sleep from
-`finishQueueAndStop` belong to the subsequent plans. `write_lock_contended`
+Implemented through Plan 3: atomic scalars, nested transactions, contention
+counters, sink Pimpls, pooled queue delivery, removal of `pushSnapshot`, and
+the no-sleep MCAP finish/restart lifecycle. Capacity/strict-mode APIs, payload
+growth counters, channel epoch publication and direct pooled serialization
+remain Plan 4. `write_lock_contended`
 counts blocking acquisitions after the spin budget; `write_lock_wait_max_ns`
 measures only the blocking acquisition, excluding serialization.
 
 ## 9. Testing
+
+The items below distinguish completed coverage through Plan 3 from the Plan 4
+checks that depend on direct serialization and capacity APIs.
 
 - **Unit, single-threaded**: `SnapshotPool` acquire/release, exhaustion, round-robin
   scan, zero allocations after construction; `SnapshotRef` move semantics and
@@ -597,29 +699,29 @@ measures only the blocking acquisition, excluding serialization.
 - **Refcount protocol**: two sinks, one of which returns `true` from `tryPush` and
   immediately consumes; assert the slot is not reused before the second
   `tryPush` (the snapshot thread's own hold, §3 step 7).
-- **Allocation**: `operator new/delete` counting hook in the test binary. After two
-  warm-up snapshots, 10 000 `takeSnapshot()` calls with scalars, vectors, custom
-  types and two sinks report zero allocations. Grow a vector: at most
-  `pool_capacity` allocations and `payloadReallocations()` equal to that count.
-  Same in strict mode: zero allocations and `droppedOversize() ≥ 1`.
+- **Allocation, Plan 3 complete**: the `operator new/delete` hook reports zero
+  allocations and zero deallocations after pool creation for fixed-size warmed
+  successful fanout and persistent queue-full failures. Queue traits route its
+  allocations through the same hook. Plan 4 adds variable payload growth,
+  reservation and strict-mode checks before making the complete frontend claim.
 - **Concurrency under TSAN** (new CI job): (a) writer thread hammering
   `LoggedValue<double>::set` and `LoggedValue<std::vector<double>>::set` during
   snapshots — no reports, every consumed snapshot decodes to a consistent vector;
   (b) random `setEnabled` toggles — decoded field set equals the mask;
-  (c) create/destroy `LoggedValue`s and add/remove sinks in a loop during
-  snapshots — clean under TSAN and ASAN; (d) two channels sharing one sink — all
-  snapshots arrive, per-channel order preserved; (e) sink thread and
-  `processQueuedSnapshots()` dequeuing concurrently.
-- **Lifetime**: a sink that keeps every `SnapshotRef` — `poolExhausted` grows, no
-  UB under ASAN; destroy the channel while the sink still holds refs — refs
-  remain readable, pool freed when the last ref dies.
-- **Pool sizing**: `MCAPSink` with `do_compression = true` on a channel of 1000
+  (c) Plan 4: create/destroy `LoggedValue`s and add/remove sinks in a loop during
+  snapshots; (d) Plan 3: two channels sharing one sink preserve per-producer
+  order; (e) Plan 3: sink worker and manual drainer serialize dequeue/callback.
+- **Lifetime, Plan 3 complete**: a callback retains references until the 64-slot
+  pool exhausts; payload, mask and pool-owned long channel name remain readable
+  after queue, channel and sink destruction; releasing refs restores publication.
+- **Pool sizing, Plan 4 measurement**: `MCAPSink` with `do_compression = true` on a channel of 1000
   doubles at 1 kHz for 60 s writing to a file on disk: `poolExhausted() == 0`
   with the default pool (the reason the default is 64, not 16).
-- **Drop behaviour**: sink whose `storeSnapshot` sleeps; `setPoolCapacity(4)`,
-  100 snapshots → `poolExhausted() == 96` and 96 `false` returns; separately a
-  sink constructed with `queue_capacity` small enough to fill → `droppedSnapshots(sink)`
-  increments while the pool does not exhaust.
+- **Drop behaviour, Plan 3 complete**: a requested queue capacity of one rounds
+  to one 32-entry block; the next publication increments only that attachment's
+  `droppedSnapshots(sink)`, while another sink can accept it. Retaining all 64
+  pool slots separately increments `poolExhausted()` and prevents publication to
+  every sink.
 - **Compatibility**: existing test suites pass; call sites using `pushSnapshot`
   or moving a `LoggedValue` are adjusted in the same change.
 - **Benchmark**: see §10.1.

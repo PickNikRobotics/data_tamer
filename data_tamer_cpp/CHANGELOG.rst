@@ -19,6 +19,27 @@ Unreleased
   ``DummySink`` exposes synchronized accessors instead of public members.
 * ``MCAPSink`` and ``ROS2PublisherSink`` store private state behind a Pimpl.
   This release changes their ABI; downstream binaries must be rebuilt.
+* Sink delivery now shares snapshots through a 64-slot channel pool and a
+  preallocated blocking queue. ``DataSinkBase(size_t queue_capacity = 1024)``
+  treats capacity as a block-rounded minimum shared by all channel producers;
+  ``DummySink`` and ``MCAPSink`` forward the same final defaulted argument.
+  ``DataSinkBase::pushSnapshot`` was removed.
+* Added ``LogChannel::poolExhausted()``, per-attachment
+  ``droppedSnapshots(sink)``, ``Stats::pool_exhausted``, and
+  ``DataSinkBase::storeErrors()``. The last counter records thrown queued
+  callbacks; a callback returning ``false`` is not an exception.
+* Derived sinks must call ``stopThread()`` before destroying callback state.
+  Queued callbacks are serialized with manual draining, exceptions do not stop
+  delivery, and protected callback-only ``retainSnapshot()`` can keep pooled
+  payload, mask and channel-name storage alive without changing the
+  ``storeSnapshot(const Snapshot&)`` virtual API.
+* Closing sink admission waits for already admitted enqueues and drains all
+  accepted references. ``MCAPSink::finishQueueAndStop()`` no longer polls or
+  sleeps; explicit restart clears forced-stop state and reopens admission,
+  while automatic rollover preserves an existing closure.
+* Explicit producer tokens preserve callback order within each channel. A sink
+  shared by multiple channels does not promise global timestamp order across
+  those channels; readers that require a merged timeline must sort or merge it.
 * Build: debug/release/asan/tsan presets, sanitizer CI, allocation-counting
   benchmarks and the ``rt_latency`` harness, including standalone mutex/pool
   measurements and validated CLI inputs. Conan's benchmark option exports and

@@ -10,6 +10,9 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-10-lockfree-frontend-design.md`, §§2, 6–10, especially delivery step 6 and measurement step 6.
 
+**Status:** Tasks 1 and 2 complete; Task 3 validation and documentation complete,
+with final whole-branch review pending.
+
 ## Global Constraints
 
 - Preserve `Snapshot`, wire bytes, schema hashes, `addChannel(const std::string&, const Schema&)`, and `storeSnapshot(const Snapshot&)`.
@@ -33,11 +36,11 @@
 
 **Interfaces:** Consumes existing channel and sink APIs only; produces `build/release/benchmarks/sink_latency [--idle]`. It must compile before and after Task 2.
 
-- [ ] Implement a small sink whose callback records `steady_clock::now() - snapshot.timestamp` into a pre-reserved vector. Send exactly 10,000 snapshots at 1 kHz, passing a steady-clock timestamp explicitly to `takeSnapshot`. Record successful/failed submissions and p50/p99/p99.9/max delivery delay. Do not mix wall-clock and steady-clock epochs.
-- [ ] Stop the worker and then drain before reading results, so this probe is safe against the old backend too. All callback storage is pre-reserved; reject unknown arguments with a nonzero exit code.
-- [ ] `--idle` creates one sink with no traffic, measures process CPU ticks from `/proc/self/stat` before/after a 10-second steady-clock interval, and prints ticks, clock ticks/second, elapsed time and CPU percentage. Parse fields after the closing parenthesis of the process name. Non-Linux builds report that this measurement is unavailable.
-- [ ] Add `CompileBenchmark(sink_latency Threads::Threads)`. Build Release, run both modes on CPUs 0–5, capture complete pre-change output under `/tmp/data-tamer-plan3-before-*`, and check unknown arguments fail. No artificial performance threshold.
-- [ ] Review the implementation and commit `bench: measure sink delivery latency and idle CPU`.
+- [x] Implement a small sink whose callback records `steady_clock::now() - snapshot.timestamp` into a pre-reserved vector. Send exactly 10,000 snapshots at 1 kHz, passing a steady-clock timestamp explicitly to `takeSnapshot`. Record successful/failed submissions and p50/p99/p99.9/max delivery delay. Do not mix wall-clock and steady-clock epochs.
+- [x] Stop the worker and then drain before reading results, so this probe is safe against the old backend too. All callback storage is pre-reserved; reject unknown arguments with a nonzero exit code.
+- [x] `--idle` creates one sink with no traffic, measures process CPU ticks from `/proc/self/stat` before/after a 10-second steady-clock interval, and prints ticks, clock ticks/second, elapsed time and CPU percentage. Parse fields after the closing parenthesis of the process name. Non-Linux builds report that this measurement is unavailable.
+- [x] Add `CompileBenchmark(sink_latency Threads::Threads)`. Build Release, run both modes on CPUs 0–5, capture complete pre-change output under `/tmp/data-tamer-plan3-before-*`, and check unknown arguments fail. No artificial performance threshold.
+- [x] Review the implementation and commit `bench: measure sink delivery latency and idle CPU`.
 
 ## Task 2: Pooled transport, channel bridge, and sink lifecycle
 
@@ -45,9 +48,9 @@
 
 **Interfaces consumed:** Existing `SnapshotPool`, `SnapshotRef`, channel locks and shared write transactions. **Produced:** `DataSinkBase(size_t queue_capacity = 1024)`, private friend `makeProducerToken()` and `tryPush(token, SnapshotRef&&)`, public `storeErrors()`, protected `retainSnapshot()`, channel `poolExhausted()`/`droppedSnapshots(sink)` plus `Stats::pool_exhausted`, optional final `queue_capacity` argument on MCAP and Dummy constructors.
 
-- [ ] Add failing tests before implementation for retained payload/mask/name after channel destruction, bounded queue overflow versus pool exhaustion, successful/failed fanout reference release, two channels sharing a sink with concurrent manual draining, exception recovery, closing acceptance during publication, and debug destructor enforcement. Use stopped workers or explicit condition-variable handshakes for deterministic overflow and in-flight callback tests; never timing guesses for correctness.
-- [ ] Give `SnapshotPool` an optional owned channel name, set every slot's view to it, and keep that view when copying into slots. Existing three-argument construction remains valid. Add a lifetime regression that destroys the source name/channel before checking the retained view.
-- [ ] Implement `BlockingConcurrentQueue<SnapshotRef, QueueTraits>`, sized in the base constructor. Construct members before launching the worker; launch only after the base `_p` is assigned. Catch exceptions in one shared delivery helper used by both worker and drainer, increment `store_errors`, and reset the current reference before releasing the store mutex.
+- [x] Add failing tests before implementation for retained payload/mask/name after channel destruction, bounded queue overflow versus pool exhaustion, successful/failed fanout reference release, two channels sharing a sink with concurrent manual draining, exception recovery, closing acceptance during publication, and debug destructor enforcement. Use stopped workers or explicit condition-variable handshakes for deterministic overflow and in-flight callback tests; never timing guesses for correctness.
+- [x] Give `SnapshotPool` an optional owned channel name, set every slot's view to it, and keep that view when copying into slots. Existing three-argument construction remains valid. Add a lifetime regression that destroys the source name/channel before checking the retained view.
+- [x] Implement `BlockingConcurrentQueue<SnapshotRef, QueueTraits>`, sized in the base constructor. Construct members before launching the worker; launch only after the base `_p` is assigned. Catch exceptions in one shared delivery helper used by both worker and drainer, increment `store_errors`, and reset the current reference before releasing the store mutex.
 
   The worker loop has this ordering:
 
@@ -65,8 +68,8 @@
 
   `processQueuedSnapshots()` acquires handoff then store mutex and holds both through the entire nonblocking drain. The worker releases handoff before its timed wait, allowing the drainer to claim handoff while waiting for the current delivery; the worker cannot barge back into the store mutex. This was added after focused testing exposed an 8.69-second `FinishQueue` delay and a concurrent drainer stalled over 20 seconds. `stopThread()` stores false and joins without either mutex. The timeout bounds only the semaphore wait, not callback duration or OS scheduling.
 
-- [ ] Gate producer admission with one atomic closed/count word. A successful CAS increment admits the producer; an RAII decrement follows `queue.try_enqueue(token, std::move(ref))`. Failure does not manually decrement slot references. `stopAcceptingSnapshots()` sets the closed bit and waits for the active count to become zero; `startAcceptingSnapshots()` clears the closed bit. Neither worker nor drainer tests acceptance after dequeue.
-- [ ] Replace the channel sink set with ownership of a sink and its token (sink destroyed after token), keeping `sinks_mutex` around insertion, removal and publication. Duplicate attachment does not create another producer. On first finished serialization create the 64-slot pool sized to payload and mask. Acquire a slot, copy payload/mask/hash/timestamp while the channel snapshot mutex is held, and keep a parent `SnapshotRef` until every enqueue attempt has finished:
+- [x] Gate producer admission with one atomic closed/count word. A successful CAS increment admits the producer; an RAII decrement follows `queue.try_enqueue(token, std::move(ref))`. Failure does not manually decrement slot references. `stopAcceptingSnapshots()` sets the closed bit and waits for the active count to become zero; `startAcceptingSnapshots()` clears the closed bit. Neither worker nor drainer tests acceptance after dequeue.
+- [x] Replace the channel sink set with ownership of a sink and its token (sink destroyed after token), keeping `sinks_mutex` around insertion, removal and publication. Duplicate attachment does not create another producer. On first finished serialization create the 64-slot pool sized to payload and mask. Acquire a slot, copy payload/mask/hash/timestamp while the channel snapshot mutex is held, and keep a parent `SnapshotRef` until every enqueue attempt has finished:
 
   ```cpp
   auto delivery = parent.clone();
@@ -77,10 +80,10 @@
   ```
 
   No sinks or pool exhaustion returns false. Pool exhaustion increments an atomic channel counter; failed publication increments that link's counter. Expose counters with their existing lock discipline, and document one snapshot producer per channel.
-- [ ] Add the callback-only retention helper without changing the virtual callback. Assert the worker has been stopped in normal debug destruction, and preserve constructor exception propagation. The base destructor's release fallback is diagnostic, not a replacement for derived cleanup.
-- [ ] Move MCAP `merged_payload` from thread-local storage into Pimpl (retain capacity between writes). Remove both the 250 µs sleep and the redundant second drain from `finishQueueAndStop`. Preserve the writer mutex for public direct calls. Cover file finalization with a regression that checks every accepted message is written, including a second recording after explicit restart. Explicit restart clears `forced_stop_recording` and reopens acceptance; automatic rollover inside a callback must not reopen acceptance that a finishing control thread has closed. Forward queue capacity from MCAP/Dummy constructors; other default constructors remain source-compatible.
-- [ ] Prove zero producer allocations/deallocations after pool creation at a fixed payload size, including filled-queue failure and successful fanout. The queue traits make this check cover queue allocations too. Keep the whole frontend zero-allocation claim reserved for Plan 4's complete warmup/reservation contract.
-- [ ] Run focused tests, then the full Debug suite. Review the complete transport diff and commit `feat: deliver pooled snapshots through blocking sink queues`.
+- [x] Add the callback-only retention helper without changing the virtual callback. Assert the worker has been stopped in normal debug destruction, and preserve constructor exception propagation. The base destructor's release fallback is diagnostic, not a replacement for derived cleanup.
+- [x] Move MCAP `merged_payload` from thread-local storage into Pimpl (retain capacity between writes). Remove both the 250 µs sleep and the redundant second drain from `finishQueueAndStop`. Preserve the writer mutex for public direct calls. Cover file finalization with a regression that checks every accepted message is written, including a second recording after explicit restart. Explicit restart clears `forced_stop_recording` and reopens acceptance; automatic rollover inside a callback must not reopen acceptance that a finishing control thread has closed. Forward queue capacity from MCAP/Dummy constructors; other default constructors remain source-compatible.
+- [x] Prove zero producer allocations/deallocations after pool creation at a fixed payload size, including filled-queue failure and successful fanout. The queue traits make this check cover queue allocations too. Keep the whole frontend zero-allocation claim reserved for Plan 4's complete warmup/reservation contract.
+- [x] Run focused tests, then the full Debug suite. Review the complete transport diff and commit `feat: deliver pooled snapshots through blocking sink queues`.
 
 ## Task 3: Validate and publish measured results
 
@@ -88,10 +91,10 @@
 
 **Interfaces:** Consumes Task 1 probe and Task 2 transport; produces reproducible evidence and exact API/lifecycle documentation.
 
-- [ ] Run all four CMake preset gates and the available ROS constructor/publisher and ABI checks. Exercise compressed MCAP and the writer example; inspect files with `/home/davide/Apps/mcap-linux-amd64 info` and `doctor`.
-- [ ] With builds/tests idle, rerun the same pinned Task 1 measurements. Run `rt_latency` with 1000 values, one/two/four sinks and two transaction writers for 10 seconds each; record allocation counts, failures, wait counters and distributions. A valid before/after delivery comparison uses Task 1's same-machine output, not the older machine's historical baseline.
-- [ ] Measure syscalls on the snapshot thread using `strace -c` without `-f` (main thread publishes); report its periodic scheduling syscalls separately from futex wakeups. Trace before/after binaries if available. If strace/perf access is restricted, record the exact limitation and available evidence, without claiming unmeasured counts. Capture idle context switches externally if useful to distinguish a sub-tick CPU result from zero wakeups.
-- [ ] Correct spec §§3/6 pseudocode for RAII failure ownership, acceptance barrier, dequeue/callback ordering, retained channel-name storage, callback retention API, and timeout qualifications. Replace the hard-coded 16-byte reference assumption with `sizeof(SnapshotRef)` (24 bytes on this build if confirmed). Update API delta and changelog with `pushSnapshot` removal, queue sizing, drop/error counters and derived-sink lifecycle requirements.
+- [x] Run all four CMake preset gates and the available ROS constructor/publisher and ABI checks. Exercise compressed MCAP and the writer example; inspect files with `/home/davide/Apps/mcap-linux-amd64 info` and `doctor`.
+- [x] With builds/tests idle, rerun the same pinned Task 1 measurements. Run `rt_latency` with 1000 values, one/two/four sinks and two transaction writers for 10 seconds each; record allocation counts, failures, wait counters and distributions. A valid before/after delivery comparison uses Task 1's same-machine output, not the older machine's historical baseline.
+- [x] Measure syscalls on the snapshot thread using `strace -c` without `-f` (main thread publishes); report its periodic scheduling syscalls separately from futex wakeups. Trace before/after binaries if available. If strace/perf access is restricted, record the exact limitation and available evidence, without claiming unmeasured counts. Capture idle context switches externally if useful to distinguish a sub-tick CPU result from zero wakeups.
+- [x] Correct spec §§3/6 pseudocode for RAII failure ownership, acceptance barrier, dequeue/callback ordering, retained channel-name storage, callback retention API, and timeout qualifications. Replace the hard-coded 16-byte reference assumption with `sizeof(SnapshotRef)` (24 bytes on this build if confirmed). Update API delta and changelog with `pushSnapshot` removal, queue sizing, drop/error counters and derived-sink lifecycle requirements.
 - [ ] Run the final whole-branch review, resolve required findings, record measured results and remaining Plan 4 scope. Commit `docs: record pooled delivery validation and measurements`.
 
 ## Self-review
