@@ -11,7 +11,7 @@
 #else
 #define DATA_TAMER_HAS_PI_MUTEX 0
 #pragma message("data_tamer: no PTHREAD_PRIO_INHERIT on this platform; WriteMutex is a plain mutex " \
-                "and the snapshot thread's wait for a writer is not bounded by priority inheritance")
+                "and blocking waits have no priority-inheritance mitigation or universal deadline")
 #endif
 
 namespace DataTamer
@@ -63,18 +63,16 @@ using PlatformWriteMutex = std::mutex;
  * the platform supports it. Satisfies the C++ Lockable requirements.
  *
  * Shared by the writer threads of a channel and by the snapshot thread. A
- * writer holding it is boosted to the priority of any waiter, so the snapshot
- * thread's wait is bounded by the writer's critical section rather than by
- * the scheduler.
+ * writer holding it can be boosted to the priority of a waiter, mitigating
+ * priority inversion. Writer work and normal scheduling still provide no
+ * universal wait deadline.
  */
 class WriteMutex
 {
 public:
   static constexpr bool kPriorityInheritance = (DATA_TAMER_HAS_PI_MUTEX == 1);
 
-  /// Spin budget used by lockWithSpin() when called without an argument.
-  /// Longer than any legal writer critical section, so the futex sleep is
-  /// only reached when a writer was preempted mid-transaction.
+  /// Nominal spin budget used by lockWithSpin() before blocking acquisition.
   static constexpr std::int64_t kLockSpinNs = 2000;
 
   WriteMutex() = default;
@@ -89,9 +87,9 @@ public:
   void unlock() { mutex_.unlock(); }
 
   /**
-   * @brief Spin on try_lock() for at most spin_ns, then block in lock().
-   * @return true if the call had to block (i.e. a writer held the mutex for
-   *         longer than the spin budget). Callers use this to count contention.
+   * @brief Spin on try_lock() for a nominal spin_ns budget, then call lock().
+   * @return true when the blocking acquisition path was used. This does not
+   *         guarantee that the kernel put the caller to sleep.
    */
   bool lockWithSpin(std::int64_t spin_ns = kLockSpinNs,
                     std::uint64_t* blocked_wait_ns = nullptr)

@@ -208,3 +208,8 @@ Rulings recorded during execution, in order:
    Linux and portable ownership checks: a pre-call signal cannot prove mutex
    entry. Cost if wrong: procfs/platform changes may require test adaptation;
    runtime is unchanged.
+5. Preserve the sink-removal test as queued/retained-lifetime coverage without
+   adding a production publication hook. Deterministic unregister coverage,
+   the shared SC epoch proof and control stress complement it; its pre-call
+   signal does not prove unpublication. Cost if wrong: a sink-specific overlap
+   regression may require a targeted internal test seam later.

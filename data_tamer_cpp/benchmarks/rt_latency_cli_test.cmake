@@ -32,3 +32,6 @@ foreach(counter write_lock_contended write_lock_wait_max_ns pool_exhausted paylo
         message(FATAL_ERROR "missing ${counter}: ${output}")
     endif()
 endforeach()
+if(NOT output MATCHES "allocations after warm-up: [0-9]+")
+    message(FATAL_ERROR "missing exact allocation total: ${output}")
+endif()

@@ -338,9 +338,10 @@ No synchronization needed; documented as the fastest path.
 
 `LoggedValue` holds `std::shared_ptr<ChannelSharedState> state_` and its
 `RegistrationID`. `setEnabled(b)` and the auto-enable branch of `set()` operate
-directly on `state_->enabled[id]` and `state_->mask_dirty` (§5.2) — pure atomics
-on memory the `LoggedValue` co-owns, so they are valid on a writer thread, cost
-the same as a `set()`, and work even if the channel has already been destroyed.
+through `state_->setEnabled(id, b)` (§5.2), which changes only the enabled bit
+and dirties the cached mask. These are pure atomics on memory the `LoggedValue`
+co-owns, so they are valid on a writer thread, cost the same as a `set()`, and
+work even if the channel has already been destroyed.
 The `LoggedValue::enabled_` mirror is dropped; `isEnabled()` reads the shared
 flag. `std::weak_ptr<LogChannel>` is kept **only** for the destructor
 (`unregister` + epoch wait, a control operation). Move constructor and assignment
@@ -414,8 +415,8 @@ For each field, an SC `fetch_or` or `fetch_and` changes only the requested
 enabled bit; if it changed, `mask_dirty.store(true, seq_cst)`. It never sets the
 registered bit, so enabling a dead field cannot revive it. No mutex, no `weak_ptr::lock`, no
 dependency on the `LogChannel` object: `LogChannel::setEnabled` and
-`LoggedValue::setEnabled` both call the same free function on
-`ChannelSharedState`. Safe to call from a writer thread, from the snapshot thread
+`LoggedValue::setEnabled` both dispatch to `ChannelSharedState::setEnabled`.
+Safe to call from a writer thread, from the snapshot thread
 between snapshots, or from inside a `scopedWrite()` transaction.
 
 The SC flag/dirty handshake makes mask changes visible to a later rebuilding

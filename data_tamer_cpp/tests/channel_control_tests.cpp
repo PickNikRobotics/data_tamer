@@ -276,7 +276,9 @@ TEST(ChannelControl, BlockedAddChannelDoesNotBlockExistingSnapshots)
   EXPECT_FALSE(added->snapshots.empty());
 }
 
-TEST(ChannelControl, RemoveDuringSerializationPreservesQueuedReferences)
+// This only proves queued and retained references survive a removal request;
+// it does not establish that removal reached unpublication before the reader exits.
+TEST(ChannelControl, QueuedAndRetainedReferencesSurviveRemovalRequestedDuringSerialization)
 {
   auto channel = LogChannel::create("control");
   auto sink = std::make_shared<ControlSink>();

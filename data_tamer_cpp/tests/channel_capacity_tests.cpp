@@ -284,17 +284,26 @@ TEST(ChannelCapacity, TenThousandDirtySnapshotsWithControlChurnDoNotAllocate)
   });
   start = true;
   size_t allocations = 0, deallocations = 0, successes = 0;
-  for(int i = 0; i < 10000; ++i)
+  size_t completed_churn = 0;
+  for(int batch = 0; batch < 10; ++batch)
   {
-    channel->setEnabled(id, i % 2 == 0);
+    for(int i = 0; i < 1000; ++i)
     {
-      DataTamerTest::AllocCounter::Scope scope;
-      successes += channel->takeSnapshot();
-      allocations += scope.allocations();
-      deallocations += scope.deallocations();
+      channel->setEnabled(id, (batch * 1000 + i) % 2 == 0);
+      {
+        DataTamerTest::AllocCounter::Scope scope;
+        successes += channel->takeSnapshot();
+        allocations += scope.allocations();
+        deallocations += scope.deallocations();
+      }
+      first->drain();
+      second->drain();
     }
-    first->drain();
-    second->drain();
+    if(batch != 9)
+    {
+      while(churn.load() <= completed_churn) std::this_thread::yield();
+      completed_churn = churn.load();
+    }
   }
   done = true;
   control.join();

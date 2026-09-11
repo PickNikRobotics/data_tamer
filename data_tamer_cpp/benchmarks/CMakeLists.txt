@@ -11,10 +11,13 @@ endfunction()
 find_package(Threads REQUIRED)
 
 CompileBenchmark(data_tamer_benchmark benchmark::benchmark)
-CompileBenchmark(rt_latency Threads::Threads)
 CompileBenchmark(sink_latency Threads::Threads)
 
-if(DATA_TAMER_BUILD_TESTS)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    CompileBenchmark(rt_latency Threads::Threads)
+endif()
+
+if(DATA_TAMER_BUILD_TESTS AND TARGET rt_latency)
     add_test(
         NAME rt_latency.invalid_cli
         COMMAND ${CMAKE_COMMAND}

@@ -262,6 +262,7 @@ int main(int argc, char** argv)
               (unsigned long long)stats.dropped_oversize,
               (unsigned long long)attachment_drops);
   std::printf("allocations per call after warm-up: %.4f\n", double(allocations) / double(total));
+  std::printf("allocations after warm-up: %zu\n", allocations);
   std::printf("takeSnapshot returned false: %zu / %zu\n", failed, total);
   std::printf("fifo=%d\n", int(fifo_ok));
   return 0;

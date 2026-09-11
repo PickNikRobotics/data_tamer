@@ -9,8 +9,10 @@
 #include <thread>
 #include <vector>
 
+#if defined(__linux__)
 #include <pthread.h>
 #include <sched.h>
+#endif
 
 using DataTamer::WriteMutex;
 
@@ -126,17 +128,18 @@ TEST(WriteMutex, ObservedSleepingWaiterReportsBlockingFallback)
 #endif
 }
 
-// Priority inheritance bound. Needs CAP_SYS_NICE; skipped otherwise.
+// Privileged priority-inheritance observation. Needs CAP_SYS_NICE; skipped otherwise.
 // A SCHED_OTHER holder shares one core with three SCHED_OTHER CPU hogs, so
 // without priority inheritance it gets ~1/4 of the core and its 200 us of
 // work spans several CFS slices (milliseconds). With PI, the SCHED_FIFO
 // waiter boosts the holder the moment it blocks, so the wait is the holder's
-// remaining work plus a wake-up: well under 1 ms.
+// remaining work plus a wake-up. This is not a universal deadline.
 //
 // Note: the FIFO waiter must never spin-wait on this core (a spinning FIFO
 // thread starves every CFS thread on it, including the holder); it sleeps.
-TEST(WriteMutex, PriorityInheritanceBoundsTheWait)
+TEST(WriteMutex, PriorityInheritanceKeepsObservedWaitShort)
 {
+#if defined(__linux__)
   sched_param fifo{};
   fifo.sched_priority = 50;
   if(pthread_setschedparam(pthread_self(), SCHED_FIFO, &fifo) != 0)
@@ -208,6 +211,9 @@ TEST(WriteMutex, PriorityInheritanceBoundsTheWait)
     h.join();
   }
   ASSERT_LT(std::chrono::duration_cast<std::chrono::microseconds>(waited).count(), 1000)
-      << "waited " << std::chrono::duration_cast<std::chrono::microseconds>(waited).count()
-      << " us: priority inheritance did not bound the wait";
+      << "observed wait "
+      << std::chrono::duration_cast<std::chrono::microseconds>(waited).count() << " us";
+#else
+  GTEST_SKIP() << "priority-inheritance observation requires Linux";
+#endif
 }
