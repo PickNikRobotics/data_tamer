@@ -563,10 +563,14 @@ while (run.load()) {
 - The shared delivery helper catches callback exceptions, increments
   `store_errors`, and resets `current_ref` before releasing `store_mutex`.
   Per-producer queue order is therefore also callback order when worker and
-  drainer overlap. Different channels use different producer tokens, so no
-  global cross-channel timestamp order is promised. MCAP validation found zero
-  per-channel inversions but 497 global inversions in the two-channel writer
-  example; consumers that require a timestamp merge must perform one.
+  drainer overlap. This FIFO guarantee applies to one continuous channel/sink
+  attachment. Removal and re-attachment creates a replacement token; newer work
+  may be delivered before older records still queued by the prior token, and no
+  order is guaranteed across that boundary. Different channels use different
+  producer tokens, so no global cross-channel timestamp order is promised.
+  MCAP validation with stable attachments found zero per-channel inversions but
+  497 global inversions in the two-channel writer example; consumers that
+  require a timestamp merge must perform one.
 - `stopThread()` stores false and joins without either mutex. The 50 ms timeout
   applies only to an idle semaphore wait. Callback duration, mutex scheduling
   and OS scheduling mean it is not a hard upper bound on `join()`.

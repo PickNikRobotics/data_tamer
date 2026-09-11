@@ -37,9 +37,12 @@ Unreleased
   accepted references. ``MCAPSink::finishQueueAndStop()`` no longer polls or
   sleeps; explicit restart clears forced-stop state and reopens admission,
   while automatic rollover preserves an existing closure.
-* Explicit producer tokens preserve callback order within each channel. A sink
-  shared by multiple channels does not promise global timestamp order across
-  those channels; readers that require a merged timeline must sort or merge it.
+* Explicit producer tokens preserve callback order within one continuous
+  channel/sink attachment. Removing and re-attaching a sink replaces the token;
+  newer work may then run before older queued records from the prior attachment,
+  with no ordering guarantee across that boundary. A sink shared by multiple
+  channels also does not promise global timestamp order; readers that require a
+  merged timeline must sort or merge it.
 * Build: debug/release/asan/tsan presets, sanitizer CI, allocation-counting
   benchmarks and the ``rt_latency`` harness, including standalone mutex/pool
   measurements and validated CLI inputs. Conan's benchmark option exports and
