@@ -1,5 +1,6 @@
 #include "data_tamer/data_tamer.hpp"
 #include "alloc_counter.hpp"
+#include "wait_for_sleeping_thread.hpp"
 
 #include <gtest/gtest.h>
 
@@ -334,7 +335,7 @@ TEST(Transaction, VectorSetAndSnapshotRaceDeliversValidPayloads)
   ASSERT_EQ(sink->errors(), 0u);
 }
 
-TEST(Transaction, ContentionCountersAdvanceOnlyAfterSpinExhaustion)
+TEST(Transaction, ContentionCountersReportSnapshotHandoffAndRemainStableWhenUncontended)
 {
   auto channel = LogChannel::create("chan");
   auto sink = std::make_shared<CheckingSink>(CheckingSink::Payload::PAIR);
@@ -342,42 +343,75 @@ TEST(Transaction, ContentionCountersAdvanceOnlyAfterSpinExhaustion)
   auto a = channel->createLoggedValue<double>("a", 1.0);
   auto b = channel->createLoggedValue<double>("b", 1.0);
   ASSERT_TRUE(channel->takeSnapshot());
+  ASSERT_EQ(channel->writeLockContended(), 0u);
+  ASSERT_EQ(channel->writeLockWaitMaxNs(), 0u);
 
-  std::atomic_bool held{ false };
-  std::atomic_bool snapshot_started{ false };
-  std::atomic_bool release{ false };
-  std::thread writer([&] {
+  std::atomic_bool started{false}, finished{false};
+  std::thread snapshot;
+  uint64_t elapsed = 0;
+  {
     auto tx = channel->scopedWrite();
-    held = true;
-    while(!snapshot_started.load(std::memory_order_acquire))
-    {
-    }
-    while(!release.load(std::memory_order_acquire))
-    {
-      std::this_thread::yield();
-    }
-  });
-  while(!held.load(std::memory_order_acquire))
-  {
+    snapshot = std::thread([&] {
+      started = true;
+      const auto before = std::chrono::steady_clock::now();
+      EXPECT_TRUE(channel->takeSnapshot());
+      elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    std::chrono::steady_clock::now() - before).count();
+      finished = true;
+    });
+    while(!started) std::this_thread::yield();
+    EXPECT_FALSE(finished.load());
   }
-
-  std::thread snapshot([&] {
-    snapshot_started.store(true, std::memory_order_release);
-    channel->takeSnapshot();
-  });
-  while(!snapshot_started.load(std::memory_order_acquire))
-  {
-  }
-  std::this_thread::sleep_for(std::chrono::milliseconds(10));
-  release.store(true, std::memory_order_release);
   snapshot.join();
-  writer.join();
 
-  ASSERT_EQ(channel->writeLockContended(), 1u);
-  ASSERT_GT(channel->writeLockWaitMaxNs(), 0u);
+  // Starting the thread does not prove that it exhausted the spin budget
+  // before the transaction ended. Either report is legal for this handoff.
   const auto stats = channel->stats();
-  ASSERT_EQ(stats.write_lock_contended, 1u);
-  ASSERT_EQ(stats.write_lock_wait_max_ns, channel->writeLockWaitMaxNs());
+  EXPECT_LE(stats.write_lock_contended, 1u);
+  if(stats.write_lock_contended == 0) EXPECT_EQ(stats.write_lock_wait_max_ns, 0u);
+  EXPECT_LE(stats.write_lock_wait_max_ns, elapsed);
+  EXPECT_EQ(stats.write_lock_contended, channel->writeLockContended());
+  EXPECT_EQ(stats.write_lock_wait_max_ns, channel->writeLockWaitMaxNs());
+  EXPECT_TRUE(channel->takeSnapshot());
+  EXPECT_EQ(channel->writeLockContended(), stats.write_lock_contended);
+  EXPECT_EQ(channel->writeLockWaitMaxNs(), stats.write_lock_wait_max_ns);
+}
+
+TEST(Transaction, ObservedSleepingSnapshotAdvancesContentionCounters)
+{
+#if defined(__linux__)
+  if(!std::ifstream("/proc/self/stat")) GTEST_SKIP() << "needs readable procfs";
+  auto channel = LogChannel::create("chan");
+  auto sink = std::make_shared<CheckingSink>(CheckingSink::Payload::PAIR);
+  channel->addDataSink(sink);
+  auto a = channel->createLoggedValue<double>("a", 1.0);
+  auto b = channel->createLoggedValue<double>("b", 1.0);
+  ASSERT_TRUE(channel->takeSnapshot());
+
+  std::atomic<pid_t> tid{0};
+  std::atomic_bool finished{false};
+  std::thread snapshot;
+  bool observed = false, accepted = false;
+  {
+    auto tx = channel->scopedWrite();
+    snapshot = std::thread([&] {
+      tid = static_cast<pid_t>(syscall(SYS_gettid));
+      accepted = channel->takeSnapshot();
+      finished = true;
+    });
+    observed = DataTamerTest::waitForSleepingThread(tid, finished);
+  }
+  snapshot.join();
+  ASSERT_TRUE(observed) << "snapshot did not sleep on the held writer mutex";
+  EXPECT_TRUE(accepted);
+  EXPECT_EQ(channel->writeLockContended(), 1u);
+  EXPECT_GT(channel->writeLockWaitMaxNs(), 0u);
+  const auto stats = channel->stats();
+  EXPECT_EQ(stats.write_lock_contended, 1u);
+  EXPECT_EQ(stats.write_lock_wait_max_ns, channel->writeLockWaitMaxNs());
+#else
+  GTEST_SKIP() << "observing a blocked snapshot requires Linux procfs";
+#endif
 }
 
 TEST(Transaction, LoneScalarSetDoesNotTakeWriteMutex)

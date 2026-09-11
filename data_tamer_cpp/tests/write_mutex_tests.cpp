@@ -1,4 +1,5 @@
 #include "data_tamer/details/write_mutex.hpp"
+#include "wait_for_sleeping_thread.hpp"
 
 #include <gtest/gtest.h>
 
@@ -53,54 +54,76 @@ TEST(WriteMutex, PriorityInheritanceIsEnabledOnLinux)
 TEST(WriteMutex, LockWithSpinReturnsFalseWhenUncontended)
 {
   WriteMutex m;
-  ASSERT_FALSE(m.lockWithSpin());
+  uint64_t waited = 123;
+  EXPECT_FALSE(m.lockWithSpin(WriteMutex::kLockSpinNs, &waited));
+  EXPECT_EQ(waited, 0u);
   m.unlock();
 }
 
-TEST(WriteMutex, LockWithSpinAcquiresAfterShortHold)
+TEST(WriteMutex, LockWithSpinOwnsMutexAndReportsWaitAfterHandoff)
 {
-  WriteMutex m;
-  std::atomic_bool holder_ready{ false };
-  std::thread holder([&] {
-    m.lock();
-    holder_ready = true;
-    std::this_thread::sleep_for(std::chrono::microseconds(500));
-    m.unlock();
-  });
-  while(!holder_ready)
+  for(int64_t budget : {int64_t(0), WriteMutex::kLockSpinNs, int64_t(50'000'000)})
   {
+    WriteMutex m;
+    m.lock();
+    std::atomic_bool started{false}, acquired{false}, release{false};
+    bool blocked = false;
+    uint64_t waited = 123, elapsed = 0;
+    std::thread waiter([&] {
+      started = true;
+      const auto before = std::chrono::steady_clock::now();
+      blocked = m.lockWithSpin(budget, &waited);
+      elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    std::chrono::steady_clock::now() - before).count();
+      acquired = true;
+      while(!release) std::this_thread::yield();
+      m.unlock();
+    });
+    while(!started) std::this_thread::yield();
+    EXPECT_FALSE(acquired.load());  // Cannot acquire while this thread owns it.
+    m.unlock();
+    while(!acquired) std::this_thread::yield();
+    const bool stolen = m.try_lock();
+    EXPECT_FALSE(stolen);  // Returning from lockWithSpin must convey ownership.
+    if(stolen) m.unlock();
+    release = true;
+    waiter.join();
+
+    // The scheduler may run the waiter before or after the handoff, regardless
+    // of budget. Validate the reported path, not a presumed scheduling delay.
+    if(!blocked) EXPECT_EQ(waited, 0u);
+    EXPECT_LE(waited, elapsed);
+    const bool reusable = m.try_lock();
+    EXPECT_TRUE(reusable);
+    if(reusable) m.unlock();
   }
-  // 500 us hold vs 2 us spin budget: we must block, and we must still acquire
-  const bool blocked = m.lockWithSpin();
-  m.unlock();
-  holder.join();
-  ASSERT_TRUE(blocked);
 }
 
-TEST(WriteMutex, LockWithSpinDoesNotBlockForVeryShortHold)
+TEST(WriteMutex, ObservedSleepingWaiterReportsBlockingFallback)
 {
+#if defined(__linux__)
+  if(!std::ifstream("/proc/self/stat")) GTEST_SKIP() << "needs readable procfs";
   WriteMutex m;
-  std::atomic_bool holder_ready{ false };
-  std::atomic_bool release{ false };
-  std::thread holder([&] {
-    m.lock();
-    holder_ready = true;
-    while(!release)
-    {
-    }
+  m.lock();
+  std::atomic<pid_t> tid{0};
+  std::atomic_bool finished{false};
+  bool blocked = false;
+  uint64_t waited = 0;
+  std::thread waiter([&] {
+    tid = static_cast<pid_t>(syscall(SYS_gettid));
+    blocked = m.lockWithSpin(WriteMutex::kLockSpinNs, &waited);
     m.unlock();
+    finished = true;
   });
-  while(!holder_ready)
-  {
-  }
-  std::atomic_bool blocked{ false };
-  std::thread waiter([&] { blocked = m.lockWithSpin(/*spin_ns=*/50'000'000); m.unlock(); });
-  std::this_thread::sleep_for(std::chrono::microseconds(100));
-  release = true;
-  waiter.join();
-  holder.join();
-  // released well inside the 50 ms spin budget -> acquired by spinning
-  ASSERT_FALSE(blocked);
+  const bool observed = DataTamerTest::waitForSleepingThread(tid, finished);
+  m.unlock();
+  waiter.join();  // Release and join before any fatal assertion, including timeout.
+  ASSERT_TRUE(observed) << "waiter did not sleep on the held mutex";
+  EXPECT_TRUE(blocked);
+  EXPECT_GT(waited, 0u);
+#else
+  GTEST_SKIP() << "observing a blocked waiter requires Linux procfs";
+#endif
 }
 
 // Priority inheritance bound. Needs CAP_SYS_NICE; skipped otherwise.
