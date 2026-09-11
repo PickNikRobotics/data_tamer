@@ -49,10 +49,83 @@ visualize your logs offline or in real-time.
 
 ## Limitations
 
-- Traced variables can not be added (registered) once the recording starts (first `takeSnapshot`).
+- New traced variables can not be added once the first `takeSnapshot()` attempt
+  freezes the schema. A previously removed name may be re-registered after that
+  point only with its compatible original type, reusing its schema slot.
 - Focused on periodic recording. Not the best option for sporadic, asynchronous events.
 - If you use `DataTamer::registerValue` you must be careful about the lifetime of the
 object. If you prefer a safer RAII interface, use `DataTamer::createLoggedValue` instead.
+
+## Real-time snapshot contract
+
+Exactly one thread per channel may call `takeSnapshot()`. Its first attempt
+freezes the schema. Successful setup registers it with attached sinks, creates
+the snapshot pool and reserves every slot; setup may lock, allocate and throw,
+even when no sink is attached. Configure it beforehand when the defaults are
+unsuitable:
+
+```cpp
+channel->setPoolCapacity(64);       // retained or in-flight snapshots
+channel->setPayloadCapacity(16 * 1024); // reservation hint, not a byte ceiling
+channel->setStrictMode(true);       // drop instead of growing a slot
+channel->takeSnapshot();            // freezes the schema and capacities
+```
+
+The default pool has 64 slots. Each slot initially reserves at least
+`max(payload_hint, 2 * initial_payload_size, 256)` bytes, so the hint is a
+minimum. The vector's actual capacity decides whether a later payload fits.
+With strict mode disabled, an acquired slot grows to twice the required size
+and increments `payloadReallocations()`; the other slots grow only when used.
+With strict mode enabled, a slot that is still too small is released, the
+snapshot is dropped, and `droppedOversize()` increments; later input cannot grow
+that slot. Capacity already gained by a slot is retained across strict-mode
+changes. Strict mode therefore fixes per-slot payload capacity. Warming alone
+does not bound non-strict growth: a later larger payload can grow the acquired
+slot again. In non-strict mode, byte usage is bounded only when payload sizes
+have a known upper bound that every slot can hold.
+
+After successful setup, `takeSnapshot()` allocates no library-owned frontend
+storage while payloads fit their slots. It serializes directly into one pool
+slot and publishes references to at most eight attached sinks. It may wait for
+the channel `WriteMutex`; keep transactions, non-scalar proxy guards and custom
+serializers short. User serializers may allocate or throw, and the allocator,
+OS scheduler and serializer work prevent a universal no-throw or hard-deadline
+guarantee. A pinned same-machine pair for two sinks and two transaction writers
+also regressed at the median, while its observed maximum improved:
+
+| Runtime | p50 (ns) | max (ns) |
+|---|---:|---:|
+| Plan 3 | 20,478 | 214,852 |
+| Final | 32,896 | 181,903 |
+
+This one CPUs 0–5 pair is context, not a latency bound. The unpinned main
+matrix also has median regressions; see the
+[Plan 4 measurements](docs/benchmarks/2026-09-plan4.md) for the full results
+and allocation evidence.
+
+Scalar `LoggedValue::set()` and `get()` are wait-free relaxed atomic operations.
+Each scalar is read without tearing, but unrelated scalar writes may land in
+different snapshots. Use `scopedWrite()` for an all-or-nothing group; non-scalar
+accessors take that same mutex automatically.
+
+Backpressure is reported at two levels. `droppedSnapshots(sink)` counts queue
+failures for one current channel/sink attachment. `poolExhausted()` counts a
+global channel failure before serialization, so every sink misses that attempt;
+retaining callback snapshots can cause this starvation. `stats()` returns a
+plain `uint64_t` point-in-time copy of the write-lock, pool, growth and oversize
+counters; the counters it reads are relaxed atomics.
+`droppedSnapshots(sink)` instead takes the channel control mutex, and
+`DataSinkBase::storeErrors()` counts exceptions thrown later by sink callbacks.
+Sink queue capacities are block-rounded minima (default 1024), not exact limits.
+
+`setEnabled()` remains lock-free during logging. Registration, unregistration,
+sink changes, capacity setup and channel destruction are control operations:
+call them outside `scopedWrite()`/pointer guards and serializer callbacks; they
+may allocate or wait for an active snapshot. Calls that use the channel object
+still need ordinary external lifetime synchronization. Re-registering a
+previously removed name with a compatible type reuses its schema slot even
+after freeze. A `RegistrationID` identifies that slot, not a generation, so an
+older same-name ID also refers to the replacement.
 
 # Examples
 

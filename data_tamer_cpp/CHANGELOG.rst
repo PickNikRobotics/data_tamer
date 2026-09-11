@@ -4,11 +4,23 @@ Changelog for package data_tamer
 
 Unreleased
 ----------
-* Real-time front end, steps 0–5: scalar ``LoggedValue`` values use lock-free
+* Real-time front end, steps 0–8: scalar ``LoggedValue`` values use lock-free
   atomics; ``set()``/``get()`` are wait-free. Non-scalar updates and snapshot
   serialization share a priority-inheriting mutex. ``LogChannel::scopedWrite()``
   groups updates into one transaction and supports nested non-scalar ``set()``/``get()``.
   Lone scalar updates do not promise consistency across values.
+* ``takeSnapshot()`` now freezes schema and capacity state on its first attempt,
+  then serializes directly into a 64-slot channel pool. Its fixed-size warmed
+  library path takes no structure mutex and performs no heap allocation; user
+  serializers and non-strict payload growth may still allocate or throw.
+  Sequentially consistent sink, liveness, mask-dirty and reader-epoch
+  publication makes concurrent value destruction and sink removal safe.
+* Added pre-freeze ``setPayloadCapacity()`` and ``setPoolCapacity()`` plus
+  runtime ``setStrictMode()``. Initial per-slot reservation is at least the
+  maximum of the hint, twice the initial payload and 256 bytes. Strict mode
+  drops an oversize snapshot against the acquired slot's actual capacity, so a
+  later input cannot grow that slot; non-strict mode grows that slot and retains
+  the new capacity.
 * Added ``writeLockContended()``, ``writeLockWaitMaxNs()`` and ``stats()``.
   Contention counts acquisitions that block after spinning; maximum wait measures
   blocking acquisition time, excluding serialization.
@@ -26,8 +38,15 @@ Unreleased
   ``DataSinkBase::pushSnapshot`` was removed.
 * Added ``LogChannel::poolExhausted()``, per-attachment
   ``droppedSnapshots(sink)``, ``Stats::pool_exhausted``, and
-  ``DataSinkBase::storeErrors()``. The last counter records thrown queued
-  callbacks; a callback returning ``false`` is not an exception.
+  ``DataSinkBase::storeErrors()``, plus payload reallocation and oversize-drop
+  counters. ``Stats`` fields are plain ``uint64_t`` point-in-time snapshots of
+  relaxed atomic counters; ``droppedSnapshots(sink)`` takes the control mutex.
+  ``DataSinkBase::storeErrors()`` records thrown queued callbacks; a callback
+  returning ``false`` is not an exception.
+* A channel supports eight attached sinks. Same-name compatible
+  re-registration reuses its schema slot after freeze; registration IDs identify
+  slots rather than generations. Control operations must run outside writer
+  guards and serializer callbacks.
 * Derived sinks must call ``stopThread()`` before destroying callback state.
   Queued callbacks are serialized with manual draining, exceptions do not stop
   delivery, and protected callback-only ``retainSnapshot()`` can keep pooled

@@ -1,41 +1,47 @@
 # Lock-free, allocation-free front end for `LogChannel`
 
-**Date:** 2026-09-10 (revised through Plan 3 on 2026-09-11)
+**Date:** 2026-09-10 (implemented through Plan 4 on 2026-09-11)
 **Scope:** `data_tamer_cpp` — `LogChannel`, `LoggedValue`, `ValuePtr`, `DataSinkBase`, in-tree sinks
-**Status:** approved design. Plan 1 implemented steps 0–3, Plan 2 steps 4–5,
-and Plan 3 step 6. Plan 4 retains steps 7–9. The
-Plan 3 channel-to-sink bridge still uses the channel structure locks and copies
-the serialized legacy snapshot into pooled storage. Channel epoch publication,
-direct pooled serialization, capacity/strict-mode APIs and the complete warm-up
-contract remain Plan 4 work.
+**Status:** implemented. Plan 1 implemented steps 0–3, Plan 2 steps 4–5,
+Plan 3 step 6, and Plan 4 steps 7–9. The temporary channel-to-sink copy bridge
+and snapshot-side structure locks are gone; direct pooled serialization,
+capacity controls and the sequentially consistent control-publication protocol
+are the final runtime.
 
 ## 1. Goal
 
-Make `LogChannel::takeSnapshot()` free of heap allocation after the first call
-and free of unbounded blocking — the only lock it may take is the channel's
-priority-inheritance write mutex, whose hold time is bounded by a writer's
-critical section — while keeping the public `LogChannel` API, the `Snapshot`
-struct, the wire format and the `storeSnapshot`-based sink interface unchanged.
-Target: control loops up to 1 kHz.
+Make the library-owned `LogChannel::takeSnapshot()` path free of heap allocation
+after successful first-call setup while payloads fit their slots. The only lock
+it may take is the channel's priority-inheritance write mutex. Its latency still
+depends on the writer critical section, serializers, allocator and OS scheduler,
+so this is not a universal hard deadline or no-throw guarantee. Keep the
+`Snapshot` struct, wire format and `storeSnapshot`-based sink interface
+unchanged. Target: control loops up to 1 kHz.
 
 ### Requirements (agreed)
 
 | # | Requirement |
 |---|---|
 | R1 | Exactly one thread per channel calls `takeSnapshot()` (the *snapshot thread*). |
-| R2 | Registered values may be written from any number of other threads. A group of values written together in one transaction must appear together in a snapshot (all-or-nothing); no snapshot is ever dropped because of writer activity. Lone scalar writes are wait-free; the snapshot thread may wait only for a bounded, priority-inherited writer critical section. |
-| R3 | When a sink cannot keep up, drop the newest snapshot, count it, return `false`. Memory is bounded. |
+| R2 | Registered values may be written from any number of other threads. A group of values written together in one transaction must appear together in a snapshot (all-or-nothing); no snapshot is dropped merely because a writer is active. Lone scalar writes are wait-free; the snapshot thread may wait for a priority-inherited writer critical section, whose duration the application controls. |
+| R3 | When a sink cannot keep up, drop the newest snapshot, count it, return `false`. Slot count is bounded. Strict mode preserves existing per-slot capacities; non-strict byte usage is bounded only when payload sizes remain within established slot capacities. |
 | R4 | `setEnabled()` is lock-free and callable from any thread while logging. |
-| R5 | Registration (`registerValue*`, `createLoggedValue`) happens during setup only; it may use a mutex and still throws once logging has started. |
+| R5 | New registration (`registerValue*`, `createLoggedValue`) happens during setup only; it may use a mutex and throws after schema freeze. The implemented exception is compatible same-name re-registration into a dead existing slot. |
 | R6 | Destroying a `LoggedValue` and `removeDataSink()` remain memory-safe while logging; they may block the *calling* thread, never the snapshot thread. |
 | R7 | Sinks that override only `addChannel()` / `storeSnapshot()` compile unchanged. |
 | R8 | Backend threads may lock and allocate; pre-allocation there is welcome but not required. |
 
 ### Non-goals
 
-Registration after the first snapshot; a wait-free snapshot thread in the
-presence of multi-value transactions (block-level triple buffering, recorded as
-the alternative in §11); any change to `signal_logger`.
+New registration after the first snapshot attempt (except compatible same-name
+reuse of a dead existing slot); a wait-free snapshot thread in the presence of
+multi-value transactions (block-level triple buffering, recorded as the
+alternative in §11); any change to `signal_logger`.
+
+The [simpler-design audit](../reviews/2026-09-11-simpler-design-audit.md)
+identified stop/join the worker, drain, then restart as the leading alternative
+that should have been compared earlier. It remains deferred because adopting it
+now would reopen already validated sink and MCAP lifecycle behavior.
 
 ## 2. Architecture
 
@@ -43,15 +49,15 @@ the alternative in §11); any change to `signal_logger`.
 
 | Role | Who | May lock | May allocate |
 |---|---|---|---|
-| Snapshot thread | caller of `takeSnapshot()` | through Plan 3: the channel snapshot and sink-set mutexes plus the channel `WriteMutex`; after Plan 4: only the `WriteMutex` during serialization | Plan 3 proves zero allocation only for a warmed, fixed-size bridge; the complete guarantee remains Plan 4 |
+| Snapshot thread | caller of `takeSnapshot()` | after setup, only the channel `WriteMutex` during serialization | no library-owned allocation while the acquired slot fits; non-strict growth and user serializers are exceptions |
 | Writer threads | `LoggedValue::set()/getMutablePtr()/setEnabled()`, raw values under `scopedWrite()`, `LogChannel::setEnabled()` | the channel `WriteMutex` (shared with other writers and the snapshot thread); critical sections must be short and allocation-free | no |
 | Control threads | `registerValue*`, `createLoggedValue`, `unregister`, `~LoggedValue`, `addDataSink`, `removeDataSink`, capacity setters | `control_mutex`, sink `store_mutex`; may wait one snapshot duration | yes |
 | Sink threads | one per `DataSinkBase` | `store_mutex` | yes |
 
 Roles are contracts, not OS threads: one thread may register values (control),
 then enter a loop where it writes them (writer) and calls `takeSnapshot()`. The
-only constraint is that a thread inside `takeSnapshot()` holds no writer guard
-and no control mutex — true by construction since those are separate calls.
+caller must enter `takeSnapshot()` without a writer guard and must not invoke
+control operations or `takeSnapshot()` recursively from serializer callbacks.
 `setEnabled` is deliberately classified as a *writer* operation: in practice it
 is called from the thread that produces the value (explicitly, or implicitly via
 `set(v, auto_enable = true)`), so it must be as cheap as `set()` and must not
@@ -62,23 +68,23 @@ depend on the channel object at all (§2.2 `ChannelSharedState`, §5.2).
 | Unit | File | Purpose |
 |---|---|---|
 | `WriteMutex` | `include/data_tamer/details/write_mutex.hpp` | `Lockable` wrapper over `pthread_mutex_t` created with `PTHREAD_PRIO_INHERIT` (Linux); falls back to `std::mutex` elsewhere with a compile-time warning. `lock()`, `try_lock()`, `unlock()` |
-| `ChannelSharedState` | `include/data_tamer/details/shared_state.hpp` | `WriteMutex write_mutex`; per-series `atomic<bool> enabled[]` (sized at freeze, append-only before); `atomic<bool> mask_dirty`. Owned by `shared_ptr` from the channel **and** from every `LoggedValue`, so writer-side operations never need the channel object |
+| `ChannelSharedState` | `include/data_tamer/details/shared_state.hpp` | `WriteMutex write_mutex`; per-series lock-free `atomic<uint8_t>` flags separating registered liveness from requested enablement; `atomic<bool> mask_dirty`. Owned by `shared_ptr` from the channel **and** every `LoggedValue`, so writer-side operations never need the channel object |
 | `SnapshotPool` | `include/data_tamer/details/snapshot_pool.hpp` | K pre-allocated `Snapshot` slots, each with an intrusive `atomic<uint32_t> refs`. `tryAcquire()` (snapshot thread only) scans for `refs == 0`. One pool per channel, owned by `shared_ptr` |
 | `SnapshotRef` | same file | Move-only handle `{ shared_ptr<SnapshotPool> pool; PoolSlot* slot; }`; explicit `clone()` increments `refs`, destruction/reset decrements it. Keeps both the slot and pool alive |
-| `SinkLink` | `src/channel.cpp` | Through Plan 3: `{ shared_ptr<DataSinkBase> sink; unique_ptr<ProducerToken> token; uint64_t dropped; }` — one per (channel, sink), stored under `sinks_mutex`; token declaration order makes it die before the sink |
-| `SinkSlot` | `src/channel.cpp` | Planned for Plan 4: atomic publication of fixed sink links removes `sinks_mutex` from the snapshot path |
-| `LogChannel::Pimpl` | `src/channel.cpp` | Through Plan 3: legacy snapshot buffer and mutex, 64-slot pool created after the first serialization, sink map and per-link counters. Plan 4 adds epoch publication and direct pooled serialization |
+| `SinkLink` | `src/channel.cpp` | `{ shared_ptr<DataSinkBase> sink; unique_ptr<ProducerToken> token; atomic<uint64_t> dropped; }`; one owned link per occupied fixed slot. Token declaration order makes it die before the sink |
+| Sink publication arrays | `src/channel.cpp` | eight control-owned `unique_ptr<SinkLink>` slots plus eight sequentially consistent atomic raw-link publications remove the sink mutex from the snapshot path |
+| `LogChannel::Pimpl` | `src/channel.cpp` | immutable post-freeze series/schema state, direct-serialization pool, cached mask, capacity/counters, fixed sink publications and a single-reader epoch |
 | `DataSinkBase::Pimpl` | `src/data_sink.cpp` | thread; pre-sized `BlockingConcurrentQueue<SnapshotRef>`; handoff and store mutexes; current callback ref; packed closed-bit/active-producer admission word; run and error counters |
 | `LoggedValue<T>` | `include/data_tamer/logged_value.hpp`, `channel.hpp` | scalar `T` → `std::atomic<T>`; non-scalar → plain `T`; both hold `shared_ptr<ChannelSharedState>` and a `weak_ptr<LogChannel>` used only by the destructor |
 | `ValuePtr` | `include/data_tamer/values.hpp` | function pointers instead of `std::function`; new constructor for `std::atomic<T>` |
 
-Constants through Plan 3: `kLockSpinNs = 2000` (spin on `try_lock` before
-sleeping), fixed `pool_capacity = 64` slots per channel (≈ 64 ms of stall
-absorption at 1 kHz), and default sink
+Constants: `kLockSpinNs = 2000` (spin on `try_lock` before sleeping), default
+`pool_capacity = 64` slots per channel (≈ 64 ms of retained/in-flight capacity
+at 1 kHz), maximum eight attached sinks, and default sink
 `queue_capacity = 1024` refs, sink thread wait timeout `50 ms`. The queue rounds
 capacity to internal 32-entry blocks, so the argument is a minimum rather than
-an exact limit. Plan 4 adds configurable pool/payload capacity and the fixed
-`kMaxSinks = 8` publication array.
+an exact limit. Pool and initial payload capacity are configurable before the
+first snapshot.
 
 ### 2.3 Ownership
 
@@ -87,19 +93,17 @@ an exact limit. Plan 4 adds configurable pool/payload capacity and the fixed
   be destroyed while sinks still hold snapshots.
 - A **slot** is free when `refs == 0`. Only the snapshot thread transitions
   `0 → 1`; sinks and the snapshot thread itself only decrement from `≥ 1`.
-- A **`ProducerToken`** is bound to the sink's queue. Through Plan 3 each
-  `SinkLink` declares its `shared_ptr<DataSinkBase>` before its token, so reverse
+- A **`ProducerToken`** is bound to the sink's queue. Each `SinkLink` declares
+  its `shared_ptr<DataSinkBase>` before its token, so reverse
   member destruction destroys the token first. The sink and queue therefore
-  outlive the token by construction. Plan 4 keeps the same ordering inside its
-  fixed `SinkSlot` owners.
-- Through Plan 3 the channel holds `sinks_mutex` while publishing and while a
-  link is inserted or removed. Plan 4 replaces this with the raw
-  `SinkSlot::link` publication and epoch reclamation described in §5.1.
+  outlive the token by construction.
+- The control thread owns links in fixed slots. The snapshot thread reads their
+  atomic publications inside the epoch described in §5.1; removal unpublishes,
+  waits out an observed reader, then destroys the owner.
 
 ### 2.4 Removed
 
-After Plan 4: `Pimpl::mutex` and `sinks_mutex` as snapshot-side locks and
-`Pimpl::snapshot`. Already removed through Plan 3:
+Removed: `Pimpl::mutex`, `sinks_mutex` and `Pimpl::snapshot` from the channel;
 `moodycamel::ConcurrentQueue<Snapshot>` (by value) in `DataSinkBase`;
 `DataSinkBase::pushSnapshot()`; `LoggedValue::rw_mutex_`; `LoggedValue` move
 constructor/assignment; the sink thread's 250 µs polling loop.
@@ -108,60 +112,45 @@ constructor/assignment; the sink thread's 250 µs polling loop.
 
 `Snapshot`; `DataSinkBase::addChannel/storeSnapshot` signatures; `ChannelsRegistry`;
 schema, hash and wire format; all `registerValue` overloads and their
-"throws after logging started" rule; existing `MCAPSink`/`ROS2PublisherSink`
+"throws after schema freeze" rule for new names, with compatible same-name
+dead-slot reuse; existing `MCAPSink`/`ROS2PublisherSink`
 call sites (the MCAP constructor only adds a final defaulted queue-capacity argument);
 the vendored moodycamel headers (now used as intended: pre-sized,
 explicit-producer, `try_enqueue`).
 
 ## 3. Hot path — `takeSnapshot(timestamp)`
 
-The direct-to-pool algorithm below is the Plan 4 target. Plan 3 implements the
-delivery half while retaining the legacy channel locks and buffer:
+The implemented path serializes directly into one acquired pool slot and fans
+out references. It contains no channel staging snapshot or snapshot-side
+structure lock.
 
-1. Under the channel snapshot mutex, rebuild the mask if dirty, serialize into
-   `Pimpl::snapshot` under the channel `WriteMutex`, and fill its timestamp and
-   schema hash.
-2. After the first completed serialization, create a 64-slot `SnapshotPool`
-   sized to that payload and mask. The pool owns a copy of the channel name and
-   every slot's `Snapshot::channel_name` views that storage.
-3. Acquire a slot and copy payload, mask, hash and timestamp from the legacy
-   snapshot while the snapshot mutex is still held. If no slot is free,
-   increment `pool_exhausted` and return `false`.
-4. Hold a parent `SnapshotRef` while publishing under `sinks_mutex`. For each
-   link, clone it and call `tryPush(token, std::move(delivery))`. A failed
-   enqueue leaves `delivery` owning its reference; ordinary RAII releases it
-   exactly once. Increment that link's drop counter and return `false` after all
-   links have been attempted if any failed.
+### Step 0 — freeze/setup (first attempt; retries until successful; takes `control_mutex`)
 
-This bridge serializes once but performs one payload/mask copy into the pool.
-It does not yet provide the complete frontend reservation or lock-free channel
-structure contract.
-
-### Step 0 — freeze (first call only; takes `control_mutex`)
-
-Set `logging_started`. Compute
-`payload_capacity = max(user_hint, 2 × current serialized size, 256)`.
-Create `SnapshotPool(pool_capacity, payload_capacity, ceil(N/8))`. For every
-`SinkSlot` with a sink: `sink->addChannel(name, schema)`, create
-`SinkLink{sink, ProducerToken(sink->queue())}`, `slot.owner = link`,
-`slot.link.store(link.get(), release)`. Cache `schema_hash`. After this the
-series array is immutable and the snapshot thread never takes `control_mutex`
-again.
+Set `schema_frozen` and cache `schema_hash`; this happens on the first attempt,
+even if later setup throws. Create the pool only after its slots reserve
+successfully, using `max(user_hint, 2 × current serialized size, 256)`. A sink
+link and its `ProducerToken` are created by `addDataSink()`; the first successful
+setup calls `addChannel(name, schema)` for each link that has not registered its
+schema, records each successful registration, then SC-publishes the links and
+sets `logging_started`. A failed setup is retryable: completed schema
+registrations are not repeated and nothing is published early. The first attempt
+may lock, allocate or throw; after successful setup the series layout is
+immutable and the snapshot thread never takes `control_mutex` again.
 
 ### Steps 1–8 — every call
 
-1. `epoch.fetch_add(1, acq_rel)` → odd = in progress.
-2. Load each `SinkSlot::link` (acquire) into a local array; if all null, epoch
+1. `epoch.fetch_add(1, seq_cst)` → odd = in progress.
+2. Load each published sink link (`seq_cst`) into a local array; if all null, epoch
    exit, `return false`. `slot = pool.tryAcquire()`: scan slots round-robin from
    the last index for `refs.load(acquire) == 0`; on success `refs.store(1,
    relaxed)` (only this thread makes the `0 → 1` transition). If none is free:
    `pool_exhausted++`, epoch exit, `return false`. No serialization work is done.
-3. `if (mask_dirty.exchange(false, acq_rel))` rebuild the private mask from
-   `enabled[i].load(relaxed)`. From here on only the mask is consulted.
-4. Locked serialization section. Acquire `state->write_mutex`: spin on
-   `try_lock()` for up to `kLockSpinNs` (longer than any legal writer critical
-   section, so the futex sleep is only reached when a writer was preempted mid
-   transaction — which priority inheritance then bounds); if the spin fails,
+3. `if (mask_dirty.exchange(false, seq_cst))` rebuild the private mask from
+   the sequentially consistent registered/enabled flags. A field is active only
+   when both bits are set. From here on only the mask is consulted.
+4. Locked serialization section. Acquire `state->write_mutex`: try-lock for the
+   nominal `kLockSpinNs` budget (2 µs), then block if it is still held. If the
+   spin fails,
    `write_lock_contended++`, record `t0`, `lock()`, and update
    `write_lock_wait_max_ns` from `now - t0` (clock reads only on this rare path).
    Under the lock: size pass over enabled series → ensure slot capacity (§4.6) →
@@ -188,33 +177,33 @@ again.
    it by RAII. There is no manual refcount decrement on this path.
 7. Release the snapshot thread's own hold: `refs.fetch_sub(1, release)`. If no
    sink accepted, this returns the slot to the pool immediately.
-8. `epoch.fetch_add(1, release)` → even. Return `true` iff every sink accepted.
+8. `epoch.fetch_add(1, seq_cst)` → even. Return `true` iff every sink accepted.
 
 The refcount protocol is the one subtle rule on this path: the snapshot thread
 holds its own reference (step 2) until *every* `tryPush` is done (step 7), so a
 fast sink can never return the slot to the pool while it is still being offered
 to a later sink.
 
-### Cost per call after Plan 4
+### Cost per call after setup
 
-Two atomic RMWs (epoch), one `exchange` (mask), ≤ `kMaxSinks` acquire loads,
+Two sequentially consistent atomic RMWs (epoch), one sequentially consistent
+`exchange` (mask), ≤ `kMaxSinks` sequentially consistent link loads,
 ≤ `pool_capacity` acquire loads in the worst-case free scan, one uncontended
 `try_lock`/`unlock` pair (~40 ns), `N` mask bit tests, serialization, and per
 sink: two refcount RMWs plus one moodycamel explicit-producer `try_enqueue`
 (store-only fast path) and one semaphore increment. No memcpy of the payload for
 any number of sinks. No allocation except §4.6.
 
-Through Plan 3, add the legacy channel/sink mutexes and one payload/mask copy to
-the costs above. The zero-allocation regression covers warmed fixed-size
-publication, including queue-full failure and fanout. Variable payload growth,
-control changes, and direct serialization are not covered by that claim.
+The zero-allocation regression covers warmed fixed-size publication, queue-full
+failure, fanout, variable-value reservation, strict oversize drops and pool
+exhaustion. Non-strict per-slot growth and user serializer behavior remain the
+documented exceptions.
 
-Worst case when a writer holds the mutex: remaining writer critical section
-(µs, under your control) + PI boost (~1 µs) + one futex sleep/wake round-trip
-(5–20 µs on PREEMPT_RT, 20–100 µs on a stock kernel) — a rare tail event whose
-per-cycle probability is (transaction duration / cycle period) × transactions
-per cycle. At 1 kHz with µs transactions this is well under 1 % of cycles and
-well inside the budget. The harness (§10.1) reports the observed maximum.
+When a writer holds the mutex, latency includes the remaining writer critical
+section, scheduling and a possible futex sleep/wake. Priority inheritance
+mitigates inversion on supported Linux systems but establishes no universal
+upper bound. The measured shared-desktop runs include millisecond maxima; see
+[Plan 4 measurements](../../benchmarks/2026-09-plan4.md).
 
 ## 4. Value synchronization
 
@@ -329,18 +318,17 @@ The README states this rule next to the first `set()` example.
   breaks (none in-tree). `scopedWrite()` is added as the preferred spelling.
   A plain lock guard does not establish transaction nesting: use `scopedWrite()`
   when calling non-scalar `set()`/`get()` within a group of writes.
-- Priority inheritance requires the writer to be a POSIX thread on Linux; it
-  works whether the writer is `SCHED_FIFO` or `SCHED_OTHER` (a CFS writer is
-  boosted to the waiter's real-time priority while holding the lock). On
-  platforms without `PTHREAD_PRIO_INHERIT` the wrapper is a plain mutex and the
-  bound is lost; the build emits a warning.
+- On Linux the wrapper requests `PTHREAD_PRIO_INHERIT`; elsewhere it uses the
+  platform fallback. This may mitigate priority inversion, but applications must
+  not infer a latency bound from the mutex type or scheduling policy.
 
 Why a single mutex rather than the wait-free alternatives: consistency across
 values plus "never drop a snapshot" plus multiple writers means the snapshot
 thread must either copy the whole value set per transaction (block-level triple
 buffering, 3× memory, a block copy on every writer transaction, and a second
-rule for lone scalar writes) or wait a bounded time for the writer. At ≤ 1 kHz
-the bounded wait is the smaller, simpler price (§11, §12).
+rule for lone scalar writes) or wait for the writer. The mutex is the smaller,
+simpler choice here, with the measured tail behavior documented separately
+(§11, §12).
 
 ### 4.3 Raw pointers written by the snapshot thread
 
@@ -370,17 +358,25 @@ atomics and a real mutex — no suppressions needed.
 
 If the serialized size exceeds the acquired slot's capacity:
 
-- `strict_mode == false` (default): `slot->payload.reserve(size × 2)` on that slot
+- `strict_mode == false` (default): `slot->payload.reserve(checkedDouble(size))` on that slot
   only, `payload_reallocations++`. Other slots grow lazily when next acquired, so
   one growth event costs up to `pool_capacity` counted allocations spread over
   the following ticks. This is the single sanctioned allocation on the hot path.
-- `strict_mode == true`: `refs.store(0, release)`, `dropped_oversize++`,
-  `return false`.
+- `strict_mode == true`: release the parent reference, `dropped_oversize++`,
+  `return false`. The acquired slot's actual `std::vector` capacity is the limit,
+  not the original hint; growth retained from earlier non-strict calls remains
+  usable.
 
 `strict_mode` is an `std::atomic<bool>` and may be toggled at runtime.
-`setPayloadCapacity(bytes)` before freeze avoids both paths.
+`setPayloadCapacity(bytes)` before freeze contributes a minimum to the initial
+`max(bytes, 2 * initial_payload_size, 256)` reservation. It is not an exact
+ceiling. Strict mode fixes the existing per-slot capacities: every later payload
+that exceeds its acquired slot drops instead of growing it. Without strict mode,
+later larger input may grow memory again.
+Size queries, custom serializers and vector allocation can throw, so neither
+mode is a universal no-throw contract.
 
-## 5. Control path — Plan 4 target
+## 5. Control path
 
 All control operations serialize on `control_mutex` (`std::mutex`), never taken
 by the snapshot thread after freeze.
@@ -389,57 +385,71 @@ by the snapshot thread after freeze.
 
 ```cpp
 void waitQuiescent() {                       // caller holds control_mutex
-  const uint64_t e = epoch.load(acquire);
+  const uint64_t e = epoch.load(seq_cst);
   if ((e & 1) == 0) return;
-  while (epoch.load(acquire) == e) std::this_thread::yield();
+  while (epoch.load(seq_cst) == e) std::this_thread::yield();
 }
 ```
 
-Contract: publish the change (atomic store read at the start of every snapshot)
-*before* calling `waitQuiescent()`. Called from the snapshot thread itself it
-returns immediately, so destroying a `LoggedValue` inside the control loop is
-legal.
+Contract: publish the change sequentially consistently before calling
+`waitQuiescent()`. The snapshot's SC epoch entry precedes its SC sink loads and
+dirty exchange. If a controller observes the reader's odd epoch, it waits for
+that reader to exit. If it observes an old even epoch, the SC total order places
+the controller's publication before the later reader entry, so that reader
+cannot also consume the old publication. This closes the store-buffering hole
+in the earlier acquire/release sketch; sanitizer runs support but do not prove
+the ordering argument.
+
+For mask reuse, a reader that exchanges `mask_dirty` before an unregistering
+dirty store may use the old mask, but its odd epoch forces unregistration to
+wait before detaching the holder. A reader that exchanges afterward rebuilds
+from the new SC registered/enabled flag. Re-registration initializes the holder
+before its SC registered publication, so a rebuilt active bit observes a valid
+holder. Control calls must be made between snapshots and outside writer/proxy
+guards and serializer callbacks.
 
 ### 5.2 `setEnabled(id, bool)` — wait-free, any thread (writer-class operation)
 
-For each field `state->enabled[i].exchange(enable, relaxed)`; if any changed,
-`state->mask_dirty.store(true, release)`. No mutex, no `weak_ptr::lock`, no
+For each field, an SC `fetch_or` or `fetch_and` changes only the requested
+enabled bit; if it changed, `mask_dirty.store(true, seq_cst)`. It never sets the
+registered bit, so enabling a dead field cannot revive it. No mutex, no `weak_ptr::lock`, no
 dependency on the `LogChannel` object: `LogChannel::setEnabled` and
 `LoggedValue::setEnabled` both call the same free function on
 `ChannelSharedState`. Safe to call from a writer thread, from the snapshot thread
 between snapshots, or from inside a `scopedWrite()` transaction.
 
-Ordering with a value write from the same writer thread (the common
-"write, then enable" case): the value store happens before the `mask_dirty`
-release store in program order, and the snapshot thread acquires `mask_dirty`
-before reading the mask, so a snapshot that sees the field enabled also sees at
-least that value.
+The SC flag/dirty handshake makes mask changes visible to a later rebuilding
+snapshot. Scalar payload values remain relaxed atomics and retain their separate
+consistency contract in §4.1.
 
 ### 5.3 Registration — `control_mutex`, before freeze only
 
-Unchanged logic; throws after freeze. Per-series `enabled` flags live in an
-append-only container of atomics sized before freeze. Re-registering a previously
-unregistered name after freeze stays allowed: set `holder`, `registered = true`,
-then `enabled.store(true)` + `mask_dirty` (holder valid before its mask bit can
-be set).
+New names still throw after freeze. Per-series flag bytes live in an append-only
+container of atomics. Re-registering a previously unregistered name with the
+same compatible type remains allowed after freeze: initialize `holder`, then SC
+publish `registered | enabled` and dirty the mask. The returned registration ID
+identifies the reused schema slot, not a generation; an older same-name ID also
+denotes the replacement slot.
 
 ### 5.4 `unregister(id)` / `~LoggedValue`
 
-Lock `control_mutex`; `enabled[i].store(false)`, `registered[i] = false`;
-`mask_dirty.store(true, release)`; `waitQuiescent()`; detach `holder[i]`. The
+Lock `control_mutex`; clear the registered bit without changing requested
+enablement; `mask_dirty.store(true, seq_cst)`; `waitQuiescent()`; detach
+`holder[i]`. The
 destructor goes through `weak_ptr::lock()`; if the channel is gone it does
 nothing.
 
 ### 5.5 `addDataSink(sink)`
 
-Lock `control_mutex`; take the first free `SinkSlot` (throw if all `kMaxSinks`
-used); `slot.sink = sink`. If already frozen: `sink->addChannel(name, schema)`,
-create the `SinkLink` with a `ProducerToken` on `sink->queue()`, `slot.owner =
-link`, `slot.link.store(link.get(), release)`.
+Lock `control_mutex`; take the first free slot (throw if all `kMaxSinks` are
+used); create its `SinkLink` and `ProducerToken`. If the schema is already
+frozen, call `sink->addChannel(name, schema)` and record that registration before
+installing the owner. If logging has started, publish the completed raw link with
+an SC store; otherwise first-call setup registers and publishes it.
 
 ### 5.6 `removeDataSink(sink)`
 
-Lock `control_mutex`; `slot.link.store(nullptr, release)`; `waitQuiescent()`
+Lock `control_mutex`; publish null with an SC store; `waitQuiescent()`
 (snapshot thread no longer uses the token); destroy `slot.owner` (moodycamel
 allows destroying a `ProducerToken` with items still queued — they remain
 dequeuable by the consumer); reset `slot.sink`. Refs already in the sink's queue
@@ -460,8 +470,12 @@ freeze. `setStrictMode(bool)`: atomic, any time. Sink queue capacity is a
 
 ### 5.9 `getSchema()`, counters
 
-`getSchema()` takes `control_mutex`. Counters are `std::atomic<uint64_t>` with
-relaxed RMW on the snapshot thread and relaxed loads elsewhere.
+`getSchema()` and `droppedSnapshots(sink)` take `control_mutex`; the latter is
+defined only for the current attachment and returns zero when detached. The
+ordinary counters backing `stats()` are `std::atomic<uint64_t>` with relaxed
+RMW on the snapshot thread and relaxed loads elsewhere. `Stats` itself is a
+plain point-in-time value and does not include attachment drops or sink callback
+errors.
 
 ### 5.10 Blocking bounds for control threads
 
@@ -625,24 +639,25 @@ independent of the number of sinks. Memory per sink is based on
 | Pool has no free slot | snapshot | no work, `pool_exhausted++`, return `false` (all sinks miss this snapshot) |
 | Sink queue full | snapshot | that sink skipped, `link.dropped++`, return `false` |
 | No sinks | snapshot | no work, return `false` |
-| `WriteMutex` held by a writer at snapshot time | snapshot | spin ≤ 2 µs, then block (PI-bounded); `write_lock_contended++`, `write_lock_wait_max_ns` updated; snapshot proceeds normally |
-| Payload > current bridge capacity (Plan 3) | snapshot | vector copy may grow the slot and allocate; fixed-size warm publication is the only tested zero-allocation case |
-| Payload > configured capacity (Plan 4) | snapshot | planned non-strict growth counter or strict drop policy |
+| `WriteMutex` held by a writer at snapshot time | snapshot | try-lock for the nominal 2 µs spin budget, then block; `write_lock_contended++`, `write_lock_wait_max_ns` updated; snapshot proceeds normally. Linux PI may mitigate inversion but gives no portable or universal bound. |
+| Payload > acquired slot's actual capacity, non-strict | snapshot | reserve twice the required size on that slot; on success `payload_reallocations++`; allocation/serializer exceptions propagate |
+| Payload > acquired slot's actual capacity, strict | snapshot | release the slot, `dropped_oversize++`, return `false`; previously retained growth remains usable |
 | `storeSnapshot` throws | sink | caught, `store_errors++`, ref destroyed (slot released) |
 | Sink retains a callback `SnapshotRef` indefinitely | sink | pool starves → `pool_exhausted` grows; no UB |
 | `DataSinkBase` destroyed with live thread | control | debug assert; release: join + stderr |
 
-Through Plan 3, payload growth in the temporary copy bridge can still allocate
-and throw. The final no-throw path depends on Plan 4's reservation/strict-mode
-work. `takeSnapshot()` returns `true` iff every attached sink's queue accepted
-the snapshot; a callback's `false` return is distinct from an enqueue failure.
+`takeSnapshot()` returns `true` iff every attached sink's queue accepted the
+snapshot; a callback's `false` return is distinct from an enqueue failure.
+Library-owned allocation is absent only after successful setup while the
+acquired slot fits. Custom size/serialization code and non-strict growth can
+allocate or throw, and strict mode does not catch those exceptions.
 
-Implemented accessors through Plan 3 are `LogChannel::poolExhausted()`,
-`writeLockContended()`, `writeLockWaitMaxNs()`,
-`droppedSnapshots(const std::shared_ptr<DataSinkBase>&)`, and `stats()` (whose
-fields currently bundle the two write-lock counters and `pool_exhausted`).
-`DataSinkBase::storeErrors()` counts thrown callbacks. Plan 4 adds the payload
-growth/oversize counters and their `Stats` fields.
+`LogChannel::stats()` bundles `write_lock_contended`,
+`write_lock_wait_max_ns`, `pool_exhausted`, `payload_reallocations` and
+`dropped_oversize`. The same counters have individual accessors.
+`droppedSnapshots(sink)` is the current attachment's queue-failure count and
+takes `control_mutex`; `DataSinkBase::storeErrors()` separately counts thrown
+callbacks on the backend.
 
 ## 8. Public API delta
 
@@ -650,9 +665,9 @@ growth/oversize counters and their `Stats` fields.
 |---|---|
 | `LogChannel::writeMutex()` | signature unchanged (`Mutex&`); `Mutex` is now `DataTamer::WriteMutex` (exclusive, priority-inheriting) instead of `std::shared_mutex` — `lock_shared()` callers break, `lock_guard`/`unique_lock`/`scoped_lock` callers do not |
 | `LogChannel::scopedWrite()` | new; nonmovable, nesting-aware `ChannelSharedState::Transaction` guard of the channel's `WriteMutex` |
-| `LogChannel::setPayloadCapacity/setPoolCapacity/setStrictMode` | planned for Plan 4 |
-| `LogChannel::poolExhausted/writeLockContended/writeLockWaitMaxNs/droppedSnapshots/stats` | new through Plan 3; `Stats` currently contains the two lock counters and `pool_exhausted` |
-| `LogChannel::payloadReallocations/droppedOversize` | planned for Plan 4 |
+| `LogChannel::setPayloadCapacity/setPoolCapacity/setStrictMode` | new; payload/pool setters freeze on the first snapshot attempt, strict mode is runtime atomic |
+| `LogChannel::poolExhausted/writeLockContended/writeLockWaitMaxNs/droppedSnapshots/stats` | new; `Stats` contains the two lock counters, pool exhaustion, payload reallocations and oversize drops; attachment drops remain a mutex-protected lookup |
+| `LogChannel::payloadReallocations/droppedOversize` | new |
 | `LoggedValue` move ctor / assignment | deleted |
 | `LoggedValue<T>::getMutablePtr()/getConstPtr()` for atomic-scalar `T` | deprecated (proxy semantics); use `set()`/`get()` |
 | `LoggedValue<T>::get()` | now `const` |
@@ -672,56 +687,58 @@ growth/oversize counters and their `Stats` fields.
 | `MCAPSink` / `ROS2PublisherSink` | private state moved behind an out-of-line Pimpl; one-time ABI change requires downstream rebuilds, subsequent private fields do not change the sink object layout |
 | `ROS2PublisherSink::schema_mutex_` | private `std::mutex` now lives in the Pimpl and protects the schema-change flag as well as schemas |
 
-Implemented through Plan 3: atomic scalars, nested transactions, contention
-counters, sink Pimpls, pooled queue delivery, removal of `pushSnapshot`, and
-the no-sleep MCAP finish/restart lifecycle. Capacity/strict-mode APIs, payload
-growth counters, channel epoch publication and direct pooled serialization
-remain Plan 4. `write_lock_contended`
+The final implementation includes atomic scalars, nested transactions,
+contention counters, sink Pimpls, pooled queue delivery, removal of
+`pushSnapshot`, the no-sleep MCAP finish/restart lifecycle, capacity/strict-mode
+APIs, payload counters, SC channel epoch publication and direct pooled
+serialization. `write_lock_contended`
 counts blocking acquisitions after the spin budget; `write_lock_wait_max_ns`
 measures only the blocking acquisition, excluding serialization.
 
 ## 9. Testing
 
-The items below distinguish completed coverage through Plan 3 from the Plan 4
-checks that depend on direct serialization and capacity APIs.
+The items below describe completed coverage through Plan 4.
 
-- **Unit, single-threaded**: `SnapshotPool` acquire/release, exhaustion, round-robin
-  scan, zero allocations after construction; `SnapshotRef` move semantics and
-  refcount on destruction; `WriteMutex` is created with `PTHREAD_PRIO_INHERIT`
-  (query the attribute) and satisfies `Lockable`; nested `set()` inside
-  `scopedWrite()` on the same thread does not deadlock; mask/payload consistency
-  when `setEnabled` fires between size and serialize passes (test hook).
+- **Unit, single-threaded**: `SnapshotPool` acquire/release, exhaustion,
+  round-robin scan, zero allocations after construction; `SnapshotRef` move
+  semantics and refcount on destruction; `WriteMutex` reports its compile-time
+  Linux PI configuration and satisfies `Lockable`; nested `set()` inside
+  `scopedWrite()` on the same thread does not deadlock. Separate shared-state
+  tests cover enablement changes and ensure a dead field cannot be revived.
 - **Transaction consistency**: writer thread updates `pos` and `vel` inside
   `scopedWrite()` with a deliberately slow body; every consumed snapshot decodes
   either both old or both new values, never mixed. Repeat with a raw pointer in
   the transaction.
 - **Priority inheritance** (runs only when the test has `CAP_SYS_NICE`): a
-  `SCHED_OTHER` writer holds the lock while a CPU-bound `SCHED_OTHER` hog runs on
-  the same core; a `SCHED_FIFO` snapshot thread's observed `writeLockWaitMaxNs`
-  stays below the writer's critical section + a small constant, versus
-  milliseconds with a plain `std::mutex` (control case).
+  `SCHED_OTHER` holder and CPU hogs share one core while a `SCHED_FIFO` waiter
+  directly acquires `WriteMutex`; the test asserts an observed wait below 1 ms.
+  It was skipped in the recorded gates because `CAP_SYS_NICE` was unavailable,
+  and it does not provide a plain-mutex control comparison or a general bound.
 - **Refcount protocol**: two sinks, one of which returns `true` from `tryPush` and
   immediately consumes; assert the slot is not reused before the second
   `tryPush` (the snapshot thread's own hold, §3 step 7).
-- **Allocation, Plan 3 complete**: the `operator new/delete` hook reports zero
+- **Allocation**: the `operator new/delete` hook reports zero
   allocations and zero deallocations after pool creation for fixed-size warmed
-  successful fanout and persistent queue-full failures. Queue traits route its
-  allocations through the same hook. Plan 4 adds variable payload growth,
-  reservation and strict-mode checks before making the complete frontend claim.
+  successful fanout and persistent queue-full failures. Queue traits route their
+  allocations through the same hook. Variable payload reservation, non-strict
+  growth, strict drops and pool exhaustion have focused coverage.
 - **Concurrency under TSAN** (new CI job): (a) writer thread hammering
   `LoggedValue<double>::set` and `LoggedValue<std::vector<double>>::set` during
   snapshots — no reports, every consumed snapshot decodes to a consistent vector;
   (b) random `setEnabled` toggles — decoded field set equals the mask;
-  (c) Plan 4: create/destroy `LoggedValue`s and add/remove sinks in a loop during
-  snapshots; (d) Plan 3: two channels sharing one sink preserve per-producer
-  order; (e) Plan 3: sink worker and manual drainer serialize dequeue/callback.
-- **Lifetime, Plan 3 complete**: a callback retains references until the 64-slot
+  (c) create/destroy `LoggedValue`s and add/remove sinks in a loop during
+  snapshots; (d) two channels sharing one sink preserve per-producer
+  order; (e) sink worker and manual drainer serialize dequeue/callback.
+- **Lifetime**: a callback retains references until the 64-slot
   pool exhausts; payload, mask and pool-owned long channel name remain readable
   after queue, channel and sink destruction; releasing refs restores publication.
-- **Pool sizing, Plan 4 measurement**: `MCAPSink` with `do_compression = true` on a channel of 1000
-  doubles at 1 kHz for 60 s writing to a file on disk: `poolExhausted() == 0`
-  with the default pool (the reason the default is 64, not 16).
-- **Drop behaviour, Plan 3 complete**: a requested queue capacity of one rounds
+- **Pool sizing measurement**: compressed `MCAPSink` on the 1000-value harness
+  at 1 kHz for 60 s wrote 60,010 records (including warm-up), passed official
+  MCAP `info`/`doctor` checks, and reported `poolExhausted() == 0` with the
+  default 64-slot pool. The separate file-order checker found zero inversions
+  and parse errors across those container records; it verifies MCAP container
+  parsing/order, not payload decoding.
+- **Drop behaviour**: a requested queue capacity of one rounds
   to one 32-entry block; the next publication increments only that attachment's
   `droppedSnapshots(sink)`, while another sink can accept it. Retaining all 64
   pool slots separately increments `poolExhausted()` and prevents publication to
@@ -741,7 +758,7 @@ introduces that CI infrastructure so every later step inherits it.
 | Step | Change | New tests | Depends on |
 |---|---|---|---|
 | 0 | CMake presets / CI jobs: `-fsanitize=address,undefined` and `-fsanitize=thread` builds running the existing gtest suite; allocation-counting hook (`operator new/delete`) as a test utility | existing suite under both sanitizers; hook self-test | — |
-| 1 | `WriteMutex` (`details/write_mutex.hpp`) — standalone PI mutex wrapper | attribute check; `Lockable` conformance; spin-then-lock helper; PI bound test (privileged, skipped otherwise) | 0 |
+| 1 | `WriteMutex` (`details/write_mutex.hpp`) — standalone PI mutex wrapper | compile-time Linux PI configuration check; `Lockable` conformance; spin-then-lock helper; privileged direct-mutex behavioral experiment (skipped without `CAP_SYS_NICE`) | 0 |
 | 2 | `SnapshotPool` + `SnapshotRef` (`details/snapshot_pool.hpp`) — standalone, not yet wired | acquire/exhaust/release; ref move semantics; producer + N consumer threads returning refs under TSAN; zero allocations after construction | 0 |
 | 3 | `ValuePtr`: `std::function` → function pointers; new `std::atomic<T>` constructor; `LoggedValue` move ops deleted | serialization byte-for-byte identical to before (golden buffers); atomic scalar serializes as the same `BasicType` | 0 |
 | 4 | Scalar `LoggedValue<T>` on `std::atomic<T>`; proxy `MutablePtr`/`ConstPtr` for scalars; `ChannelSharedState` introduced for the enable flags | `set` from a writer thread during snapshots is clean under TSAN (this is the first step that fixes the existing race); accessor semantics; `setEnabled` from a writer thread | 3 |
@@ -843,11 +860,12 @@ consistency tests of §9 apply unchanged.
   per-value consistency, violating (a). Block-level triple buffering with
   copy-forward transactions satisfies all three with a wait-free reader, at the
   price of 3× memory, a full block copy on every writer transaction, and a
-  separate rule for lone scalar writes. The PI mutex satisfies all three with 1×
-  memory, no copies and ~30 lines; its price is a bounded wait on the snapshot
-  thread — one writer critical section plus a futex round-trip, tens of µs,
-  rarely — which is acceptable at the ≤ 1 kHz target. Lone scalar writes stay
-  wait-free atomics because they carry no consistency promise.
+  separate rule for lone scalar writes. The mutex satisfies the consistency and
+  no-writer-drop requirements with 1× memory and no copies; its price is that
+  the snapshot thread waits for a writer. Linux PI may mitigate inversion, but
+  observed shared-desktop tails reach milliseconds and no general timing bound is
+  claimed. Lone scalar writes stay wait-free atomics because they carry no
+  consistency promise.
 - **Pool + refcounted handle instead of per-edge rings**: the snapshot is
   serialized once and shared by all sinks (zero copy), a sink that keeps a
   reference degrades to a counter instead of undefined behaviour, and the
