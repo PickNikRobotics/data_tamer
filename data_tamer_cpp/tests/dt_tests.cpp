@@ -40,10 +40,10 @@ TEST(DataTamerBasic, SinkAdd)
   for(int i = 0; i < shapshot_count; i++)
   {
     channel->takeSnapshot();
-    std::this_thread::sleep_for(std::chrono::microseconds(50));
   }
 
-  std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  dummy_sink_A->flush();
+  dummy_sink_B->flush();
 
   const auto hash = channel->getSchema().hash;
 
@@ -109,14 +109,12 @@ TEST(DataTamerBasic, TestRegistration)
   // changing the pointer to another one is valid
   // but only if we unregister first
   channel->unregister(id_v2);
+  // changing type is never allowed, not even after unregistering
+  ASSERT_THROW(channel->registerValue("v2", &i1), std::runtime_error);
   id_v2 = channel->registerValue("v2", &v2_bis);
 
-  // changing type is never allowed, not even if we unregister
-  ASSERT_ANY_THROW(channel->registerValue("v2", &i1));
-
   channel->takeSnapshot();
-  // give time to the sink thread to do its work
-  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  sink->flush();
 
   // changing the pointer after takeSnapshot is valid
   channel->unregister(id_i2);
@@ -136,7 +134,7 @@ TEST(DataTamerBasic, TestRegistration)
   channel->setEnabled(id_i1, false);
 
   channel->takeSnapshot();
-  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  sink->flush();
 
   // payload should contain v2, and i2
   auto reduced_size = sizeof(double) + sizeof(int32_t);
@@ -148,7 +146,7 @@ TEST(DataTamerBasic, TestRegistration)
   channel->setEnabled(id_i1, true);
 
   channel->takeSnapshot();
-  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  sink->flush();
 
   ASSERT_EQ(sink->latestPayloadSize(), expected_size);
 }
@@ -166,7 +164,7 @@ TEST(DataTamerBasic, Vector)
   const auto expected_size = 4 * sizeof(float) + sizeof(uint32_t);
 
   channel->takeSnapshot();
-  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  sink->flush();
   ASSERT_EQ(sink->latestPayloadSize(), expected_size);
 }
 
@@ -196,14 +194,14 @@ TEST(DataTamerBasic, Disable)
                          3 * sizeof(double) + 4 * sizeof(float) + sizeof(uint32_t);
 
   channel->takeSnapshot();
-  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  sink->flush();
   ASSERT_EQ(sink->latestPayloadSize(), expected_size);
   ASSERT_EQ(sink->latestActiveMask()[0], 0b11111111);
 
   auto checkSize = [&](const auto& id, size_t size) {
     channel->setEnabled(id, false);
     channel->takeSnapshot();
-    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    sink->flush();
     channel->setEnabled(id, true);
 
     size_t expected = expected_size - size;
@@ -242,7 +240,7 @@ TEST(DataTamerBasic, VectorWithChangingSize)
   channel->registerValue("vect", &vect);
 
   channel->takeSnapshot();
-  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  sink->flush();
   ASSERT_EQ(sink->latestPayloadSize(),
             vect.size() * sizeof(float) + sizeof(uint32_t));
 
@@ -254,7 +252,7 @@ TEST(DataTamerBasic, VectorWithChangingSize)
   }
 
   channel->takeSnapshot();
-  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  sink->flush();
   ASSERT_EQ(sink->latestPayloadSize(),
             vect.size() * sizeof(float) + sizeof(uint32_t));
 
@@ -262,7 +260,7 @@ TEST(DataTamerBasic, VectorWithChangingSize)
   vect.resize(5);
 
   channel->takeSnapshot();
-  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  sink->flush();
   ASSERT_EQ(sink->latestPayloadSize(),
             vect.size() * sizeof(float) + sizeof(uint32_t));
 }

@@ -167,3 +167,30 @@ TEST(ValuePtr, DefaultConstructedIsInertNotUB)
   ASSERT_EQ(span.size(), 8u);
   ASSERT_EQ(empty.type(), BasicType::OTHER);
 }
+
+TEST(ValuePtr, DetachSerializesNothingButKeepsTypeIdentity)
+{
+  const double d = 1.5;
+  ValuePtr detached(&d);
+  detached.detach();
+  ASSERT_EQ(detached.getSerializedSize(), 0u);
+  uint8_t buffer[8];
+  SerializeMe::SpanBytes span(buffer, 8);
+  detached.serialize(span);
+  ASSERT_EQ(span.size(), 8u);
+  ASSERT_TRUE(detached == ValuePtr(&d));  // re-registration type check still works
+  ASSERT_EQ(detached.type(), BasicType::FLOAT64);
+}
+
+TEST(ValuePtr, DifferentShapesCompareUnequal)
+{
+  const double d = 0;
+  const float f = 0;
+  const std::vector<double> v;
+  const std::array<double, 3> a3{};
+  const std::array<double, 4> a4{};
+  ASSERT_TRUE(ValuePtr(&d) != ValuePtr(&f));
+  ASSERT_TRUE(ValuePtr(&d) != ValuePtr(&v));
+  ASSERT_TRUE(ValuePtr(&a3) != ValuePtr(&a4));
+  ASSERT_TRUE(ValuePtr(&v) != ValuePtr(&a3));
+}

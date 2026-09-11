@@ -140,6 +140,7 @@ TEST(SnapshotPool, ProducerAndConsumersUnderContention)
   for(int c = 0; c < kConsumers; c++)
   {
     consumers.emplace_back([&, c] {
+      bool final_sweep = false;  // done is set after the last push: swap once more
       while(true)
       {
         std::vector<SnapshotRef> batch;
@@ -149,11 +150,14 @@ TEST(SnapshotPool, ProducerAndConsumersUnderContention)
         }
         if(batch.empty())
         {
-          if(done)
+          if(final_sweep)
           {
             return;
           }
-          std::this_thread::yield();
+          if(done)
+            final_sweep = true;
+          else
+            std::this_thread::yield();
           continue;
         }
         for(auto& ref : batch)

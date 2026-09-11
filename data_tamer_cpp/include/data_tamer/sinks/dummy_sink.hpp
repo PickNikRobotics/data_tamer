@@ -22,6 +22,10 @@ public:
 
   ~DummySink() override { stopThread(); }
 
+  /// Deliver every snapshot already pushed by takeSnapshot(), including one the
+  /// worker is currently storing. Tests call this instead of sleeping.
+  void flush() { processQueuedSnapshots(); }
+
   void addChannel(std::string const& name, Schema const& schema) override
   {
     std::scoped_lock lk(mutex_);

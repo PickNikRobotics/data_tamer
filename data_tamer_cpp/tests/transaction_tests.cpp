@@ -243,6 +243,7 @@ TEST(Transaction, ValuesWrittenTogetherAppearTogetherInDeliveredSnapshots)
   auto b = channel->createLoggedValue<double>("b", 1.0);
 
   std::atomic_bool stop{ false };
+  std::atomic<size_t> iterations{ 0 };
   std::thread writer([&] {
     double value = 1.0;
     while(!stop.load(std::memory_order_relaxed))
@@ -252,6 +253,7 @@ TEST(Transaction, ValuesWrittenTogetherAppearTogetherInDeliveredSnapshots)
       std::this_thread::yield();
       b->set(value);
       value = value == 1.0 ? 2.0 : 1.0;
+      iterations++;
     }
   });
 
@@ -263,6 +265,7 @@ TEST(Transaction, ValuesWrittenTogetherAppearTogetherInDeliveredSnapshots)
   stop = true;
   writer.join();
 
+  ASSERT_GT(iterations.load(), 0u);
   ASSERT_GT(accepted, 0u);
   ASSERT_TRUE(sink->waitFor(accepted));
   ASSERT_EQ(sink->delivered(), accepted);
@@ -278,6 +281,7 @@ TEST(Transaction, RawPointerWritesAppearTogetherInDeliveredSnapshots)
   channel->registerValue("pair", &pair);
 
   std::atomic_bool stop{ false };
+  std::atomic<size_t> iterations{ 0 };
   std::thread writer([&] {
     double value = 1.0;
     while(!stop.load(std::memory_order_relaxed))
@@ -287,6 +291,7 @@ TEST(Transaction, RawPointerWritesAppearTogetherInDeliveredSnapshots)
       std::this_thread::yield();
       pair.b = value;
       value = value == 1.0 ? 2.0 : 1.0;
+      iterations++;
     }
   });
 
@@ -298,6 +303,7 @@ TEST(Transaction, RawPointerWritesAppearTogetherInDeliveredSnapshots)
   stop = true;
   writer.join();
 
+  ASSERT_GT(iterations.load(), 0u);
   ASSERT_GT(accepted, 0u);
   ASSERT_TRUE(sink->waitFor(accepted));
   ASSERT_EQ(sink->delivered(), accepted);
@@ -312,12 +318,14 @@ TEST(Transaction, VectorSetAndSnapshotRaceDeliversValidPayloads)
   auto vec = channel->createLoggedValue<std::vector<double>>("vec");
 
   std::atomic_bool stop{ false };
+  std::atomic<size_t> iterations{ 0 };
   std::thread writer([&] {
     size_t size = 1;
     while(!stop.load(std::memory_order_relaxed))
     {
       vec->set(std::vector<double>(size, double(size)));
       size = size == 64 ? 1 : size + 1;
+      iterations++;
     }
   });
 
@@ -329,6 +337,7 @@ TEST(Transaction, VectorSetAndSnapshotRaceDeliversValidPayloads)
   stop = true;
   writer.join();
 
+  ASSERT_GT(iterations.load(), 0u);
   ASSERT_GT(accepted, 0u);
   ASSERT_TRUE(sink->waitFor(accepted));
   ASSERT_EQ(sink->delivered(), accepted);

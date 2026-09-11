@@ -75,7 +75,7 @@ TEST(DataTamerCustom, CustomType1)
   channel->registerValue("test_value", &my_test);
 
   channel->takeSnapshot();
-  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  sink->flush();
 
   auto expected_size = sizeof(Pose) + sizeof(double) + sizeof(int32_t) +
                        sizeof(uint32_t) + 4 * sizeof(Point3D) + sizeof(TestType::Color) +
@@ -147,7 +147,7 @@ TEST(DataTamerCustom, CustomType2)
   channel->registerValue("quats", &quats);
 
   channel->takeSnapshot();
-  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  sink->flush();
 
   auto expected_size = 2 * sizeof(Point3D) + 3 * sizeof(Quaternion) + sizeof(uint32_t);
 
@@ -240,7 +240,7 @@ TEST(DataTamerCustom, CustomType3)
   channel->registerCustomValue("v3", &v3, serializer);
 
   channel->takeSnapshot();
-  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  sink->flush();
 
   const auto expected_size = 6 * sizeof(Pos2D) + sizeof(uint32_t);
 
@@ -279,7 +279,7 @@ TEST(DataTamerCustom, RegisterConstMethods)
   channel->registerValue("vect", &vect);
 
   channel->takeSnapshot();
-  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  sink->flush();
 
   const auto expected_size = 2 * sizeof(double);
 

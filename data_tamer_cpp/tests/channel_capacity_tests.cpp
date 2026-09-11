@@ -3,6 +3,7 @@
 #include "alloc_counter.hpp"
 
 #include <gtest/gtest.h>
+#include <chrono>
 #include <cstring>
 #include <limits>
 #include <thread>
@@ -301,7 +302,10 @@ TEST(ChannelCapacity, TenThousandDirtySnapshotsWithControlChurnDoNotAllocate)
     }
     if(batch != 9)
     {
-      while(churn.load() <= completed_churn) std::this_thread::yield();
+      const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+      while(churn.load() <= completed_churn && std::chrono::steady_clock::now() < deadline)
+        std::this_thread::yield();
+      ASSERT_GT(churn.load(), completed_churn) << "control thread stalled";
       completed_churn = churn.load();
     }
   }

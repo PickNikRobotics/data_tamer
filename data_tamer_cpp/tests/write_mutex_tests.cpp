@@ -161,7 +161,10 @@ TEST(WriteMutex, PriorityInheritanceKeepsObservedWaitShort)
   cpu_set_t one_core;
   CPU_ZERO(&one_core);
   CPU_SET(0, &one_core);
-  pthread_setaffinity_np(pthread_self(), sizeof(one_core), &one_core);
+  if(pthread_setaffinity_np(pthread_self(), sizeof(one_core), &one_core) != 0)
+  {
+    GTEST_SKIP() << "cannot pin to CPU 0";
+  }
 
   WriteMutex m;
   std::atomic_bool stop{ false };

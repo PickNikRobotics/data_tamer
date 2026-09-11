@@ -426,15 +426,19 @@ TEST(ChannelControl, SerializerExceptionsLeaveEpochAndPoolReusable)
     auto serializer = std::make_shared<PausedSerializer>();
     auto id = channel->registerCustomValue("value", &value, serializer);
     channel->addDataSink(sink);
+    channel->setPoolCapacity(1);  // a slot leaked by the throw would fail the next call
     ASSERT_TRUE(channel->takeSnapshot());
+    sink->processQueuedSnapshots();
     serializer->throw_size = size_pass;
     serializer->throw_serialize = !size_pass;
     EXPECT_THROW(channel->takeSnapshot(), std::runtime_error);
     serializer->throw_size = serializer->throw_serialize = false;
     EXPECT_TRUE(channel->takeSnapshot());
+    sink->processQueuedSnapshots();
     channel->unregister(id);
     EXPECT_TRUE(channel->takeSnapshot());
     sink->processQueuedSnapshots();
+    EXPECT_EQ(channel->poolExhausted(), 0u);
     EXPECT_EQ(sink->snapshots.size(), 3u);
     checkPayloads(*sink, 1);
   }
@@ -448,7 +452,7 @@ TEST(ChannelControl, ExhaustedPoolDoesNotCallSerializer)
   auto serializer = std::make_shared<PausedSerializer>();
   channel->registerCustomValue("value", &value, serializer);
   channel->addDataSink(sink);
-  for(int i = 0; i < 64; ++i) ASSERT_TRUE(channel->takeSnapshot());
+  for(size_t i = 0; i < SnapshotPool::kDefaultCapacity; ++i) ASSERT_TRUE(channel->takeSnapshot());
   const auto calls = serializer->size_calls;
   EXPECT_FALSE(channel->takeSnapshot());
   EXPECT_EQ(serializer->size_calls, calls);

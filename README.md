@@ -90,23 +90,12 @@ slot and publishes references to at most eight attached sinks. It may wait for
 the channel `WriteMutex`; keep transactions, non-scalar proxy guards and custom
 serializers short. User serializers may allocate or throw, and the allocator,
 OS scheduler and serializer work prevent a universal no-throw or hard-deadline
-guarantee. A pinned same-machine pair for two sinks and two transaction writers
-also regressed at the median, while its observed maximum improved:
-
-| Runtime | p50 (ns) | max (ns) |
-|---|---:|---:|
-| Plan 3 | 20,478 | 214,852 |
-| Final | 32,896 | 181,903 |
-
-This one CPUs 0–5 pair is context, not a latency bound. The unpinned main
-matrix also has median regressions; see the
-[Plan 4 measurements](docs/benchmarks/2026-09-plan4.md) for the full results
-and allocation evidence.
-
-Scalar `LoggedValue::set()` and `get()` are wait-free relaxed atomic operations.
-Each scalar is read without tearing, but unrelated scalar writes may land in
-different snapshots. Use `scopedWrite()` for an all-or-nothing group; non-scalar
-accessors take that same mutex automatically.
+guarantee. On the reference desktop (pinned, two sinks, two transaction
+writers) a 1 kHz snapshot of 501 fields and 8 KB takes about 30 µs at the
+median with a maximum near 250 µs; see the
+[Plan 4 measurements](docs/benchmarks/2026-09-plan4.md) and the
+[follow-up A/B](docs/superpowers/reviews/2026-09-11-frontend-refactoring-followups.md)
+for the full results and allocation evidence.
 
 Backpressure is reported at two levels. `droppedSnapshots(sink)` counts queue
 failures for one current channel/sink attachment. `poolExhausted()` counts a

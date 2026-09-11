@@ -50,7 +50,7 @@ TEST(LoggedValue, ScalarSetIsSeenBySnapshotAndDoesNotAllocate)
   channel->addDataSink(sink);
   auto v = channel->createLoggedValue<double>("v", 1.0);
   channel->takeSnapshot();
-  std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  sink->flush();
 
   {
     AllocCounter::Scope scope;
@@ -63,7 +63,7 @@ TEST(LoggedValue, ScalarSetIsSeenBySnapshotAndDoesNotAllocate)
   ASSERT_EQ(v->get(), 999.0);
 
   channel->takeSnapshot();
-  std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  sink->flush();
   const auto snap = sink->latestSnapshot();
   ASSERT_EQ(snap.payload.size(), sizeof(double));
   double stored = 0;
@@ -111,22 +111,54 @@ TEST(LoggedValue, AutoEnableOnSetDirtiesMask)
   auto v = channel->createLoggedValue<double>("v", 1.0);
   v->setEnabled(false);
   channel->takeSnapshot();
-  std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  sink->flush();
   ASSERT_EQ(sink->latestPayloadSize(), 0u);
 
   v->set(2.0);  // auto_enable defaults to true
   channel->takeSnapshot();
-  std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  sink->flush();
   ASSERT_EQ(sink->latestPayloadSize(), sizeof(double));
 }
 
 // The race that existed before this plan: a writer thread hammering set()
 // while the snapshot thread serializes. Must be clean under TSAN, and every
 // snapshot must decode to a value the writer actually wrote.
+namespace
+{
+// Every delivered 8-byte payload must have all bytes equal (see the writer below).
+class TearingSink : public DataSinkBase
+{
+public:
+  ~TearingSink() override { stopThread(); }
+  using DataSinkBase::processQueuedSnapshots;
+  std::atomic<size_t> checked{ 0 };
+  std::atomic<size_t> torn{ 0 };
+  void addChannel(const std::string&, const Schema&) override {}
+  bool storeSnapshot(const Snapshot& snapshot) override
+  {
+    uint64_t seen = 0;
+    if(snapshot.payload.size() != sizeof(seen))
+    {
+      torn++;
+      return false;
+    }
+    std::memcpy(&seen, snapshot.payload.data(), sizeof(seen));
+    for(int b = 1; b < 8; b++)
+      if(((seen >> (8 * b)) & 0xFF) != (seen & 0xFF))
+      {
+        torn++;
+        return false;
+      }
+    checked++;
+    return true;
+  }
+};
+}  // namespace
+
 TEST(LoggedValue, ScalarWriterRacesSnapshotCleanly)
 {
   auto channel = LogChannel::create("chan");
-  auto sink = std::make_shared<DummySink>();
+  auto sink = std::make_shared<TearingSink>();
   channel->addDataSink(sink);
   auto v = channel->createLoggedValue<uint64_t>("v", 0);
   channel->takeSnapshot();
@@ -152,15 +184,9 @@ TEST(LoggedValue, ScalarWriterRacesSnapshotCleanly)
   }
   stop = true;
   writer.join();
-  std::this_thread::sleep_for(std::chrono::milliseconds(20));
-  const auto snap = sink->latestSnapshot();
-  ASSERT_EQ(snap.payload.size(), sizeof(uint64_t));
-  uint64_t seen = 0;
-  std::memcpy(&seen, snap.payload.data(), sizeof(seen));
-  for(int b = 1; b < 8; b++)
-  {
-    ASSERT_EQ((seen >> (8 * b)) & 0xFF, seen & 0xFF) << "torn value " << std::hex << seen;
-  }
+  sink->processQueuedSnapshots();
+  ASSERT_EQ(sink->torn.load(), 0u);
+  ASSERT_GT(sink->checked.load(), 0u);  // a full queue may have dropped some
 }
 
 TEST(LoggedValue, NonScalarStillWorksThroughMutablePtr)
@@ -172,10 +198,13 @@ TEST(LoggedValue, NonScalarStillWorksThroughMutablePtr)
   {
     auto p = v->getMutablePtr();
     p->push_back(3.0);
+    bool lockable = true;
+    std::thread([&] { lockable = channel->writeMutex().try_lock(); }).join();
+    ASSERT_FALSE(lockable);  // held by p
   }
   ASSERT_EQ(v->get().size(), 3u);
   channel->takeSnapshot();
-  std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  sink->flush();
   ASSERT_EQ(sink->latestPayloadSize(), sizeof(uint32_t) + 3 * sizeof(double));
 }
 

@@ -35,6 +35,27 @@ void* countedAllocOrThrow(std::size_t size)
   return p;
 }
 
+void* countedAlignedMalloc(std::size_t size, std::align_val_t alignment) noexcept
+{
+  if(AllocCounter::enabled)
+  {
+    ++AllocCounter::allocations;
+  }
+  const auto align = static_cast<std::size_t>(alignment);
+  const auto rounded = (size + align - 1) / align * align;  // aligned_alloc precondition
+  return std::aligned_alloc(align, rounded == 0 ? align : rounded);
+}
+
+void* countedAlignedAllocOrThrow(std::size_t size, std::align_val_t alignment)
+{
+  void* p = countedAlignedMalloc(size, alignment);
+  if(p == nullptr)
+  {
+    throw std::bad_alloc();
+  }
+  return p;
+}
+
 void countedFree(void* p) noexcept
 {
   if(p != nullptr && AllocCounter::enabled)
@@ -49,6 +70,16 @@ void* operator new(std::size_t size) { return countedAllocOrThrow(size); }
 void* operator new[](std::size_t size) { return countedAllocOrThrow(size); }
 void* operator new(std::size_t size, const std::nothrow_t&) noexcept { return countedMalloc(size); }
 void* operator new[](std::size_t size, const std::nothrow_t&) noexcept { return countedMalloc(size); }
+
+void* operator new(std::size_t size, std::align_val_t al) { return countedAlignedAllocOrThrow(size, al); }
+void* operator new[](std::size_t size, std::align_val_t al) { return countedAlignedAllocOrThrow(size, al); }
+void* operator new(std::size_t size, std::align_val_t al, const std::nothrow_t&) noexcept { return countedAlignedMalloc(size, al); }
+void* operator new[](std::size_t size, std::align_val_t al, const std::nothrow_t&) noexcept { return countedAlignedMalloc(size, al); }
+
+void operator delete(void* p, std::align_val_t) noexcept { countedFree(p); }
+void operator delete[](void* p, std::align_val_t) noexcept { countedFree(p); }
+void operator delete(void* p, std::size_t, std::align_val_t) noexcept { countedFree(p); }
+void operator delete[](void* p, std::size_t, std::align_val_t) noexcept { countedFree(p); }
 
 void operator delete(void* p) noexcept { countedFree(p); }
 void operator delete[](void* p) noexcept { countedFree(p); }

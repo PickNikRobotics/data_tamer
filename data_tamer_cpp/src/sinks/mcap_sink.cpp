@@ -94,7 +94,7 @@ void MCAPSink::addChannel(std::string const& channel_name, Schema const& schema)
   std::scoped_lock lk(_p->mutex);
   _p->schemas[channel_name] = schema;
   auto it = _p->hash_to_channel_id.find(schema.hash);
-  if(it != _p->hash_to_channel_id.end())
+  if(it != _p->hash_to_channel_id.end() || !_p->writer)  // stopped: re-added on restart
   {
     return;
   }
@@ -173,8 +173,11 @@ void MCAPSink::stopRecording()
 {
   std::scoped_lock lk(_p->mutex);
   _p->forced_stop_recording = true;
-  _p->writer->close();
-  _p->writer.reset();
+  if(_p->writer)  // idempotent: finishQueueAndStop() may follow stopRecording()
+  {
+    _p->writer->close();
+    _p->writer.reset();
+  }
 }
 
 void MCAPSink::finishQueueAndStop()

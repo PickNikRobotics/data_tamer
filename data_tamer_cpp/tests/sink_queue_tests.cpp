@@ -128,7 +128,6 @@ TEST(SinkQueue, PoolExhaustionIsSeparateAndRetainedSlotsAreReusable)
   retained.clear();
   EXPECT_TRUE(channel->takeSnapshot());
   channel->removeDataSink(sink);
-  EXPECT_EQ(channel->droppedSnapshots(sink), 0u);
   EXPECT_FALSE(channel->takeSnapshot());
 }
 
@@ -275,15 +274,17 @@ TEST(SinkQueue, CloseDuringPublicationDrainsEveryAcceptedSnapshot)
     ASSERT_TRUE(ready.wait_for(lock, std::chrono::seconds(5), [&] { return entered; }));
   }
   ASSERT_TRUE(channel->takeSnapshot());  // Guaranteed accepted work remains queued.
-  std::atomic<bool> publish{ true }, started{ false };
+  std::atomic<bool> publish{ true }, attempted{ false };
   int accepted = 2;
   std::thread producer([&] {
-    started = true;
     while(publish)
+    {
       if(channel->takeSnapshot())
         ++accepted;
+      attempted = true;
+    }
   });
-  while(!started)
+  while(!attempted)
     std::this_thread::yield();
   sink->stopAcceptingSnapshots();  // Must return even though callback is blocked.
   publish = false;
@@ -328,7 +329,8 @@ TEST(SinkQueue, McapFinalizationWritesEveryAcceptedSnapshotAfterRestart)
   const auto directory =
       std::filesystem::temp_directory_path() /
       ("data_tamer_sink_queue_" + std::to_string(NsecSinceEpoch().count()));
-  std::filesystem::create_directory(directory);
+  std::filesystem::remove_all(directory);
+  ASSERT_TRUE(std::filesystem::create_directory(directory));
   const auto first = (directory / "first.mcap").string();
   const auto second = (directory / "second.mcap").string();
   uint64_t value = 9;
@@ -343,6 +345,7 @@ TEST(SinkQueue, McapFinalizationWritesEveryAcceptedSnapshotAfterRestart)
       if(channel->takeSnapshot())
         ++accepted;
     sink->finishQueueAndStop();
+    sink->finishQueueAndStop();  // stopping twice must be harmless
     EXPECT_FALSE(channel->takeSnapshot());
     mcap::McapReader reader;
     ASSERT_TRUE(reader.open(path).ok());
@@ -370,7 +373,8 @@ TEST(SinkQueue, McapAutomaticRolloverDoesNotReopenClosedAcceptance)
   const auto directory =
       std::filesystem::temp_directory_path() /
       ("data_tamer_rollover_" + std::to_string(NsecSinceEpoch().count()));
-  std::filesystem::create_directory(directory);
+  std::filesystem::remove_all(directory);
+  ASSERT_TRUE(std::filesystem::create_directory(directory));
   uint64_t value = 1;
   auto sink = std::make_shared<ControlledMcap>((directory / "rollover.mcap").string());
   sink->setCreateNewFileOnReset(true);

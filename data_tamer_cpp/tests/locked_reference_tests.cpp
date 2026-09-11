@@ -84,6 +84,51 @@ TEST(LockedReference, AtomicConstProxyHoldsACopy)
   ASSERT_TRUE(p);
 }
 
+TEST(LockedReference, MovedLockingPtrsUnlockOnlyThroughTheirFinalOwner)
+{
+  WriteMutex m;
+  int value = 1;
+  {
+    MutablePtr<int> a(&value, &m);
+    MutablePtr<int> b(std::move(a));
+    ASSERT_FALSE(a);
+    ASSERT_TRUE(b);
+    MutablePtr<int> c(nullptr, nullptr);
+    c = std::move(b);
+    ASSERT_FALSE(b);
+    ASSERT_FALSE(canLockFromAnotherThread(m));  // still held, by c
+  }
+  ASSERT_TRUE(canLockFromAnotherThread(m));
+  {
+    ConstPtr<int> a(&value, &m);
+    ConstPtr<int> b(std::move(a));
+    ASSERT_FALSE(a);
+    ASSERT_FALSE(canLockFromAnotherThread(m));
+  }
+  ASSERT_TRUE(canLockFromAnotherThread(m));
+}
+
+TEST(LockedReference, MovedAtomicProxyCommitsExactlyOnce)
+{
+  std::atomic<int> first{ 1 };
+  std::atomic<int> second{ 10 };
+  {
+    AtomicProxy<int> a(&first);
+    *a = 2;
+    AtomicProxy<int> b(std::move(a));
+    ASSERT_FALSE(a);
+    ASSERT_EQ(first.load(), 1);  // nothing committed yet
+    AtomicProxy<int> c(&second);
+    *c = 20;
+    c = std::move(b);  // commits 20 to second, takes over first
+    ASSERT_FALSE(b);
+    ASSERT_EQ(second.load(), 20);
+    ASSERT_EQ(first.load(), 1);
+  }
+  ASSERT_EQ(first.load(), 2);
+  ASSERT_EQ(second.load(), 20);
+}
+
 TEST(LockedReference, NullProxiesAreFalse)
 {
   AtomicProxy<int> a(nullptr);
