@@ -9,8 +9,8 @@ jobs:
       matrix:
         env:
           - {ROS_DISTRO: humble, ROS_REPO: main}
-          - {ROS_DISTRO: iron, ROS_REPO: main}
           - {ROS_DISTRO: jazzy, ROS_REPO: main}
+          - {ROS_DISTRO: lyrical, ROS_REPO: main}
           # industrial_ci defaults rolling to Ubuntu 26.04 (resolute), for which
           # packages.ros.org publishes no ros-rolling-* binaries yet; pin to noble.
           - {ROS_DISTRO: rolling, ROS_REPO: main, OS_CODE_NAME: noble}
