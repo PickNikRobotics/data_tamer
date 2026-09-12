@@ -1,0 +1,14 @@
+name: ros2 lyrical
+
+on: [push, pull_request]
+
+jobs:
+  industrial_ci:
+    name: ros2 lyrical
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # industrial_ci no longer tags releases (latest tag 0.10.0 is from 2020); pin the
+      # commit so its distro defaults change when we choose. master @ 2026-06-01.
+      - uses: ros-industrial/industrial_ci@125164b9f1883cdf1858897a7146d1bebf2be5c6
+        env: {ROS_DISTRO: lyrical, ROS_REPO: main}
