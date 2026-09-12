@@ -357,10 +357,25 @@ TEST(DataTamerParser, RejectsMalformedInput)
                      { snapshot.payload.data(), snapshot.payload.size() } };
   ASSERT_TRUE(ParseSnapshot(schema, view, count_values));
 
-  // truncated payload: the last double is cut in half
+  // truncated payload: the last double is cut in half; the checked read reports it
   SnapshotView truncated = view;
   truncated.payload.size -= 4;
-  EXPECT_THROW(ParseSnapshot(schema, truncated, count_values), std::runtime_error);
+  try
+  {
+    ParseSnapshot(schema, truncated, count_values);
+    FAIL() << "truncated payload accepted";
+  }
+  catch(const std::runtime_error& e)
+  {
+    EXPECT_NE(std::string(e.what()).find("truncated"), std::string::npos) << e.what();
+  }
+  static_assert(sizeof(SnapshotView::schema_hash) == 8, "schema hash must be 64-bit "
+                                                        "everywhere");
+  static_assert(sizeof(DataTamer::Snapshot::schema_hash) == 8, "schema hash must be "
+                                                               "64-bit everywhere");
+  EXPECT_FALSE(schema.fields[0] !=
+               schema.fields[0]);  // operator!= must be defined (link check)
+  EXPECT_TRUE(schema.fields[0] != schema.fields[1]);
 
   // mask too short for the schema
   SnapshotView short_mask = view;
