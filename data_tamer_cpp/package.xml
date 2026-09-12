@@ -2,13 +2,14 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>data_tamer_cpp</name>
-  <version>1.0.3</version>
+  <version>1.0.4</version>
   <description>
   DataTamer data logging library
   </description>
 
   <maintainer email="davide.faconti@gmail.com">Davide Faconti</maintainer>
   <maintainer email="henrygerardmoore@gmail.com">Henry Moore</maintainer>
+  <maintainer email="nathanbrooks@picknik.ai">Nathan Brooks</maintainer>
 
   <license>MIT</license>
 
@@ -19,6 +20,8 @@
   <depend>rclcpp</depend>
   <depend>rclcpp_lifecycle</depend>
   <depend>mcap_vendor</depend>
+  <depend>lz4</depend>
+  <depend>libzstd-dev</depend>
   <depend>data_tamer_msgs</depend>
   <depend>ament_cmake_gtest</depend>
   <depend>gtest_vendor</depend>

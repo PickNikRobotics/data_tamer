@@ -163,6 +163,16 @@ public:
   void addDataSink(std::shared_ptr<DataSinkBase> sink);
 
   /**
+   * @brief removeDataSink remove a sink, i.e. a class collecting our snapshots.
+   */
+  void removeDataSink(std::shared_ptr<DataSinkBase> sink);
+
+  /**
+  * @brief getNumberOfSinks returns the number of registered sinks.
+  */
+  size_t getNumberOfSinks() const;
+
+  /**
    * @brief takeSnapshot copies the current value of all your registered values
    *  and send an instance of Snapshot to all your Sinks.
    *

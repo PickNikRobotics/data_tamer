@@ -5,33 +5,26 @@
 #include "data_tamer_msgs/msg/schemas.hpp"
 #include "data_tamer_msgs/msg/snapshot.hpp"
 #include <unordered_map>
+#include <type_traits>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
+#include <rclcpp/node_interfaces/node_interfaces.hpp>
+#include <rclcpp/node_interfaces/node_topics_interface.hpp>
 
 namespace DataTamer
 {
 
+using PublisherNodeInterfaces =
+    rclcpp::node_interfaces::NodeInterfaces<rclcpp::node_interfaces::NodeTopicsInterface>;
+
 class ROS2PublisherSink : public DataSinkBase
 {
 public:
-  ROS2PublisherSink(std::shared_ptr<rclcpp::Node> node, const std::string& topic_prefix);
-
-  ROS2PublisherSink(std::shared_ptr<rclcpp_lifecycle::LifecycleNode> node,
-                    const std::string& topic_prefix);
-
   template <typename NodeT>
-  void create_publishers(NodeT& node, const std::string& topic_prefix)
+  ROS2PublisherSink(NodeT&& nodelike, const std::string& topic_prefix)
+    : node_interface_(normalize_node(nodelike))
   {
-    rclcpp::QoS schemas_qos{ rclcpp::KeepAll() };
-    schemas_qos.reliable();
-    schemas_qos.transient_local();  // latch
-
-    const rclcpp::QoS data_qos{ rclcpp::KeepAll() };
-
-    schema_publisher_ = node->template create_publisher<data_tamer_msgs::msg::Schemas>(
-        topic_prefix + "/schemas", schemas_qos);
-    data_publisher_ = node->template create_publisher<data_tamer_msgs::msg::Snapshot>(
-        topic_prefix + "/data", data_qos);
+    create_publishers(topic_prefix);
   }
 
   void addChannel(const std::string& name, const Schema& schema) override;
@@ -39,6 +32,52 @@ public:
   bool storeSnapshot(const Snapshot& snapshot) override;
 
 private:
+  template <typename NodeT>
+  static PublisherNodeInterfaces normalize_node(NodeT&& nodelike)
+  {
+    using D = std::decay_t<NodeT>;
+
+    // use a friendlier compile error than the one that would otherwise come out
+    static_assert(
+        std::is_same_v<D, PublisherNodeInterfaces> ||
+            std::is_same_v<D, std::shared_ptr<rclcpp::Node>> ||
+            std::is_same_v<D, std::shared_ptr<rclcpp_lifecycle::LifecycleNode>> ||
+            std::is_constructible_v<PublisherNodeInterfaces, D&>,
+        "ROS2PublisherSink: unsupported node-like type passed to "
+        "`ROS2PublisherSink(NodeT&& nodelike, const std::string& topic_prefix)`. Pass a "
+        "rclcpp::Node, "
+        "rclcpp_lifecycle::LifecycleNode, a shared_ptr to either, or a "
+        "PublisherNodeInterfaces.");
+
+    if constexpr(std::is_same_v<D, PublisherNodeInterfaces>)
+    {
+      return nodelike;
+    }
+    else if constexpr(std::is_same_v<D, std::shared_ptr<rclcpp::Node>> ||
+                      std::is_same_v<D, std::shared_ptr<rclcpp_lifecycle::LifecycleNode>>)
+    {
+      return PublisherNodeInterfaces(*nodelike);
+    }
+    else
+    {
+      return PublisherNodeInterfaces(nodelike);
+    }
+  }
+
+  void create_publishers(const std::string& topic_prefix)
+  {
+    rclcpp::QoS schemas_qos{ rclcpp::KeepAll() };
+    schemas_qos.reliable();
+    schemas_qos.transient_local();  // latch
+
+    const rclcpp::QoS data_qos{ rclcpp::KeepAll() };
+
+    schema_publisher_ = rclcpp::create_publisher<data_tamer_msgs::msg::Schemas>(
+        node_interface_, topic_prefix + "/schemas", schemas_qos);
+    data_publisher_ = rclcpp::create_publisher<data_tamer_msgs::msg::Snapshot>(
+        node_interface_, topic_prefix + "/data", data_qos);
+  }
+
   std::unordered_map<std::string, Schema> schemas_;
   Mutex schema_mutex_;
 
@@ -47,6 +86,9 @@ private:
 
   bool schema_changed_ = true;
   data_tamer_msgs::msg::Snapshot data_msg_;
+
+  // ---- Stored node façade ----
+  PublisherNodeInterfaces node_interface_;
 };
 
 }  // namespace DataTamer

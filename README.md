@@ -1,7 +1,10 @@
 ![Data Tamer](data_tamer_logo.png)
 
 [![cmake Ubuntu](https://github.com/facontidavide/data_tamer/actions/workflows/cmake_ubuntu.yml/badge.svg)](https://github.com/facontidavide/data_tamer/actions/workflows/cmake_ubuntu.yml)
-[![ros2](https://github.com/PickNikRobotics/data_tamer/actions/workflows/ros2.yml/badge.svg)](https://github.com/PickNikRobotics/data_tamer/actions/workflows/ros2.yml)
+[![ros2 humble](https://github.com/PickNikRobotics/data_tamer/actions/workflows/ros2-humble.yml/badge.svg)](https://github.com/PickNikRobotics/data_tamer/actions/workflows/ros2-humble.yml)
+[![ros2 jazzy](https://github.com/PickNikRobotics/data_tamer/actions/workflows/ros2-jazzy.yml/badge.svg)](https://github.com/PickNikRobotics/data_tamer/actions/workflows/ros2-jazzy.yml)
+[![ros2 lyrical](https://github.com/PickNikRobotics/data_tamer/actions/workflows/ros2-lyrical.yml/badge.svg)](https://github.com/PickNikRobotics/data_tamer/actions/workflows/ros2-lyrical.yml)
+[![ros2 rolling](https://github.com/PickNikRobotics/data_tamer/actions/workflows/ros2-rolling.yml/badge.svg)](https://github.com/PickNikRobotics/data_tamer/actions/workflows/ros2-rolling.yml)
 [![codecov](https://codecov.io/gh/facontidavide/data_tamer/graph/badge.svg?token=D0wtsntWds)](https://codecov.io/gh/facontidavide/data_tamer)
 
 **DataTamer** is a library to log/trace numerical variables over time and
@@ -174,8 +177,11 @@ cmake --build build/Debug --parallel
 
 # How to deserialize data recorded with DataTamer
 
-I will write more extensively about the serialization format used by DataTamer, but for the time being I
-created a single header file without external dependencies that you can just copy into your project:
-[data_tamer_parser.hpp](data_tamer_cpp/include/data_tamer_parser/data_tamer_parser.hpp)
+The wire format is specified in [docs/wire_format.md](docs/wire_format.md), with golden
+byte vectors under `docs/wire_format/vectors/` that the test suite checks on every run.
+Two reference decoders implement it:
 
-You can see how it is used in this example: [mcap_reader](data_tamer_cpp/examples/mcap_reader.cpp)
+- C++, a single header without external dependencies that you can copy into your project:
+  [data_tamer_parser.hpp](data_tamer_cpp/include/data_tamer_parser/data_tamer_parser.hpp),
+  used in [mcap_reader](data_tamer_cpp/examples/mcap_reader.cpp).
+- Python, standard library only: [python/data_tamer_parser.py](python/data_tamer_parser.py).
