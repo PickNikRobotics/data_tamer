@@ -11,10 +11,10 @@ jobs:
           - {ROS_DISTRO: humble, ROS_REPO: main}
           - {ROS_DISTRO: iron, ROS_REPO: main}
           - {ROS_DISTRO: jazzy, ROS_REPO: main}
-          - {ROS_DISTRO: rolling, ROS_REPO: main}
+          # industrial_ci defaults rolling to Ubuntu 26.04 (resolute), for which
+          # packages.ros.org publishes no ros-rolling-* binaries yet; pin to noble.
+          - {ROS_DISTRO: rolling, ROS_REPO: main, OS_CODE_NAME: noble}
     runs-on: ubuntu-latest
-    # rolling tracks a Ubuntu release that packages.ros.org does not serve yet
-    continue-on-error: ${{ matrix.env.ROS_DISTRO == 'rolling' }}
     steps:
       - uses: actions/checkout@v4
       - uses: 'ros-industrial/industrial_ci@master'
