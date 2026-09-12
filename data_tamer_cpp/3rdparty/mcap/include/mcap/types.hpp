@@ -1,7 +1,5 @@
 #pragma once
 
-#include <cstdint>
-
 #include "errors.hpp"
 #include "visibility.hpp"
 #include <cstddef>

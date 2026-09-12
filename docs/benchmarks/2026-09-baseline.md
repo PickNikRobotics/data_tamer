@@ -4,7 +4,7 @@ Recorded on the unmodified library at commit `a851887`, built with benchmark
 and allocation-hook sources copied in from `data_tamer_cpp` commit `a832e2d`
 (HEAD of `lockfree-frontend` at the time of this fix wave — items 1 and 2 of
 the final review; item 3, "make `AllocCounter` see `malloc`", is BLOCKED, see
-`.superpowers/sdd/2026-09-10-lockfree-frontend-plan-1/final-fix-report.md`).
+the plan's final fix report (not kept in the repository)).
 Because item 3 did not land, `tests/alloc_counter.cpp` is still the original
 `operator new`/`operator delete` interposition hook, **not** a malloc-level
 one: `allocs/op` below counts C++ allocations only (as in the previous
@@ -33,9 +33,9 @@ under load average 4.1 with CPU scaling on and no core pinning):
   `***WARNING*** CPU scaling is enabled` benchmark message is expected.
 
 How to reproduce: see the commands in
-`docs/superpowers/plans/2026-09-10-lockfree-frontend-plan-1.md`, Task 5, Step 5,
+the implementation plan, Task 5, Step 5,
 adjusted per item 4 of
-`.superpowers/sdd/2026-09-10-lockfree-frontend-plan-1/final-fix-report.md`
+the plan's final fix report (not kept in the repository)
 (worktree at `a851887`, benchmark+hook sources copied from commit `a832e2d`,
 pinned to CPUs 0-5, `--benchmark_repetitions=5`).
 

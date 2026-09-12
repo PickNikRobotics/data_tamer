@@ -58,63 +58,30 @@ object. If you prefer a safer RAII interface, use `DataTamer::createLoggedValue`
 
 ## Real-time snapshot contract
 
-Exactly one thread per channel may call `takeSnapshot()`. Its first attempt
-freezes the schema. Successful setup registers it with attached sinks, creates
-the snapshot pool and reserves every slot; setup may lock, allocate and throw,
-even when no sink is attached. Configure it beforehand when the defaults are
-unsuitable:
+- One thread per channel calls `takeSnapshot()`. The first call freezes the schema and
+  pre-allocates a pool of 64 snapshots; after that, snapshots do not allocate as long as
+  payloads fit their slots. Tune beforehand with `setPoolCapacity()`, `setPayloadCapacity()`
+  and `setStrictMode()` (drop oversize snapshots instead of growing).
+- Scalar `LoggedValue::set()` / `get()` are wait-free atomics. To capture several values
+  together, group the writes:
 
 ```cpp
-channel->setPoolCapacity(64);       // retained or in-flight snapshots
-channel->setPayloadCapacity(16 * 1024); // reservation hint, not a byte ceiling
-channel->setStrictMode(true);       // drop instead of growing a slot
-channel->takeSnapshot();            // freezes the schema and capacities
+{
+  auto tx = channel->scopedWrite();
+  logged_real->set(3.2f);
+  value_int = 43;  // raw registered values share the same mutex
+}
 ```
 
-The default pool has 64 slots. Each slot initially reserves at least
-`max(payload_hint, 2 * initial_payload_size, 256)` bytes, so the hint is a
-minimum. The vector's actual capacity decides whether a later payload fits.
-With strict mode disabled, an acquired slot grows to twice the required size
-and increments `payloadReallocations()`; the other slots grow only when used.
-With strict mode enabled, a slot that is still too small is released, the
-snapshot is dropped, and `droppedOversize()` increments; later input cannot grow
-that slot. Capacity already gained by a slot is retained across strict-mode
-changes. Strict mode therefore fixes per-slot payload capacity. Warming alone
-does not bound non-strict growth: a later larger payload can grow the acquired
-slot again. In non-strict mode, byte usage is bounded only when payload sizes
-have a known upper bound that every slot can hold.
+- Non-scalar values lock automatically. Keep transactions and pointer guards short: the
+  snapshot thread waits on them.
+- Backpressure counters: `poolExhausted()`, `droppedSnapshots(sink)`, `payloadReallocations()`,
+  `droppedOversize()`, or all at once with `stats()`.
+- Registering, unregistering and changing sinks are safe while logging, but call them outside
+  `scopedWrite()` and sink callbacks.
 
-After successful setup, `takeSnapshot()` allocates no library-owned frontend
-storage while payloads fit their slots. It serializes directly into one pool
-slot and publishes references to at most eight attached sinks. It may wait for
-the channel `WriteMutex`; keep transactions, non-scalar proxy guards and custom
-serializers short. User serializers may allocate or throw, and the allocator,
-OS scheduler and serializer work prevent a universal no-throw or hard-deadline
-guarantee. On the reference desktop (pinned, two sinks, two transaction
-writers) a 1 kHz snapshot of 501 fields and 8 KB takes about 30 µs at the
-median with a maximum near 250 µs; see the
-[Plan 4 measurements](docs/benchmarks/2026-09-plan4.md) and the
-[follow-up A/B](docs/superpowers/reviews/2026-09-11-frontend-refactoring-followups.md)
-for the full results and allocation evidence.
-
-Backpressure is reported at two levels. `droppedSnapshots(sink)` counts queue
-failures for one current channel/sink attachment. `poolExhausted()` counts a
-global channel failure before serialization, so every sink misses that attempt;
-retaining callback snapshots can cause this starvation. `stats()` returns a
-plain `uint64_t` point-in-time copy of the write-lock, pool, growth and oversize
-counters; the counters it reads are relaxed atomics.
-`droppedSnapshots(sink)` instead takes the channel control mutex, and
-`DataSinkBase::storeErrors()` counts exceptions thrown later by sink callbacks.
-Sink queue capacities are block-rounded minima (default 1024), not exact limits.
-
-`setEnabled()` remains lock-free during logging. Registration, unregistration,
-sink changes, capacity setup and channel destruction are control operations:
-call them outside `scopedWrite()`/pointer guards and serializer callbacks; they
-may allocate or wait for an active snapshot. Calls that use the channel object
-still need ordinary external lifetime synchronization. Re-registering a
-previously removed name with a compatible type reuses its schema slot even
-after freeze. A `RegistrationID` identifies that slot, not a generation, so an
-older same-name ID also refers to the replacement.
+Details in [CHANGELOG.rst](data_tamer_cpp/CHANGELOG.rst); measurements in
+[docs/benchmarks](docs/benchmarks/2026-09-12-main-vs-lockfree-frontend.md).
 
 # Examples
 
