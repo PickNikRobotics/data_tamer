@@ -20,6 +20,8 @@
   <depend>rclcpp</depend>
   <depend>rclcpp_lifecycle</depend>
   <depend>mcap_vendor</depend>
+  <depend>lz4</depend>
+  <depend>libzstd-dev</depend>
   <depend>data_tamer_msgs</depend>
   <depend>ament_cmake_gtest</depend>
   <depend>gtest_vendor</depend>
