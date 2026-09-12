@@ -43,7 +43,7 @@ struct MCAPSink::Pimpl
   std::unique_ptr<mcap::McapWriter> writer;
 
   std::unordered_map<uint64_t, uint16_t> hash_to_channel_id;
-  std::unordered_map<std::string, Schema> schemas;
+  std::unordered_map<uint64_t, Schema> schemas;
 
   bool create_file_on_reset = false;
   std::string original_filepath;
@@ -57,9 +57,8 @@ struct MCAPSink::Pimpl
   std::recursive_mutex mutex;
 };
 
-MCAPSink::MCAPSink(const std::string& filepath, bool do_compression,
-                   size_t queue_capacity)
-  : DataSinkBase(queue_capacity), _p(std::make_unique<Pimpl>())
+MCAPSink::MCAPSink(const std::string& filepath, bool do_compression)
+  : _p(std::make_unique<Pimpl>())
 {
   _p->filepath = filepath;
   _p->compression = do_compression;
@@ -85,16 +84,13 @@ void DataTamer::MCAPSink::openFile(std::string const& filepath)
   _p->hash_to_channel_id.clear();
 }
 
-MCAPSink::~MCAPSink()
-{
-  stopThread();
-  std::scoped_lock lk(_p->mutex);
-}
+MCAPSink::~MCAPSink() = default;
 
-void MCAPSink::addChannel(std::string const& channel_name, Schema const& schema)
+void MCAPSink::onSchema(Schema const& schema)
 {
   std::scoped_lock lk(_p->mutex);
-  _p->schemas[channel_name] = schema;
+  _p->schemas[schema.hash] = schema;
+  const auto& channel_name = schema.channel_name;
   auto it = _p->hash_to_channel_id.find(schema.hash);
   if(it != _p->hash_to_channel_id.end() || !_p->writer)  // stopped: re-added on restart
   {
@@ -117,13 +113,14 @@ void MCAPSink::addChannel(std::string const& channel_name, Schema const& schema)
   _p->hash_to_channel_id[schema.hash] = publisher.id;
 }
 
-bool MCAPSink::storeSnapshot(const Snapshot& snapshot)
+void MCAPSink::onSnapshot(const SnapshotRef& ref)
 {
   std::scoped_lock lk(_p->mutex);
   if(_p->forced_stop_recording)
   {
-    return false;
+    return;
   }
+  const Snapshot& snapshot = *ref;
   // the payload must contain both the ActiveMask and the other data
   auto& merged_payload = _p->merged_payload;
   const auto size_mask = snapshot.active_mask.size();
@@ -143,7 +140,11 @@ bool MCAPSink::storeSnapshot(const Snapshot& snapshot)
   msg.publishTime = msg.logTime;
   msg.data = reinterpret_cast<std::byte const*>(merged_payload.data());  // NOLINT
   msg.dataSize = merged_payload.size();
-  const bool written = _p->writer->write(msg).ok();
+  const auto status = _p->writer->write(msg);
+  if(!status.ok())
+  {
+    throw std::runtime_error("MCAP write failed: " + status.message);
+  }
 
   // If reset_time is exceeded, we want to overwrite the current file.
   // Better than filling the disk, if you forgot to stop the application.
@@ -158,12 +159,11 @@ bool MCAPSink::storeSnapshot(const Snapshot& snapshot)
     }
     restartRecordingImpl(_p->filepath, _p->compression, false);
   }
-  return written;
 }
 
 void MCAPSink::setMaxTimeBeforeReset(std::chrono::seconds reset_time)
 {
-  std::scoped_lock lk(_p->mutex);  // read by the worker in storeSnapshot
+  std::scoped_lock lk(_p->mutex);  // read by the worker in onSnapshot
   _p->reset_time = reset_time;
 }
 
@@ -177,23 +177,11 @@ void MCAPSink::stopRecording()
 {
   std::scoped_lock lk(_p->mutex);
   _p->forced_stop_recording = true;
-  if(_p->writer)  // idempotent: finishQueueAndStop() may follow stopRecording()
+  if(_p->writer)  // idempotent
   {
     _p->writer->close();
     _p->writer.reset();
   }
-}
-
-void MCAPSink::finishQueueAndStop()
-{
-  // stop accepting new snapshots
-  stopAcceptingSnapshots();
-
-  // finish any that are queued
-  processQueuedSnapshots();
-
-  // now stop the recording as normal
-  stopRecording();
 }
 
 void MCAPSink::restartRecording(const std::string& filepath, bool do_compression)
@@ -216,15 +204,14 @@ void MCAPSink::restartRecordingImpl(const std::string& filepath, bool do_compres
   openFile(_p->filepath);
 
   // rebuild the channels
-  for(auto const& [name, schema] : _p->schemas)
+  for(auto const& [hash, schema] : _p->schemas)
   {
-    addChannel(name, schema);
+    onSchema(schema);
   }
 
   if(new_file)
   {
     _p->forced_stop_recording = false;
-    startAcceptingSnapshots();
   }
 }
 
