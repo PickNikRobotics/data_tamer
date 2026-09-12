@@ -34,7 +34,8 @@ TEST(SerializeMe, NumbersRoundTripAtUnalignedOffsets)
   const double d = 3.25;
   const int32_t i = -42;
   const uint64_t u = 0x0102030405060708ULL;
-  std::vector<uint8_t> storage(BufferSize(tag) + BufferSize(d) + BufferSize(i) + BufferSize(u));
+  std::vector<uint8_t> storage(BufferSize(tag) + BufferSize(d) + BufferSize(i) +
+                               BufferSize(u));
   SpanBytes buffer(storage);
   SerializeIntoBuffer(buffer, tag);
   SerializeIntoBuffer(buffer, d);
