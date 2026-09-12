@@ -17,7 +17,7 @@
 namespace DataTamerParser
 {
 
-constexpr int SCHEMA_VERSION = 4;
+constexpr int SCHEMA_VERSION = 5;
 
 enum class BasicType : uint8_t
 {
@@ -184,26 +184,29 @@ inline bool GetBit(BufferSpan mask, size_t index)
   return 0 != (byte & uint8_t(1 << (index % 8)));
 }
 
-[[nodiscard]] inline uint64_t AddFieldToHash(const TypeField& field, uint64_t hash)
+/// FNV-1a 64 of the schema text without its "### hash:" line (wire format, section 5).
+[[nodiscard]] inline uint64_t SchemaTextHash(const std::string& text)
 {
-  // https://stackoverflow.com/questions/2590677/how-do-i-combine-hash-values-in-c0x
-  const std::hash<std::string> str_hasher;
-  const std::hash<uint8_t> type_hasher;
-  const std::hash<bool> bool_hasher;
-  const std::hash<uint32_t> uint_hasher;
-
-  auto combine = [&hash](const auto& hasher, const auto& val) {
-    hash ^= hasher(val) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
+  uint64_t hash = 0xcbf29ce484222325ULL;
+  auto feed = [&hash](const char* begin, const char* end) {
+    for(; begin != end; ++begin)
+    {
+      hash ^= static_cast<uint8_t>(*begin);
+      hash *= 0x100000001b3ULL;
+    }
   };
-
-  combine(str_hasher, field.field_name);
-  combine(type_hasher, static_cast<uint8_t>(field.type));
-  if(field.type == BasicType::OTHER)
+  const auto hash_line = text.find("### hash:");
+  if(hash_line == std::string::npos)
   {
-    combine(str_hasher, field.type_name);
+    feed(text.data(), text.data() + text.size());
+    return hash;
   }
-  combine(bool_hasher, field.is_vector);
-  combine(uint_hasher, field.array_size);
+  const auto line_end = text.find('\n', hash_line);
+  feed(text.data(), text.data() + hash_line);
+  if(line_end != std::string::npos)
+  {
+    feed(text.data() + line_end + 1, text.data() + text.size());
+  }
   return hash;
 }
 
@@ -277,8 +280,10 @@ inline Schema BuilSchemaFromText(const std::string& txt, bool check_hash = false
 
     if(str_left == "### version:")
     {
-      // check compatibility
-      if(std::stoi(str_right) != SCHEMA_VERSION)
+      // Version 4 differs only in how the hash was computed; its declared value
+      // is still the one to match snapshots against.
+      const int version = std::stoi(str_right);
+      if(version != SCHEMA_VERSION && version != 4)
       {
         throw std::runtime_error("Wrong SCHEMA_VERSION");
       }
@@ -295,7 +300,6 @@ inline Schema BuilSchemaFromText(const std::string& txt, bool check_hash = false
     {
       // check compatibility
       schema.channel_name = str_right;
-      schema.hash = std::hash<std::string>()(schema.channel_name);
       continue;
     }
 
@@ -351,24 +355,17 @@ inline Schema BuilSchemaFromText(const std::string& txt, bool check_hash = false
     field.field_name = *str_name;
     trimString(field.field_name);
 
-    // update the hash
-    if(field_vector == &schema.fields)
-    {
-      schema.hash = AddFieldToHash(field, schema.hash);
-    }
-
     field_vector->push_back(field);
   }
-  if(check_hash && declared_schema != 0 && declared_schema != schema.hash)
+  // Snapshots carry the writer's declared hash: that is what to match against.
+  // check_hash verifies it against the defined recomputation (version 5 texts only;
+  // version 4 used an implementation-defined std::hash and cannot be verified).
+  const uint64_t computed = SchemaTextHash(txt);
+  if(check_hash && declared_schema != 0 && declared_schema != computed)
   {
     throw std::runtime_error("Error in hash calculation");
   }
-  // The writer's hash is std::hash based, so it is only reproducible with the same
-  // standard library. Snapshots carry the writer's value: match against that.
-  if(declared_schema != 0)
-  {
-    schema.hash = declared_schema;
-  }
+  schema.hash = declared_schema != 0 ? declared_schema : computed;
   return schema;
 }
 
