@@ -7,6 +7,9 @@
 #include "data_tamer/custom_types.hpp"
 #include "data_tamer/contrib/SerializeMe.hpp"
 
+#if DATA_TAMER_EIGEN_SUPPORT
+#include <Eigen/Dense>
+#endif
 namespace DataTamer
 {
 using SerializeMe::has_TypeDefinition;
@@ -23,12 +26,14 @@ public:
   template <typename T, bool = true>
   ValuePtr(const T* pointer, CustomSerializer::Ptr type_info = {});
 
-  template <template <class, class> class Container, class T, class... TArgs,
-            std::enable_if_t<!has_TypeDefinition<Container<T, TArgs...>>::value, bool> = true>
+  template <
+      template <class, class> class Container, class T, class... TArgs,
+      std::enable_if_t<!has_TypeDefinition<Container<T, TArgs...>>::value, bool> = true>
   ValuePtr(const Container<T, TArgs...>* vect);
 
-  template <template <class, class> class Container, class T, class... TArgs,
-            std::enable_if_t<!has_TypeDefinition<Container<T, TArgs...>>::value, bool> = true>
+  template <
+      template <class, class> class Container, class T, class... TArgs,
+      std::enable_if_t<!has_TypeDefinition<Container<T, TArgs...>>::value, bool> = true>
   ValuePtr(const Container<T, TArgs...>* vect, CustomSerializer::Ptr type_info);
 
   template <typename T, size_t N,
@@ -38,6 +43,10 @@ public:
   template <typename T, size_t N,
             std::enable_if_t<!has_TypeDefinition<std::array<T, N>>::value, bool> = true>
   ValuePtr(const std::array<T, N>* vect, CustomSerializer::Ptr type_info);
+
+#if DATA_TAMER_EIGEN_SUPPORT
+  ValuePtr(const Eigen::VectorXd* vect);
+#endif
 
   ValuePtr(ValuePtr const& other) = delete;
   ValuePtr& operator=(ValuePtr const& other) = delete;
@@ -144,7 +153,8 @@ inline ValuePtr::ValuePtr(const Container<T, TArgs...>* vect,
   };
 }
 
-template <typename T, size_t N, std::enable_if_t<!has_TypeDefinition<std::array<T, N>>::value, bool>>
+template <typename T, size_t N,
+          std::enable_if_t<!has_TypeDefinition<std::array<T, N>>::value, bool>>
 inline ValuePtr::ValuePtr(const std::array<T, N>* array)
   : v_ptr_(array)
   , type_(GetBasicType<T>())
@@ -158,7 +168,8 @@ inline ValuePtr::ValuePtr(const std::array<T, N>* array)
   get_size_impl_ = [array]() { return SerializeMe::BufferSize(*array); };
 }
 
-template <typename T, size_t N, std::enable_if_t<!has_TypeDefinition<std::array<T, N>>::value, bool>>
+template <typename T, size_t N,
+          std::enable_if_t<!has_TypeDefinition<std::array<T, N>>::value, bool>>
 inline ValuePtr::ValuePtr(const std::array<T, N>* array, CustomSerializer::Ptr type_info)
   : v_ptr_(array)
   , type_(GetBasicType<T>())
@@ -185,6 +196,33 @@ inline ValuePtr::ValuePtr(const std::array<T, N>* array, CustomSerializer::Ptr t
     return tot_size;
   };
 }
+
+#if DATA_TAMER_EIGEN_SUPPORT
+inline ValuePtr::ValuePtr(const Eigen::VectorXd* vect)
+  : v_ptr_(vect)
+  , type_(GetBasicType<double>())         // element type
+  , type_index_(typeid(Eigen::VectorXd))  // identifies the "container type"
+  , memory_size_(sizeof(double))          // element size (consistent with containers)
+  , is_vector_(true)
+{
+  serialize_impl_ = [vect](SerializeMe::SpanBytes& buffer) -> void {
+    const uint32_t n = static_cast<uint32_t>(vect->size());
+    SerializeMe::SerializeIntoBuffer(buffer, n);
+
+    // contiguous block of doubles
+    const size_t bytes = static_cast<size_t>(n) * sizeof(double);
+    if(bytes > 0)
+    {
+      std::memcpy(buffer.data(), vect->data(), bytes);
+      buffer.trimFront(bytes);
+    }
+  };
+
+  get_size_impl_ = [vect]() -> size_t {
+    return sizeof(uint32_t) + static_cast<size_t>(vect->size()) * sizeof(double);
+  };
+}
+#endif
 
 inline bool ValuePtr::operator==(const ValuePtr& other) const
 {
