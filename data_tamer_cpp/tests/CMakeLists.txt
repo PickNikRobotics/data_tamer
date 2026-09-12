@@ -74,10 +74,12 @@ endif()
 # built as C++20, and this object library is what stops a C++20-only construct
 # from leaking into the public interface.
 add_library(public_headers_cxx17 OBJECT public_headers_cxx17.cpp)
-target_include_directories(public_headers_cxx17 PRIVATE ${PROJECT_SOURCE_DIR}/include)
+# Linking the library target gives this object library exactly the include
+# directories a consumer gets (including the transitive ROS ones); its own
+# standard stays 17.
+target_link_libraries(public_headers_cxx17 PRIVATE data_tamer)
 set_target_properties(public_headers_cxx17 PROPERTIES
     CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
 if(DATA_TAMER_BUILD_ROS)
     target_compile_definitions(public_headers_cxx17 PRIVATE DATA_TAMER_CHECK_ROS_HEADERS=1)
-    target_include_directories(public_headers_cxx17 PRIVATE ${rclcpp_INCLUDE_DIRS} ${rclcpp_lifecycle_INCLUDE_DIRS} ${data_tamer_msgs_INCLUDE_DIRS})
 endif()
