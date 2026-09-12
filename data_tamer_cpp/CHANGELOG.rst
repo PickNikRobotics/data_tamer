@@ -11,6 +11,13 @@ Unreleased
   is C++20 on recent distributions. Internally, the reader-quiescence and sink-admission
   barriers block on ``std::atomic::wait`` instead of yield-spinning, and the
   sink worker is a ``std::jthread``.
+* Build: CMake 3.22 is now required. The build is target-based: MCAP, rclcpp,
+  rclcpp_lifecycle and the message package are linked as imported targets
+  (``mcap_vendor::mcap``, ``rclcpp::rclcpp``, ...) instead of ``*_INCLUDE_DIRS``
+  and ``*_LIBRARIES`` variables, the library links ``Threads::Threads`` and
+  exports a ``data_tamer::data_tamer`` alias in-tree, ``DATA_TAMER_VERSION``
+  reports the library's own version when built as a subproject, and the
+  installed ``data_tamerConfig.cmake`` finds its dependencies.
 * Robustness fixes from the 2.0 review: the header-only parser and the Python
   decoder check bounds before every read, reject masks shorter than the schema,
   oversized dynamic counts and cyclic custom types, match type names exactly and

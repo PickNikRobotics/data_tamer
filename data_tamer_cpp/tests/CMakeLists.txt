@@ -32,14 +32,13 @@ endif()
 
 if(DATA_TAMER_BUILD_ROS AND gtest_vendor_FOUND AND ament_cmake_gtest_FOUND)
     ament_add_gtest(datatamer_test ${DATATAMER_TEST_SOURCES} ros2_publisher_tests.cpp)
-    target_link_libraries(datatamer_test data_tamer)
 else()
     find_package(GTest REQUIRED)
     include(GoogleTest)
 
     add_executable(datatamer_test ${DATATAMER_TEST_SOURCES})
     target_compile_options(datatamer_test PRIVATE $<$<CXX_COMPILER_ID:GNU,Clang>:-Werror=deprecated-declarations>)
-    target_link_libraries(datatamer_test data_tamer GTest::gtest_main)
+    target_link_libraries(datatamer_test PRIVATE GTest::gtest_main)
 
     # Optional launcher for the test binary (the tsan preset uses it to run under
     # `setarch -R`). CROSSCOMPILING_EMULATOR is honoured both by test discovery
@@ -51,14 +50,9 @@ else()
     gtest_discover_tests(datatamer_test DISCOVERY_MODE PRE_TEST)
 endif()
 
-target_include_directories(datatamer_test
-    PUBLIC $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>)
-
-if(USE_VENDORED_MCAP)
-    target_include_directories(datatamer_test PRIVATE ${PROJECT_SOURCE_DIR}/3rdparty/mcap/include)
-elseif(NOT DATA_TAMER_BUILD_ROS)
-    target_link_libraries(datatamer_test mcap::mcap)
-endif()
+# Tests are built as C++20 like the library. Some read MCAP files back directly.
+target_compile_features(datatamer_test PRIVATE cxx_std_20)
+target_link_libraries(datatamer_test PRIVATE data_tamer ${DATA_TAMER_MCAP_TARGET})
 
 # Golden vectors for docs/wire_format.md, shared with the Python reference decoder.
 target_compile_definitions(datatamer_test PRIVATE
