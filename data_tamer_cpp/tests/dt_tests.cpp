@@ -323,3 +323,32 @@ TEST(DataTamerBasic, FinishQueue)
   // since we just stopped recording but not snapshots, we'll still be able to take a snapshot (but it won't be written to disk)
   EXPECT_TRUE(channel->takeSnapshot());
 }
+
+// #71: the rollover counter goes before the extension: log.mcap, log_1.mcap, ...
+TEST(DataTamerBasic, McapRolloverNumbersFilesBeforeTheExtension)
+{
+  const auto directory =
+      std::filesystem::temp_directory_path() /
+      ("data_tamer_rollover_" + std::to_string(NsecSinceEpoch().count()));
+  std::filesystem::remove_all(directory);
+  ASSERT_TRUE(std::filesystem::create_directory(directory));
+  auto channel = LogChannel::create("chan");
+  auto sink = std::make_shared<MCAPSink>((directory / "log.mcap").string());
+  sink->setCreateNewFileOnReset(true);
+  sink->setMaxTimeBeforeReset(std::chrono::seconds(-1));  // every snapshot rolls over
+  channel->addDataSink(sink);
+  double value = 1.0;
+  channel->registerValue("value", &value);
+  for(int i = 0; i < 3; ++i)
+  {
+    EXPECT_TRUE(channel->takeSnapshot());
+  }
+  sink->finishQueueAndStop();
+  for(const auto& file : std::filesystem::directory_iterator(directory))
+  {
+    EXPECT_EQ(file.path().extension(), ".mcap") << file.path();
+  }
+  EXPECT_TRUE(std::filesystem::exists(directory / "log.mcap"));
+  EXPECT_TRUE(std::filesystem::exists(directory / "log_1.mcap"));
+  std::filesystem::remove_all(directory);
+}
