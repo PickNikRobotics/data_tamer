@@ -4,7 +4,10 @@ project(data_tamer_cpp VERSION 1.0.0)
 
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-set(CMAKE_CXX_STANDARD 17)
+# The library and its tests compile as C++20; the installed headers stay valid
+# C++17 (consumers only need cxx_std_17), which tests/public_headers_cxx17.cpp
+# enforces by compiling every public header as strict C++17.
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
 
 if(${CMAKE_PROJECT_NAME} STREQUAL ${PROJECT_NAME})
@@ -89,7 +92,7 @@ else()
     target_compile_options(data_tamer PRIVATE -Wall -Wconversion -Wextra -Wsign-conversion -Werror -Wpedantic -Wno-sign-conversion)
 endif()
 
-target_compile_features(data_tamer PUBLIC cxx_std_17)
+target_compile_features(data_tamer PUBLIC cxx_std_17 PRIVATE cxx_std_20)
 target_include_directories(data_tamer
  PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

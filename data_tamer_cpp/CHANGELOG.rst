@@ -4,6 +4,12 @@ Changelog for package data_tamer
 
 Unreleased
 ----------
+* Build: the library, tests and benchmarks compile as C++20; the installed
+  headers remain C++17 (consumers need ``cxx_std_17``), enforced by a test
+  target that compiles every public header as strict C++17 and by building the
+  examples as C++17. Internally, the reader-quiescence and sink-admission
+  barriers block on ``std::atomic::wait`` instead of yield-spinning, and the
+  sink worker is a ``std::jthread``.
 * Robustness fixes from the 2.0 review: the header-only parser and the Python
   decoder check bounds before every read, reject masks shorter than the schema,
   oversized dynamic counts and cyclic custom types, match type names exactly and

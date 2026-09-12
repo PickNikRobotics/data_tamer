@@ -1,9 +1,11 @@
 
+# Examples are consumers: build them as plain C++17 to prove the public API needs no more.
 function(CompileExample TARGET)
     add_executable(${TARGET} ${TARGET}.cpp)
     target_include_directories(${TARGET}
      PUBLIC $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>)
     target_link_libraries(${TARGET} data_tamer)
+    set_target_properties(${TARGET} PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
 endfunction()
 
 CompileExample(T01_basic_example)

@@ -69,3 +69,15 @@ if(Python3_FOUND)
     add_test(NAME python_reference_decoder
         COMMAND Python3::Interpreter -m unittest discover -s ${PROJECT_SOURCE_DIR}/../python -p "test_*.py")
 endif()
+
+# Every installed header must compile as strict C++17: the library itself is
+# built as C++20, and this object library is what stops a C++20-only construct
+# from leaking into the public interface.
+add_library(public_headers_cxx17 OBJECT public_headers_cxx17.cpp)
+target_include_directories(public_headers_cxx17 PRIVATE ${PROJECT_SOURCE_DIR}/include)
+set_target_properties(public_headers_cxx17 PROPERTIES
+    CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+if(DATA_TAMER_BUILD_ROS)
+    target_compile_definitions(public_headers_cxx17 PRIVATE DATA_TAMER_CHECK_ROS_HEADERS=1)
+    target_include_directories(public_headers_cxx17 PRIVATE ${rclcpp_INCLUDE_DIRS} ${rclcpp_lifecycle_INCLUDE_DIRS} ${data_tamer_msgs_INCLUDE_DIRS})
+endif()
