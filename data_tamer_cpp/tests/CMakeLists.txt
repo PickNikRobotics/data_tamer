@@ -17,7 +17,9 @@ set(DATATAMER_TEST_SOURCES
     channel_capacity_tests.cpp
     transaction_tests.cpp
     abi_tests.cpp
-    locked_reference_tests.cpp)
+    locked_reference_tests.cpp
+    serialize_me_tests.cpp
+    wire_format_tests.cpp)
 
 # look for gtest from ROS, but only when building for ROS 2
 if(DATA_TAMER_BUILD_ROS)
@@ -56,4 +58,14 @@ if(USE_VENDORED_MCAP)
     target_include_directories(datatamer_test PRIVATE ${PROJECT_SOURCE_DIR}/3rdparty/mcap/include)
 elseif(NOT DATA_TAMER_BUILD_ROS)
     target_link_libraries(datatamer_test mcap::mcap)
+endif()
+
+# Golden vectors for docs/wire_format.md, shared with the Python reference decoder.
+target_compile_definitions(datatamer_test PRIVATE
+    DATA_TAMER_WIRE_FORMAT_DIR="${PROJECT_SOURCE_DIR}/../docs/wire_format")
+
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_FOUND)
+    add_test(NAME python_reference_decoder
+        COMMAND Python3::Interpreter -m unittest discover -s ${PROJECT_SOURCE_DIR}/../python -p "test_*.py")
 endif()

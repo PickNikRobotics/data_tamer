@@ -1,0 +1,29 @@
+### version: 4
+### hash: 64186643224329035
+### channel_name: wire_test
+
+bool flag
+char letter
+int8 i8
+uint8 u8
+int16 i16
+uint16 u16
+int32 i32
+uint32 u32
+int64 i64
+uint64 u64
+float32 f32
+float64 f64
+float64[] vec
+int32[4] arr
+Pose pose
+Point3D[] points
+===========================================================
+MSG: Point3D
+float64 x
+float64 y
+float64 z
+===========================================================
+MSG: Pose
+Point3D position
+uint32 stamp

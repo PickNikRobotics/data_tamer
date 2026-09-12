@@ -19,7 +19,7 @@ namespace DataTamerParser
 
 constexpr int SCHEMA_VERSION = 4;
 
-enum class BasicType: uint8_t
+enum class BasicType : uint8_t
 {
   BOOL,
   CHAR,
@@ -363,6 +363,12 @@ inline Schema BuilSchemaFromText(const std::string& txt, bool check_hash = false
   {
     throw std::runtime_error("Error in hash calculation");
   }
+  // The writer's hash is std::hash based, so it is only reproducible with the same
+  // standard library. Snapshots carry the writer's value: match against that.
+  if(declared_schema != 0)
+  {
+    schema.hash = declared_schema;
+  }
   return schema;
 }
 
@@ -432,7 +438,8 @@ inline bool ParseSnapshot(const Schema& schema, SnapshotView snapshot,
       ParseSnapshotRecursive(field, schema.custom_types, buffer, callback_number, "");
     }
   }
-  return true;
+  // every enabled field consumed exactly its bytes; leftovers mean schema/payload mismatch
+  return buffer.size == 0;
 }
 
 }  // namespace DataTamerParser

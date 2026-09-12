@@ -1,0 +1,2 @@
+# golden wire-format vectors: compared byte for byte, never eol-converted
+docs/wire_format/vectors/** -text
