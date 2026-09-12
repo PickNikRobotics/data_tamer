@@ -46,7 +46,6 @@ std::string_view TypeDefinition(StampedPose& p, AddField& add)
 struct SyncSink : DummySink
 {
   SyncSink() { stopThread(); }
-  void drain() { processQueuedSnapshots(); }
 };
 struct SyncMcap : MCAPSink
 {
@@ -139,7 +138,7 @@ TEST(WireFormat, SchemaTextAndSnapshotsMatchGoldenVectors)
 
   const std::chrono::nanoseconds stamp(1234567890);
   ASSERT_TRUE(channel->takeSnapshot(stamp));
-  sink->drain();
+  sink->flush();
   const Snapshot full = sink->latestSnapshot();
 
   const std::string schema_text = ToStr(channel->getSchema());
@@ -161,7 +160,7 @@ TEST(WireFormat, SchemaTextAndSnapshotsMatchGoldenVectors)
   channel->setEnabled(id_i16, false);
   channel->setEnabled(id_pose, false);
   ASSERT_TRUE(channel->takeSnapshot(stamp));
-  sink->drain();
+  sink->flush();
   const Snapshot masked = sink->latestSnapshot();
   checkGolden("snapshot_masked.mask", masked.active_mask);
   checkGolden("snapshot_masked.payload", masked.payload);

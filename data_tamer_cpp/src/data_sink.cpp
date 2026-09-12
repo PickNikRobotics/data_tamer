@@ -70,7 +70,12 @@ DataSinkBase::DataSinkBase(size_t queue_capacity) : _p(new Pimpl(queue_capacity)
         break;
       if(_p->queue.wait_dequeue_timed(_p->current_ref, std::chrono::milliseconds(50)))
       {
-        _p->deliver(this);
+        // Drain everything already queued under the mutex we hold; one
+        // lock round-trip per wake-up instead of one per snapshot.
+        do
+        {
+          _p->deliver(this);
+        } while(_p->queue.try_dequeue(_p->current_ref));
       }
     }
   });
@@ -100,18 +105,15 @@ std::unique_ptr<moodycamel::ProducerToken> DataSinkBase::makeProducerToken()
 
 bool DataSinkBase::tryPush(moodycamel::ProducerToken& token, SnapshotRef&& snapshot)
 {
-  auto state = _p->admission.load(std::memory_order_acquire);
-  do
-  {
-    if(state & kClosed)
-      return false;
-  } while(!_p->admission.compare_exchange_weak(
-      state, state + 1, std::memory_order_acq_rel, std::memory_order_acquire));
+  // Announce first, check second: a transient increment on a closed sink is
+  // withdrawn at once, and stopAcceptingSnapshots() waits for it like any other.
   struct AdmissionGuard
   {
     std::atomic<uint64_t>& admission;
     ~AdmissionGuard() { admission.fetch_sub(1, std::memory_order_release); }
   } guard{ _p->admission };
+  if(_p->admission.fetch_add(1, std::memory_order_acq_rel) & kClosed)
+    return false;
   // Failed try_enqueue leaves snapshot intact; its owner releases it once.
   return _p->queue.try_enqueue(token, std::move(snapshot));
 }

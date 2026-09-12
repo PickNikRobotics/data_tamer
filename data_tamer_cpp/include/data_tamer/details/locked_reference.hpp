@@ -3,6 +3,7 @@
 #include "data_tamer/details/write_mutex.hpp"
 
 #include <atomic>
+#include <mutex>
 #include <utility>
 
 /// The channel's transaction lock. Exclusive and priority-inheriting: a
@@ -15,53 +16,76 @@ namespace DataTamer
 using ::Mutex;
 
 /**
- * @brief Const pointer that holds the mutex for its lifetime.
+ * @brief Const pointer that holds the mutex for its lifetime. Move-only; the
+ * lock travels with the object and is released exactly once.
  */
 template <typename T>
 class ConstPtr
 {
 public:
-  ConstPtr(const T* obj, Mutex* mutex);
-  ConstPtr(const ConstPtr&) = delete;
-  ConstPtr& operator=(const ConstPtr&) = delete;
-  ConstPtr(ConstPtr&&) noexcept;
-  ConstPtr& operator=(ConstPtr&&) noexcept;
-  ~ConstPtr();
+  ConstPtr(const T* obj, Mutex* mutex)
+    : obj_(obj)
+    , lock_(mutex ? std::unique_lock<Mutex>(*mutex) : std::unique_lock<Mutex>())
+  {}
+  ConstPtr(ConstPtr&& other) noexcept
+    : obj_(std::exchange(other.obj_, nullptr)), lock_(std::move(other.lock_))
+  {}
+  ConstPtr& operator=(ConstPtr&& other) noexcept
+  {
+    obj_ = std::exchange(other.obj_, nullptr);
+    lock_ = std::move(other.lock_);  // releases any lock this object held
+    return *this;
+  }
 
   explicit operator bool() const { return obj_ != nullptr; }
-  [[deprecated("the lock is held for the lifetime of this object; there is nothing to lock manually")]]
-  Mutex* mutex() { return mutex_; }
+  [[deprecated("the lock is held for the lifetime of this object; there is nothing to "
+               "lock manually")]]
+  Mutex* mutex()
+  {
+    return lock_.mutex();
+  }
   const T& operator*() const { return *obj_; }
   const T* operator->() const { return obj_; }
 
 private:
   const T* obj_ = nullptr;
-  Mutex* mutex_ = nullptr;
+  std::unique_lock<Mutex> lock_;
 };
 
 /**
- * @brief Mutable pointer that holds the mutex for its lifetime.
+ * @brief Mutable pointer that holds the mutex for its lifetime. Move-only.
  */
 template <typename T>
 class MutablePtr
 {
 public:
-  MutablePtr(T* obj, Mutex* mutex);
-  MutablePtr(const MutablePtr&) = delete;
-  MutablePtr& operator=(const MutablePtr&) = delete;
-  MutablePtr(MutablePtr&&) noexcept;
-  MutablePtr& operator=(MutablePtr&&) noexcept;
-  ~MutablePtr();
+  MutablePtr(T* obj, Mutex* mutex)
+    : obj_(obj)
+    , lock_(mutex ? std::unique_lock<Mutex>(*mutex) : std::unique_lock<Mutex>())
+  {}
+  MutablePtr(MutablePtr&& other) noexcept
+    : obj_(std::exchange(other.obj_, nullptr)), lock_(std::move(other.lock_))
+  {}
+  MutablePtr& operator=(MutablePtr&& other) noexcept
+  {
+    obj_ = std::exchange(other.obj_, nullptr);
+    lock_ = std::move(other.lock_);  // releases any lock this object held
+    return *this;
+  }
 
   explicit operator bool() const { return obj_ != nullptr; }
-  [[deprecated("the lock is held for the lifetime of this object; there is nothing to lock manually")]]
-  Mutex* mutex() { return mutex_; }
+  [[deprecated("the lock is held for the lifetime of this object; there is nothing to "
+               "lock manually")]]
+  Mutex* mutex()
+  {
+    return lock_.mutex();
+  }
   T& operator*() { return *obj_; }
   T* operator->() { return obj_; }
 
 private:
   T* obj_ = nullptr;
-  Mutex* mutex_ = nullptr;
+  std::unique_lock<Mutex> lock_;
 };
 
 /**
@@ -96,7 +120,6 @@ public:
   ~AtomicProxy() { commit(); }
 
   explicit operator bool() const { return target_ != nullptr; }
-  Mutex* mutex() { return nullptr; }
   T& operator*() { return copy_; }
   T* operator->() { return &copy_; }
 
@@ -118,10 +141,10 @@ class AtomicConstProxy
 {
 public:
   explicit AtomicConstProxy(const std::atomic<T>* target)
-    : valid_(target != nullptr), copy_(target ? target->load(std::memory_order_relaxed) : T{})
+    : valid_(target != nullptr)
+    , copy_(target ? target->load(std::memory_order_relaxed) : T{})
   {}
   explicit operator bool() const { return valid_; }
-  Mutex* mutex() { return nullptr; }
   const T& operator*() const { return copy_; }
   const T* operator->() const { return &copy_; }
 
@@ -129,91 +152,5 @@ private:
   bool valid_;
   T copy_;
 };
-
-//----------------------------------------------------
-
-template <typename T>
-inline ConstPtr<T>::ConstPtr(const T* obj, Mutex* mutex) : obj_(obj), mutex_(mutex)
-{
-  if(mutex_)
-  {
-    mutex_->lock();
-  }
-}
-
-template <typename T>
-inline ConstPtr<T>::ConstPtr(ConstPtr&& other) noexcept : obj_(other.obj_), mutex_(other.mutex_)
-{
-  other.obj_ = nullptr;
-  other.mutex_ = nullptr;
-}
-
-template <typename T>
-inline ConstPtr<T>& ConstPtr<T>::operator=(ConstPtr&& other) noexcept
-{
-  if(this != &other)
-  {
-    if(mutex_)
-    {
-      mutex_->unlock();
-    }
-    obj_ = other.obj_;
-    mutex_ = other.mutex_;
-    other.obj_ = nullptr;
-    other.mutex_ = nullptr;
-  }
-  return *this;
-}
-
-template <typename T>
-inline ConstPtr<T>::~ConstPtr()
-{
-  if(mutex_)
-  {
-    mutex_->unlock();
-  }
-}
-
-template <typename T>
-inline MutablePtr<T>::MutablePtr(T* obj, Mutex* mutex) : obj_(obj), mutex_(mutex)
-{
-  if(mutex_)
-  {
-    mutex_->lock();
-  }
-}
-
-template <typename T>
-inline MutablePtr<T>::MutablePtr(MutablePtr&& other) noexcept : obj_(other.obj_), mutex_(other.mutex_)
-{
-  other.obj_ = nullptr;
-  other.mutex_ = nullptr;
-}
-
-template <typename T>
-inline MutablePtr<T>& MutablePtr<T>::operator=(MutablePtr&& other) noexcept
-{
-  if(this != &other)
-  {
-    if(mutex_)
-    {
-      mutex_->unlock();
-    }
-    obj_ = other.obj_;
-    mutex_ = other.mutex_;
-    other.obj_ = nullptr;
-    other.mutex_ = nullptr;
-  }
-  return *this;
-}
-
-template <typename T>
-inline MutablePtr<T>::~MutablePtr()
-{
-  if(mutex_)
-  {
-    mutex_->unlock();
-  }
-}
 
 }  // namespace DataTamer

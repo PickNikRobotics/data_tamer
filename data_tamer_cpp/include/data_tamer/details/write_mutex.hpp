@@ -5,13 +5,19 @@
 #include <mutex>
 #include <system_error>
 
-#if defined(__linux__)
+// Priority inheritance is a POSIX option, not a Linux feature: the same test
+// admits QNX and other POSIX real-time systems. Without it WriteMutex is a plain
+// std::mutex and blocking waits have no priority-inheritance mitigation.
+#if defined(__has_include)
+#if __has_include(<unistd.h>)
+#include <unistd.h>
+#endif
+#endif
+#if defined(_POSIX_THREAD_PRIO_INHERIT) && _POSIX_THREAD_PRIO_INHERIT > 0
 #include <pthread.h>
 #define DATA_TAMER_HAS_PI_MUTEX 1
 #else
 #define DATA_TAMER_HAS_PI_MUTEX 0
-#pragma message("data_tamer: no PTHREAD_PRIO_INHERIT on this platform; WriteMutex is a plain mutex " \
-                "and blocking waits have no priority-inheritance mitigation or universal deadline")
 #endif
 
 namespace DataTamer
@@ -104,9 +110,12 @@ public:
     }
     // The clock is read once per kTriesPerClockCheck attempts: a try_lock is a
     // few ns, a clock read tens of ns, so checking every iteration would spend
-    // most of the budget on the clock instead of on the lock.
-    constexpr int kTriesPerClockCheck = 16;
-    const auto deadline = std::chrono::steady_clock::now() + std::chrono::nanoseconds(spin_ns);
+    // most of the budget on the clock instead of on the lock. A pause between
+    // attempts keeps the spinner from stealing the mutex's cache line from the
+    // owner it is waiting for.
+    constexpr int kTriesPerClockCheck = 8;
+    const auto deadline =
+        std::chrono::steady_clock::now() + std::chrono::nanoseconds(spin_ns);
     do
     {
       for(int i = 0; i < kTriesPerClockCheck; i++)
@@ -115,20 +124,31 @@ public:
         {
           return false;
         }
+        spinPause();
       }
     } while(std::chrono::steady_clock::now() < deadline);
     const auto wait_start = std::chrono::steady_clock::now();
     lock();
     if(blocked_wait_ns)
     {
-      *blocked_wait_ns = std::uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
-                                          std::chrono::steady_clock::now() - wait_start)
-                                          .count());
+      *blocked_wait_ns =
+          std::uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                            std::chrono::steady_clock::now() - wait_start)
+                            .count());
     }
     return true;
   }
 
 private:
+  static void spinPause()
+  {
+#if defined(__x86_64__) || defined(__i386__)
+    __builtin_ia32_pause();
+#elif defined(__aarch64__)
+    asm volatile("yield" ::: "memory");
+#endif
+  }
+
   details::PlatformWriteMutex mutex_;
 };
 

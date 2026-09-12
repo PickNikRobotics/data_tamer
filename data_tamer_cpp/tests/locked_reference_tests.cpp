@@ -70,7 +70,6 @@ TEST(LockedReference, AtomicProxyWritesBackOnDestruction)
     ASSERT_EQ(*p, 1.5);
     *p += 1.0;
     ASSERT_EQ(target.load(), 1.5);  // not yet visible
-    ASSERT_EQ(p.mutex(), nullptr);
   }
   ASSERT_EQ(target.load(), 2.5);
 }

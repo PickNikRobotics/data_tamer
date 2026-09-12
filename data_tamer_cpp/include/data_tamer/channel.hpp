@@ -161,6 +161,8 @@ public:
 
   /**
    * @brief addDataSink add a sink, i.e. a class collecting our snapshots.
+   * A channel holds at most eight sinks; adding a ninth throws. Adding the
+   * same sink twice is a no-op.
    */
   void addDataSink(std::shared_ptr<DataSinkBase> sink);
 
@@ -244,7 +246,8 @@ public:
   [[nodiscard]] uint64_t droppedOversize() const;
 
   /// Failed publications to this attachment; zero if sink is not attached.
-  [[nodiscard]] uint64_t droppedSnapshots(const std::shared_ptr<DataSinkBase>& sink) const;
+  [[nodiscard]] uint64_t
+  droppedSnapshots(const std::shared_ptr<DataSinkBase>& sink) const;
 
   struct Stats
   {

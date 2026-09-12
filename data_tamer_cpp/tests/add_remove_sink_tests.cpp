@@ -6,19 +6,13 @@
 
 using namespace DataTamer;
 
-class DrainingDummySink : public DummySink
-{
-public:
-  using DataSinkBase::processQueuedSnapshots;
-};
-
-void take_snapshots(std::shared_ptr<LogChannel> channel, DrainingDummySink& sink, int count)
+void take_snapshots(std::shared_ptr<LogChannel> channel, DummySink& sink, int count)
 {
   for(int i = 0; i < count; i++)
   {
     channel->takeSnapshot();
   }
-  sink.processQueuedSnapshots();
+  sink.flush();
 }
 
 TEST(DataTamerSinkRegistry, AddSinkIncreasesCountAndRef)
@@ -36,7 +30,7 @@ TEST(DataTamerSinkRegistry, AddSinkIncreasesCountAndRef)
 TEST(DataTamerSinkRegistry, SnapshotsAreRecordedWhileSinkPresent)
 {
   auto channel = LogChannel::create("chan");
-  auto sink = std::make_shared<DrainingDummySink>();
+  auto sink = std::make_shared<DummySink>();
   channel->addDataSink(sink);
 
   std::vector<double> dummyData = { 10, 11, 12 };
@@ -52,7 +46,7 @@ TEST(DataTamerSinkRegistry, SnapshotsAreRecordedWhileSinkPresent)
 TEST(DataTamerSinkRegistry, RemoveSinkStopsRecording)
 {
   auto channel = LogChannel::create("chan");
-  auto sink = std::make_shared<DrainingDummySink>();
+  auto sink = std::make_shared<DummySink>();
   channel->addDataSink(sink);
 
   std::vector<double> dummyData = { 10, 11, 12 };

@@ -6,6 +6,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <functional>
 #include <condition_variable>
 #include <cstring>
 #include <memory>
@@ -234,6 +235,38 @@ TEST(Transaction, NestingAcrossMoreThanEightChannelsDoesNotAllocateOrAlias)
   nestTransactions(channels, 0, true);
 }
 
+// Runs `step` on a writer thread while snapshotting until the writer has run at
+// least once (a busy two-core runner may not schedule it during the first 2000
+// calls), then requires every accepted snapshot to have been delivered intact.
+void raceWriterAgainstSnapshots(LogChannel& channel, CheckingSink& sink,
+                                const std::function<void()>& step)
+{
+  std::atomic_bool stop{ false };
+  std::atomic<size_t> iterations{ 0 };
+  std::thread writer([&] {
+    while(!stop.load(std::memory_order_relaxed))
+    {
+      step();
+      iterations++;
+    }
+  });
+  size_t accepted = 0;
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+  for(int i = 0;
+      i < 2000 || (iterations.load() == 0 && std::chrono::steady_clock::now() < deadline);
+      ++i)
+  {
+    accepted += channel.takeSnapshot();
+  }
+  stop = true;
+  writer.join();
+  ASSERT_GT(iterations.load(), 0u) << "writer thread never ran";
+  ASSERT_GT(accepted, 0u);
+  ASSERT_TRUE(sink.waitFor(accepted));
+  ASSERT_EQ(sink.delivered(), accepted);
+  ASSERT_EQ(sink.errors(), 0u);
+}
+
 TEST(Transaction, ValuesWrittenTogetherAppearTogetherInDeliveredSnapshots)
 {
   auto channel = LogChannel::create("chan");
@@ -242,39 +275,14 @@ TEST(Transaction, ValuesWrittenTogetherAppearTogetherInDeliveredSnapshots)
   auto a = channel->createLoggedValue<double>("a", 1.0);
   auto b = channel->createLoggedValue<double>("b", 1.0);
 
-  std::atomic_bool stop{ false };
-  std::atomic<size_t> iterations{ 0 };
-  std::thread writer([&] {
-    double value = 1.0;
-    while(!stop.load(std::memory_order_relaxed))
-    {
-      auto tx = channel->scopedWrite();
-      a->set(value);
-      std::this_thread::yield();
-      b->set(value);
-      value = value == 1.0 ? 2.0 : 1.0;
-      iterations++;
-    }
+  double value = 1.0;
+  raceWriterAgainstSnapshots(*channel, *sink, [&] {
+    auto tx = channel->scopedWrite();
+    a->set(value);
+    std::this_thread::yield();
+    b->set(value);
+    value = value == 1.0 ? 2.0 : 1.0;
   });
-
-  size_t accepted = 0;
-  // Keep snapshotting until the writer has actually raced us at least once; a
-  // busy two-core runner may not schedule it during the first 2000 calls.
-  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
-  for(int i = 0;
-      i < 2000 || (iterations.load() == 0 && std::chrono::steady_clock::now() < deadline);
-      ++i)
-  {
-    accepted += channel->takeSnapshot();
-  }
-  stop = true;
-  writer.join();
-
-  ASSERT_GT(iterations.load(), 0u) << "writer thread never ran";
-  ASSERT_GT(accepted, 0u);
-  ASSERT_TRUE(sink->waitFor(accepted));
-  ASSERT_EQ(sink->delivered(), accepted);
-  ASSERT_EQ(sink->errors(), 0u);
 }
 
 TEST(Transaction, RawPointerWritesAppearTogetherInDeliveredSnapshots)
@@ -285,39 +293,14 @@ TEST(Transaction, RawPointerWritesAppearTogetherInDeliveredSnapshots)
   Pair pair{ 1.0, 1.0 };
   channel->registerValue("pair", &pair);
 
-  std::atomic_bool stop{ false };
-  std::atomic<size_t> iterations{ 0 };
-  std::thread writer([&] {
-    double value = 1.0;
-    while(!stop.load(std::memory_order_relaxed))
-    {
-      std::lock_guard<Mutex> lock(channel->writeMutex());
-      pair.a = value;
-      std::this_thread::yield();
-      pair.b = value;
-      value = value == 1.0 ? 2.0 : 1.0;
-      iterations++;
-    }
+  double value = 1.0;
+  raceWriterAgainstSnapshots(*channel, *sink, [&] {
+    std::lock_guard<Mutex> lock(channel->writeMutex());
+    pair.a = value;
+    std::this_thread::yield();
+    pair.b = value;
+    value = value == 1.0 ? 2.0 : 1.0;
   });
-
-  size_t accepted = 0;
-  // Keep snapshotting until the writer has actually raced us at least once; a
-  // busy two-core runner may not schedule it during the first 2000 calls.
-  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
-  for(int i = 0;
-      i < 2000 || (iterations.load() == 0 && std::chrono::steady_clock::now() < deadline);
-      ++i)
-  {
-    accepted += channel->takeSnapshot();
-  }
-  stop = true;
-  writer.join();
-
-  ASSERT_GT(iterations.load(), 0u) << "writer thread never ran";
-  ASSERT_GT(accepted, 0u);
-  ASSERT_TRUE(sink->waitFor(accepted));
-  ASSERT_EQ(sink->delivered(), accepted);
-  ASSERT_EQ(sink->errors(), 0u);
 }
 
 TEST(Transaction, VectorSetAndSnapshotRaceDeliversValidPayloads)
@@ -327,36 +310,11 @@ TEST(Transaction, VectorSetAndSnapshotRaceDeliversValidPayloads)
   channel->addDataSink(sink);
   auto vec = channel->createLoggedValue<std::vector<double>>("vec");
 
-  std::atomic_bool stop{ false };
-  std::atomic<size_t> iterations{ 0 };
-  std::thread writer([&] {
-    size_t size = 1;
-    while(!stop.load(std::memory_order_relaxed))
-    {
-      vec->set(std::vector<double>(size, double(size)));
-      size = size == 64 ? 1 : size + 1;
-      iterations++;
-    }
+  size_t size = 1;
+  raceWriterAgainstSnapshots(*channel, *sink, [&] {
+    vec->set(std::vector<double>(size, double(size)));
+    size = size == 64 ? 1 : size + 1;
   });
-
-  size_t accepted = 0;
-  // Keep snapshotting until the writer has actually raced us at least once; a
-  // busy two-core runner may not schedule it during the first 2000 calls.
-  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
-  for(int i = 0;
-      i < 2000 || (iterations.load() == 0 && std::chrono::steady_clock::now() < deadline);
-      ++i)
-  {
-    accepted += channel->takeSnapshot();
-  }
-  stop = true;
-  writer.join();
-
-  ASSERT_GT(iterations.load(), 0u) << "writer thread never ran";
-  ASSERT_GT(accepted, 0u);
-  ASSERT_TRUE(sink->waitFor(accepted));
-  ASSERT_EQ(sink->delivered(), accepted);
-  ASSERT_EQ(sink->errors(), 0u);
 }
 
 TEST(Transaction, ContentionCountersReportSnapshotHandoffAndRemainStableWhenUncontended)
@@ -397,11 +355,9 @@ TEST(Transaction, ContentionCountersReportSnapshotHandoffAndRemainStableWhenUnco
   if(stats.write_lock_contended == 0)
     EXPECT_EQ(stats.write_lock_wait_max_ns, 0u);
   EXPECT_LE(stats.write_lock_wait_max_ns, elapsed);
-  EXPECT_EQ(stats.write_lock_contended, channel->writeLockContended());
-  EXPECT_EQ(stats.write_lock_wait_max_ns, channel->writeLockWaitMaxNs());
-  EXPECT_TRUE(channel->takeSnapshot());
-  EXPECT_EQ(channel->writeLockContended(), stats.write_lock_contended);
-  EXPECT_EQ(channel->writeLockWaitMaxNs(), stats.write_lock_wait_max_ns);
+  EXPECT_TRUE(channel->takeSnapshot());  // an uncontended snapshot moves neither counter
+  EXPECT_EQ(channel->stats().write_lock_contended, stats.write_lock_contended);
+  EXPECT_EQ(channel->stats().write_lock_wait_max_ns, stats.write_lock_wait_max_ns);
 }
 
 TEST(Transaction, ObservedSleepingSnapshotAdvancesContentionCounters)

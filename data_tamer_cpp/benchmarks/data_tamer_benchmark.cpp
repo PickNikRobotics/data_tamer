@@ -22,14 +22,12 @@ static void measureSnapshots(benchmark::State& state, LogChannel& channel)
   channel.takeSnapshot();  // warm-up: buffers reach their steady-state capacity
   channel.takeSnapshot();
 
-  std::size_t allocs = 0;
+  DataTamerTest::AllocCounter::Scope scope;  // outside the timed loop
   for(auto _ : state)
   {
-    DataTamerTest::AllocCounter::Scope scope;
     channel.takeSnapshot();
-    allocs += scope.allocations();
   }
-  state.counters["allocs/op"] = double(allocs) / double(state.iterations());
+  state.counters["allocs/op"] = double(scope.allocations()) / double(state.iterations());
 }
 
 static void DT_Doubles(benchmark::State& state)

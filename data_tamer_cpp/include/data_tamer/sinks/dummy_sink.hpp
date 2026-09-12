@@ -18,7 +18,9 @@ namespace DataTamer
 class DummySink : public DataSinkBase
 {
 public:
-  explicit DummySink(size_t queue_capacity = 1024) : DataSinkBase(queue_capacity) {}
+  explicit DummySink(size_t queue_capacity = kDefaultQueueCapacity)
+    : DataSinkBase(queue_capacity)
+  {}
 
   ~DummySink() override { stopThread(); }
 
@@ -26,11 +28,10 @@ public:
   /// worker is currently storing. Tests call this instead of sleeping.
   void flush() { processQueuedSnapshots(); }
 
-  void addChannel(std::string const& name, Schema const& schema) override
+  void addChannel(std::string const& /*name*/, Schema const& schema) override
   {
     std::scoped_lock lk(mutex_);
     schemas_[schema.hash] = schema;
-    schema_names_[schema.hash] = name;
     snapshots_count_[schema.hash] = 0;
   }
 
@@ -94,16 +95,9 @@ public:
     return schemas_.at(hash);
   }
 
-  std::string schemaName(uint64_t hash) const
-  {
-    std::scoped_lock lk(mutex_);
-    return schema_names_.at(hash);
-  }
-
 private:
   mutable std::mutex mutex_;
   std::unordered_map<uint64_t, Schema> schemas_;
-  std::unordered_map<uint64_t, std::string> schema_names_;
   std::unordered_map<uint64_t, long> snapshots_count_;
   Snapshot latest_snapshot_;
 };

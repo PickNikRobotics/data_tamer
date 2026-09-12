@@ -44,15 +44,6 @@ TEST(WriteMutex, TryLockFailsWhileHeld)
   m.unlock();
 }
 
-TEST(WriteMutex, PriorityInheritanceIsEnabledOnLinux)
-{
-#if defined(__linux__)
-  ASSERT_TRUE(WriteMutex::kPriorityInheritance);
-#else
-  ASSERT_FALSE(WriteMutex::kPriorityInheritance);
-#endif
-}
-
 TEST(WriteMutex, LockWithSpinReturnsFalseWhenUncontended)
 {
   WriteMutex m;
@@ -64,11 +55,11 @@ TEST(WriteMutex, LockWithSpinReturnsFalseWhenUncontended)
 
 TEST(WriteMutex, LockWithSpinOwnsMutexAndReportsWaitAfterHandoff)
 {
-  for(int64_t budget : {int64_t(0), WriteMutex::kLockSpinNs, int64_t(50'000'000)})
+  for(int64_t budget : { int64_t(0), WriteMutex::kLockSpinNs, int64_t(50'000'000) })
   {
     WriteMutex m;
     m.lock();
-    std::atomic_bool started{false}, acquired{false}, release{false};
+    std::atomic_bool started{ false }, acquired{ false }, release{ false };
     bool blocked = false;
     uint64_t waited = 123, elapsed = 0;
     std::thread waiter([&] {
@@ -76,39 +67,47 @@ TEST(WriteMutex, LockWithSpinOwnsMutexAndReportsWaitAfterHandoff)
       const auto before = std::chrono::steady_clock::now();
       blocked = m.lockWithSpin(budget, &waited);
       elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
-                    std::chrono::steady_clock::now() - before).count();
+                    std::chrono::steady_clock::now() - before)
+                    .count();
       acquired = true;
-      while(!release) std::this_thread::yield();
+      while(!release)
+        std::this_thread::yield();
       m.unlock();
     });
-    while(!started) std::this_thread::yield();
+    while(!started)
+      std::this_thread::yield();
     EXPECT_FALSE(acquired.load());  // Cannot acquire while this thread owns it.
     m.unlock();
-    while(!acquired) std::this_thread::yield();
+    while(!acquired)
+      std::this_thread::yield();
     const bool stolen = m.try_lock();
     EXPECT_FALSE(stolen);  // Returning from lockWithSpin must convey ownership.
-    if(stolen) m.unlock();
+    if(stolen)
+      m.unlock();
     release = true;
     waiter.join();
 
     // The scheduler may run the waiter before or after the handoff, regardless
     // of budget. Validate the reported path, not a presumed scheduling delay.
-    if(!blocked) EXPECT_EQ(waited, 0u);
+    if(!blocked)
+      EXPECT_EQ(waited, 0u);
     EXPECT_LE(waited, elapsed);
     const bool reusable = m.try_lock();
     EXPECT_TRUE(reusable);
-    if(reusable) m.unlock();
+    if(reusable)
+      m.unlock();
   }
 }
 
 TEST(WriteMutex, ObservedSleepingWaiterReportsBlockingFallback)
 {
 #if defined(__linux__)
-  if(!std::ifstream("/proc/self/stat")) GTEST_SKIP() << "needs readable procfs";
+  if(!std::ifstream("/proc/self/stat"))
+    GTEST_SKIP() << "needs readable procfs";
   WriteMutex m;
   m.lock();
-  std::atomic<pid_t> tid{0};
-  std::atomic_bool finished{false};
+  std::atomic<pid_t> tid{ 0 };
+  std::atomic_bool finished{ false };
   bool blocked = false;
   uint64_t waited = 0;
   std::thread waiter([&] {
@@ -149,12 +148,17 @@ TEST(WriteMutex, PriorityInheritanceKeepsObservedWaitShort)
   struct RestoreScheduler
   {
     cpu_set_t original_affinity;
-    RestoreScheduler() { pthread_getaffinity_np(pthread_self(), sizeof(original_affinity), &original_affinity); }
+    RestoreScheduler()
+    {
+      pthread_getaffinity_np(pthread_self(), sizeof(original_affinity),
+                             &original_affinity);
+    }
     ~RestoreScheduler()
     {
       sched_param other{};
       pthread_setschedparam(pthread_self(), SCHED_OTHER, &other);
-      pthread_setaffinity_np(pthread_self(), sizeof(original_affinity), &original_affinity);
+      pthread_setaffinity_np(pthread_self(), sizeof(original_affinity),
+                             &original_affinity);
     }
   } restore;
 

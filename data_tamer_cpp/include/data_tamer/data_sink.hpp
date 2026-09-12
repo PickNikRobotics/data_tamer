@@ -62,8 +62,10 @@ using DataSnapshot = std::vector<uint8_t>;
 class DataSinkBase
 {
 public:
+  static constexpr size_t kDefaultQueueCapacity = 1024;
+
   /// Preallocated, block-rounded queue capacity, shared by all producers.
-  explicit DataSinkBase(size_t queue_capacity = 1024);
+  explicit DataSinkBase(size_t queue_capacity = kDefaultQueueCapacity);
 
   DataSinkBase(const DataSinkBase& other) = delete;
   DataSinkBase& operator=(const DataSinkBase& other) = delete;
@@ -110,6 +112,9 @@ protected:
   /// Callback-only clone of the currently delivered pool reference. Include
   /// details/snapshot_pool.hpp to use the returned handle. Direct calls to a
   /// derived storeSnapshot method cannot retain queue ownership.
+  /// The handle reaches the callback through thread-local context rather than a
+  /// parameter so that the storeSnapshot(const Snapshot&) signature of existing
+  /// sinks stays source compatible.
   [[nodiscard]] SnapshotRef retainSnapshot() const;
 
 private:

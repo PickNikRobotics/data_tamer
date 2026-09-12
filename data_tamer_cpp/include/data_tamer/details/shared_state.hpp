@@ -74,7 +74,7 @@ public:
   /// thread holds it for serialization. Priority-inheriting where available.
   WriteMutex write_mutex;
 
-  /// SC publication pairs with the snapshot's SC exchange and reader epoch.
+  /// SC publication pairs with the snapshot's SC load/exchange and reader epoch.
   std::atomic<bool> mask_dirty{ true };
 
   void addSeries() { flags_.emplace_back(kRegistered | kEnabled); }
@@ -105,8 +105,9 @@ public:
   /// Lock-free; changes requested enablement only, never registration liveness.
   void setEnabled(size_t index, bool enable)
   {
-    const auto old = enable ? flags_[index].fetch_or(kEnabled, std::memory_order_seq_cst)
-                            : flags_[index].fetch_and(uint8_t(~kEnabled), std::memory_order_seq_cst);
+    const auto old =
+        enable ? flags_[index].fetch_or(kEnabled, std::memory_order_seq_cst) :
+                 flags_[index].fetch_and(uint8_t(~kEnabled), std::memory_order_seq_cst);
     if(bool(old & kEnabled) != enable)
       mask_dirty.store(true, std::memory_order_seq_cst);
   }
@@ -115,6 +116,12 @@ public:
   {
     for(size_t i = 0; i < id.fields_count; i++)
       setEnabled(id.first_index + i, enable);
+  }
+
+  void setRegistered(const RegistrationID& id, bool registered)
+  {
+    for(size_t i = 0; i < id.fields_count; i++)
+      setRegistered(id.first_index + i, registered);
   }
 
   [[nodiscard]] bool inTransactionOnThisThread() const noexcept
@@ -133,7 +140,8 @@ public:
 private:
   static constexpr uint8_t kRegistered = 1;
   static constexpr uint8_t kEnabled = 2;
-  static_assert(std::atomic<uint8_t>::is_always_lock_free, "series flags must be lock-free");
+  static_assert(std::atomic<uint8_t>::is_always_lock_free, "series flags must be "
+                                                           "lock-free");
   std::deque<std::atomic<uint8_t>> flags_;
 };
 

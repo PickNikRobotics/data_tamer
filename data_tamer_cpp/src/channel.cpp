@@ -35,26 +35,35 @@ struct LogChannel::Pimpl
   std::vector<ValueHolder> series;
   std::unordered_map<std::string, size_t> registered_values;
   std::shared_ptr<ChannelSharedState> shared = std::make_shared<ChannelSharedState>();
-  std::atomic<uint64_t> write_lock_contended{0};
-  std::atomic<uint64_t> write_lock_wait_max_ns{0};
-  size_t schema_hash = 0;
+  std::atomic<uint64_t> write_lock_contended{ 0 };
+  std::atomic<uint64_t> write_lock_wait_max_ns{ 0 };
   ActiveMask active_mask;  // Snapshot-thread-owned, independent of retained slots.
   size_t payload_capacity = 0;
   size_t pool_capacity = SnapshotPool::kDefaultCapacity;
-  std::atomic<bool> strict_mode{false};
-  std::atomic<uint64_t> payload_reallocations{0};
-  std::atomic<uint64_t> dropped_oversize{0};
+  std::atomic<bool> strict_mode{ false };
+  std::atomic<uint64_t> payload_reallocations{ 0 };
+  std::atomic<uint64_t> dropped_oversize{ 0 };
   std::shared_ptr<SnapshotPool> pool;
-  std::atomic<uint64_t> pool_exhausted{0};
   Schema schema;
-  bool schema_frozen = false;  // control_mutex held
+  bool schema_frozen = false;    // control_mutex held
   bool logging_started = false;  // snapshot thread, or control_mutex held
 
   void rebuildMask()
   {
     std::fill(active_mask.begin(), active_mask.end(), 0xFF);
     for(size_t i = 0; i < series.size(); ++i)
-      if(!shared->isEnabled(i)) SetBit(active_mask, i, false);
+      if(!shared->isEnabled(i))
+        SetBit(active_mask, i, false);
+  }
+
+  // Reader side of the mask handshake. Both operations are SC, so a reader that
+  // saw the flag clear is ordered before any later dirty store and is covered by
+  // waitQuiescent(); the plain load keeps the common path free of a locked RMW.
+  void refreshMaskIfDirty()
+  {
+    if(shared->mask_dirty.load(std::memory_order_seq_cst) &&
+       shared->mask_dirty.exchange(false, std::memory_order_seq_cst))
+      rebuildMask();
   }
 
   // Caller holds write_mutex; size and serialization use this same cached mask.
@@ -80,13 +89,13 @@ struct LogChannel::Pimpl
     // Members are destroyed in reverse order: token must die before its sink.
     std::shared_ptr<DataSinkBase> sink;
     std::unique_ptr<moodycamel::ProducerToken> token;
-    std::atomic<uint64_t> dropped{0};
+    std::atomic<uint64_t> dropped{ 0 };
     bool schema_registered = false;
   };
   static constexpr size_t kMaxSinks = 8;
   std::array<std::unique_ptr<SinkLink>, kMaxSinks> sinks;
   std::array<std::atomic<SinkLink*>, kMaxSinks> published_sinks{};
-  std::atomic<uint64_t> epoch{0};
+  std::atomic<uint64_t> epoch{ 0 };
 
   // Controller holds control_mutex. SC order prevents a reader from both
   // seeing an old link/cached mask and being missed by this epoch observation:
@@ -99,6 +108,17 @@ struct LogChannel::Pimpl
     while((observed & 1) && epoch.load(std::memory_order_seq_cst) == observed)
       std::this_thread::yield();
   }
+
+  // Reader side of waitQuiescent(): odd epoch while a snapshot is in progress.
+  struct EpochGuard
+  {
+    std::atomic<uint64_t>& epoch;
+    explicit EpochGuard(std::atomic<uint64_t>& value) : epoch(value)
+    {
+      epoch.fetch_add(1, std::memory_order_seq_cst);
+    }
+    ~EpochGuard() { epoch.fetch_add(1, std::memory_order_seq_cst); }
+  };
 };
 
 RegistrationID LogChannel::registerValueImpl(const std::string& name,
@@ -116,23 +136,24 @@ RegistrationID LogChannel::registerValueImpl(const std::string& name,
       throw std::runtime_error("Can't register a new value once recording started");
     const auto type = value_ptr.type();
     const std::string type_name = type_info ? type_info->typeName() : ToStr(type);
-    TypeField field{name, type, type_name, value_ptr.isVector(), value_ptr.vectorSize()};
+    TypeField field{ name, type, type_name, value_ptr.isVector(),
+                     value_ptr.vectorSize() };
     Pimpl::ValueHolder instance;
     instance.name = name;
     instance.holder = std::move(value_ptr);
     _p->series.emplace_back(std::move(instance));
     _p->shared->addSeries();
     const size_t index = _p->series.size() - 1;
-    _p->registered_values.insert({name, index});
+    _p->registered_values.insert({ name, index });
     _p->schema.hash = AddFieldToHash(field, _p->schema.hash);
     _p->schema.fields.emplace_back(std::move(field));
     if(type_info)
     {
       auto custom_schema = type_info->typeSchema();
       if(custom_schema && _p->schema.custom_types.count(type_info->typeName()) == 0)
-        _p->schema.custom_schemas.insert({type_info->typeName(), *custom_schema});
+        _p->schema.custom_schemas.insert({ type_info->typeName(), *custom_schema });
     }
-    return {index, 1};
+    return { index, 1 };
   }
 
   const size_t index = it->second;
@@ -144,7 +165,7 @@ RegistrationID LogChannel::registerValueImpl(const std::string& name,
   instance.holder = std::move(value_ptr);
   // Publish the fully initialized replacement before a mask may enable it.
   _p->shared->setRegistered(index, true);
-  return {index, 1};
+  return { index, 1 };
 }
 
 LogChannel::LogChannel(std::string name) : _p(new Pimpl)
@@ -159,7 +180,10 @@ std::shared_ptr<LogChannel> LogChannel::create(std::string name)
   return std::shared_ptr<LogChannel>(new LogChannel(std::move(name)));
 }
 
-const std::string& LogChannel::channelName() const { return _p->channel_name; }
+const std::string& LogChannel::channelName() const
+{
+  return _p->channel_name;
+}
 LogChannel::~LogChannel()
 {
   // Calls using the channel object must already be externally synchronized.
@@ -167,7 +191,8 @@ LogChannel::~LogChannel()
   for(auto& link : _p->published_sinks)
     link.store(nullptr, std::memory_order_seq_cst);
   _p->waitQuiescent();
-  for(auto& link : _p->sinks) link.reset();
+  for(auto& link : _p->sinks)
+    link.reset();
 }
 
 void LogChannel::setEnabled(const RegistrationID& id, bool enable)
@@ -178,8 +203,7 @@ void LogChannel::setEnabled(const RegistrationID& id, bool enable)
 void LogChannel::unregister(const RegistrationID& id)
 {
   std::lock_guard const lock(_p->control_mutex);
-  for(size_t i = 0; i < id.fields_count; i++)
-    _p->shared->setRegistered(id.first_index + i, false);
+  _p->shared->setRegistered(id, false);
   _p->waitQuiescent();
   for(size_t i = 0; i < id.fields_count; i++)
     _p->series[id.first_index + i].holder.detach();
@@ -187,13 +211,16 @@ void LogChannel::unregister(const RegistrationID& id)
 
 void LogChannel::addDataSink(std::shared_ptr<DataSinkBase> sink)
 {
-  if(!sink) throw std::invalid_argument("Can't add a null sink");
+  if(!sink)
+    throw std::invalid_argument("Can't add a null sink");
   std::lock_guard const lock(_p->control_mutex);
   size_t free_slot = Pimpl::kMaxSinks;
   for(size_t i = 0; i < _p->sinks.size(); ++i)
   {
-    if(_p->sinks[i] && _p->sinks[i]->sink == sink) return;
-    if(!_p->sinks[i]) free_slot = i;
+    if(_p->sinks[i] && _p->sinks[i]->sink == sink)
+      return;
+    if(!_p->sinks[i])
+      free_slot = i;
   }
   if(free_slot == Pimpl::kMaxSinks)
     throw std::runtime_error("A channel supports at most eight sinks");
@@ -208,7 +235,8 @@ void LogChannel::addDataSink(std::shared_ptr<DataSinkBase> sink)
   // Neither a throwing token allocation nor addChannel can publish a partial link.
   _p->sinks[free_slot] = std::move(link);
   if(_p->logging_started)
-    _p->published_sinks[free_slot].store(_p->sinks[free_slot].get(), std::memory_order_seq_cst);
+    _p->published_sinks[free_slot].store(_p->sinks[free_slot].get(),
+                                         std::memory_order_seq_cst);
 }
 
 void LogChannel::removeDataSink(std::shared_ptr<DataSinkBase> sink)
@@ -230,7 +258,8 @@ size_t LogChannel::getNumberOfSinks() const
 {
   std::lock_guard const lock(_p->control_mutex);
   size_t count = 0;
-  for(const auto& link : _p->sinks) count += bool(link);
+  for(const auto& link : _p->sinks)
+    count += bool(link);
   return count;
 }
 
@@ -240,7 +269,10 @@ Schema LogChannel::getSchema() const
   return _p->schema;
 }
 
-Mutex& LogChannel::writeMutex() { return _p->shared->write_mutex; }
+Mutex& LogChannel::writeMutex()
+{
+  return _p->shared->write_mutex;
+}
 
 ChannelSharedState::Transaction LogChannel::scopedWrite()
 {
@@ -259,19 +291,21 @@ uint64_t LogChannel::writeLockWaitMaxNs() const
 
 LogChannel::Stats LogChannel::stats() const
 {
-  return {writeLockContended(), writeLockWaitMaxNs(), poolExhausted(),
-          payloadReallocations(), droppedOversize()};
+  return { writeLockContended(), writeLockWaitMaxNs(), poolExhausted(),
+           payloadReallocations(), droppedOversize() };
 }
 
 uint64_t LogChannel::poolExhausted() const
 {
-  return _p->pool_exhausted.load(std::memory_order_relaxed);
+  std::lock_guard const lock(_p->control_mutex);  // pool is created under it
+  return _p->pool ? _p->pool->exhausted() : 0;
 }
 
 void LogChannel::setPayloadCapacity(size_t bytes)
 {
   std::lock_guard const lock(_p->control_mutex);
-  if(_p->schema_frozen) throw std::runtime_error("Payload capacity is frozen");
+  if(_p->schema_frozen)
+    throw std::runtime_error("Payload capacity is frozen");
   if(bytes > std::vector<uint8_t>().max_size())
     throw std::length_error("Snapshot payload capacity is too large");
   _p->payload_capacity = bytes;
@@ -280,8 +314,10 @@ void LogChannel::setPayloadCapacity(size_t bytes)
 void LogChannel::setPoolCapacity(size_t count)
 {
   std::lock_guard const lock(_p->control_mutex);
-  if(_p->schema_frozen) throw std::runtime_error("Pool capacity is frozen");
-  if(count == 0) throw std::invalid_argument("Pool capacity must be positive");
+  if(_p->schema_frozen)
+    throw std::runtime_error("Pool capacity is frozen");
+  if(count == 0)
+    throw std::invalid_argument("Pool capacity must be positive");
   if(count > std::numeric_limits<std::ptrdiff_t>::max() / sizeof(PoolSlot))
     throw std::length_error("Snapshot pool capacity is too large");
   _p->pool_capacity = count;
@@ -306,11 +342,15 @@ uint64_t LogChannel::droppedSnapshots(const std::shared_ptr<DataSinkBase>& sink)
 {
   std::lock_guard const lock(_p->control_mutex);
   for(const auto& link : _p->sinks)
-    if(link && link->sink == sink) return link->dropped.load(std::memory_order_relaxed);
+    if(link && link->sink == sink)
+      return link->dropped.load(std::memory_order_relaxed);
   return 0;
 }
 
-std::shared_ptr<ChannelSharedState> LogChannel::sharedState() const { return _p->shared; }
+std::shared_ptr<ChannelSharedState> LogChannel::sharedState() const
+{
+  return _p->shared;
+}
 
 void LogChannel::addCustomType(const std::string& custom_type_name,
                                const FieldsVector& fields)
@@ -318,14 +358,23 @@ void LogChannel::addCustomType(const std::string& custom_type_name,
   _p->schema.custom_types[custom_type_name] = fields;
 }
 
-std::mutex& LogChannel::controlMutex() { return _p->control_mutex; }
-bool LogChannel::schemaFrozen() const { return _p->schema_frozen; }
+std::mutex& LogChannel::controlMutex()
+{
+  return _p->control_mutex;
+}
+bool LogChannel::schemaFrozen() const
+{
+  return _p->schema_frozen;
+}
 bool LogChannel::hasCustomType(const std::string& type_name) const
 {
   return _p->schema.custom_types.count(type_name) != 0;
 }
 
-const ActiveMask& LogChannel::getActiveFlags() { return _p->active_mask; }
+const ActiveMask& LogChannel::getActiveFlags()
+{
+  return _p->active_mask;
+}
 
 bool LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
 {
@@ -335,18 +384,17 @@ bool LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
   {
     std::lock_guard const lock(_p->control_mutex);
     _p->schema_frozen = true;
-    _p->schema_hash = _p->schema.hash;
     if(!_p->pool)
     {
       std::lock_guard<WriteMutex> write_lock(_p->shared->write_mutex);
       _p->active_mask.resize(_p->series.size() / 8 + (_p->series.size() % 8 != 0));
       _p->shared->mask_dirty.exchange(false, std::memory_order_seq_cst);
       _p->rebuildMask();
-      const auto capacity = std::max({ _p->payload_capacity,
-                                      checkedDouble(_p->payloadSize()), size_t(256) });
+      const auto capacity = std::max(
+          { _p->payload_capacity, checkedDouble(_p->payloadSize()), size_t(256) });
       // Publish the pool only after every slot has reserved successfully.
       _p->pool = std::make_shared<SnapshotPool>(_p->pool_capacity, capacity,
-                                               _p->active_mask.size(), _p->channel_name);
+                                                _p->active_mask.size(), _p->channel_name);
     }
     for(auto& link : _p->sinks)
     {
@@ -361,15 +409,7 @@ bool LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
     _p->logging_started = true;
   }
 
-  struct EpochGuard
-  {
-    std::atomic<uint64_t>& epoch;
-    explicit EpochGuard(std::atomic<uint64_t>& value) : epoch(value)
-    {
-      epoch.fetch_add(1, std::memory_order_seq_cst);
-    }
-    ~EpochGuard() { epoch.fetch_add(1, std::memory_order_seq_cst); }
-  } guard(_p->epoch);
+  Pimpl::EpochGuard guard(_p->epoch);
 
   std::array<Pimpl::SinkLink*, Pimpl::kMaxSinks> links{};
   bool has_sinks = false;
@@ -378,36 +418,34 @@ bool LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
     links[i] = _p->published_sinks[i].load(std::memory_order_seq_cst);
     has_sinks |= links[i] != nullptr;
   }
-  if(!has_sinks) return false;
-
-  auto* slot = _p->pool->tryAcquire();
-  if(!slot)
-  {
-    _p->pool_exhausted.fetch_add(1, std::memory_order_relaxed);
+  if(!has_sinks)
     return false;
-  }
+
+  auto* slot = _p->pool->tryAcquire();  // counts exhaustion itself
+  if(!slot)
+    return false;
   SnapshotRef parent(_p->pool, slot);
   auto& snapshot = slot->snapshot;
 
-  // An old cached mask requires an SC exchange before unregistration's dirty
-  // store, so that reader is covered by waitQuiescent(). A rebuilt active bit
-  // acquires registration's initialized holder through its SC flag load.
-  if(_p->shared->mask_dirty.exchange(false, std::memory_order_seq_cst))
-    _p->rebuildMask();
+  // A rebuilt active bit acquires registration's initialized holder through
+  // its SC flag load; see refreshMaskIfDirty() for the ordering argument.
+  _p->refreshMaskIfDirty();
 
   {
     auto& write_mutex = _p->shared->write_mutex;
     uint64_t blocked_wait_ns = 0;
-    const bool blocked = write_mutex.lockWithSpin(WriteMutex::kLockSpinNs, &blocked_wait_ns);
+    const bool blocked =
+        write_mutex.lockWithSpin(WriteMutex::kLockSpinNs, &blocked_wait_ns);
     std::lock_guard<WriteMutex> write_lock(write_mutex, std::adopt_lock);
     if(blocked)
     {
       _p->write_lock_contended.fetch_add(1, std::memory_order_relaxed);
       auto previous = _p->write_lock_wait_max_ns.load(std::memory_order_relaxed);
       while(previous < blocked_wait_ns &&
-            !_p->write_lock_wait_max_ns.compare_exchange_weak(
-                previous, blocked_wait_ns, std::memory_order_relaxed))
-      {}
+            !_p->write_lock_wait_max_ns.compare_exchange_weak(previous, blocked_wait_ns,
+                                                              std::memory_order_relaxed))
+      {
+      }
     }
     const auto payload_size = _p->payloadSize();
     if(payload_size > snapshot.payload.capacity())
@@ -429,7 +467,7 @@ bool LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
   }
 
   snapshot.active_mask = _p->active_mask;
-  snapshot.schema_hash = _p->schema_hash;
+  snapshot.schema_hash = _p->schema.hash;
   snapshot.timestamp = timestamp;
 
   bool all_pushed = true;

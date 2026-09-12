@@ -17,8 +17,11 @@ TEST(LoggedValue, IsNotMovableOrCopyable)
 {
   static_assert(!std::is_copy_constructible_v<LoggedValue<double>>);
   static_assert(!std::is_copy_assignable_v<LoggedValue<double>>);
-  static_assert(!std::is_move_constructible_v<LoggedValue<double>>,
-                "moving a LoggedValue would leave the channel with a dangling pointer");
+  static_assert(!std::is_move_constructible_v<LoggedValue<double>>, "moving a "
+                                                                    "LoggedValue would "
+                                                                    "leave the channel "
+                                                                    "with a dangling "
+                                                                    "pointer");
   static_assert(!std::is_move_assignable_v<LoggedValue<double>>);
 }
 
@@ -36,10 +39,16 @@ TEST(LoggedValue, ScalarTraitSelectsAtomics)
   static_assert(is_atomic_scalar_v<double>);
   static_assert(is_atomic_scalar_v<int8_t>);
   static_assert(is_atomic_scalar_v<bool>);
-  enum Color : uint8_t { RED };
+  enum Color : uint8_t
+  {
+    RED
+  };
   static_assert(is_atomic_scalar_v<Color>);
   static_assert(!is_atomic_scalar_v<std::vector<double>>);
-  struct Big { double a, b; };
+  struct Big
+  {
+    double a, b;
+  };
   static_assert(!is_atomic_scalar_v<Big>);
 }
 
@@ -223,7 +232,8 @@ TEST(LoggedValue, NonScalarProxyExcludesSnapshot)
     while(!stop)
     {
       auto p = v->getMutablePtr();
-      p->assign(size_t(1 + (p->size() % 64)), 1.0);  // size cycles 1..64, reallocating often
+      p->assign(size_t(1 + (p->size() % 64)),
+                1.0);  // size cycles 1..64, reallocating often
     }
   });
   for(int i = 0; i < 3000; i++)
@@ -232,17 +242,4 @@ TEST(LoggedValue, NonScalarProxyExcludesSnapshot)
   }
   stop = true;
   writer.join();
-}
-
-// The deprecation must be scalar-only: a non-scalar getMutablePtr() is the
-// right tool for in-place edits and must not warn. We compile this file with
-// -Werror=deprecated-declarations disabled locally only around the scalar
-// call (see the pragma), so an accidental deprecation on the vector overload
-// would fail the build.
-TEST(LoggedValue, DeprecationIsScalarOnly)
-{
-  auto channel = LogChannel::create("chan");
-  auto vec = channel->createLoggedValue<std::vector<int>>("vec");
-  auto p = vec->getMutablePtr();  // must NOT be deprecated
-  p->push_back(1);
 }

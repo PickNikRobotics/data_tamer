@@ -26,7 +26,7 @@ public:
    * @param do_compression if true, compress the data on the fly.
    */
   explicit MCAPSink(std::string const& filepath, bool do_compression = false,
-                    size_t queue_capacity = 1024);
+                    size_t queue_capacity = kDefaultQueueCapacity);
 
   ~MCAPSink() override;
 

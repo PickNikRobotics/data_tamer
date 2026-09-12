@@ -57,7 +57,8 @@ struct MCAPSink::Pimpl
   std::recursive_mutex mutex;
 };
 
-MCAPSink::MCAPSink(const std::string& filepath, bool do_compression, size_t queue_capacity)
+MCAPSink::MCAPSink(const std::string& filepath, bool do_compression,
+                   size_t queue_capacity)
   : DataSinkBase(queue_capacity), _p(std::make_unique<Pimpl>())
 {
   _p->filepath = filepath;
@@ -145,8 +146,8 @@ bool MCAPSink::storeSnapshot(const Snapshot& snapshot)
 
   // If reset_time is exceeded, we want to overwrite the current file.
   // Better than filling the disk, if you forgot to stop the application.
-  auto const now = std::chrono::system_clock::now();
-  if(_p->reset_time != std::chrono::seconds(0) && now - _p->start_time > _p->reset_time)
+  if(_p->reset_time != std::chrono::seconds(0) &&
+     std::chrono::system_clock::now() - _p->start_time > _p->reset_time)
   {
     if(_p->create_file_on_reset)
     {
