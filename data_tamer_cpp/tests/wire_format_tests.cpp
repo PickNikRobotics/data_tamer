@@ -64,7 +64,10 @@ void writeFile(const std::string& name, const void* data, size_t size)
   file.write(static_cast<const char*>(data), std::streamsize(size));
 }
 
-bool updating() { return std::getenv("DATA_TAMER_UPDATE_GOLDEN") != nullptr; }
+bool updating()
+{
+  return std::getenv("DATA_TAMER_UPDATE_GOLDEN") != nullptr;
+}
 
 // Compare (or, when updating, record) `actual` against the fixture `name`.
 void checkGolden(const std::string& name, const std::vector<uint8_t>& actual)
@@ -85,10 +88,12 @@ void checkGolden(const std::string& name, const std::vector<uint8_t>& actual)
 // the MSG sections (unordered_map). Normalize both before comparing.
 std::vector<uint8_t> canonicalSchema(std::string text)
 {
-  const std::string separator = "===========================================================\n";
+  const std::string separator = "========================================================"
+                                "===\n";
   std::vector<std::string> sections;
   size_t start = 0;
-  for(size_t pos; (pos = text.find(separator, start)) != std::string::npos; start = pos + separator.size())
+  for(size_t pos; (pos = text.find(separator, start)) != std::string::npos;
+      start = pos + separator.size())
     sections.push_back(text.substr(start, pos - start));
   sections.push_back(text.substr(start));
   std::sort(sections.begin() + 1, sections.end());
@@ -186,7 +191,8 @@ TEST(WireFormat, SchemaTextAndSnapshotsMatchGoldenVectors)
   channel->setEnabled(id_pose, false);
   ASSERT_TRUE(channel->takeSnapshot(std::chrono::nanoseconds(1234567890)));
   const auto masked = waitDelivered(*sink, hash, 2);
-  ASSERT_EQ(masked.payload.size(), full.payload.size() - sizeof(int16_t) - 3 * sizeof(double) - sizeof(uint32_t));
+  ASSERT_EQ(masked.payload.size(), full.payload.size() - sizeof(int16_t) -
+                                       3 * sizeof(double) - sizeof(uint32_t));
   checkGolden("snapshot_masked.mask", masked.active_mask);
   checkGolden("snapshot_masked.payload", masked.payload);
   checkGolden("snapshot_masked.mcap_message", mcapMessage(masked));
