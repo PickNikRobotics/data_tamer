@@ -73,13 +73,10 @@ endif()
 # Every installed header must compile as strict C++17: the library itself is
 # built as C++20, and this object library is what stops a C++20-only construct
 # from leaking into the public interface.
+# The check covers the core headers only. The ROS 2 sink header is excluded on
+# purpose: it includes rclcpp, whose exported compile features already require
+# C++20 on recent distributions, so it cannot promise C++17 regardless of us.
 add_library(public_headers_cxx17 OBJECT public_headers_cxx17.cpp)
-# Linking the library target gives this object library exactly the include
-# directories a consumer gets (including the transitive ROS ones); its own
-# standard stays 17.
-target_link_libraries(public_headers_cxx17 PRIVATE data_tamer)
+target_include_directories(public_headers_cxx17 PRIVATE ${PROJECT_SOURCE_DIR}/include)
 set_target_properties(public_headers_cxx17 PROPERTIES
     CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
-if(DATA_TAMER_BUILD_ROS)
-    target_compile_definitions(public_headers_cxx17 PRIVATE DATA_TAMER_CHECK_ROS_HEADERS=1)
-endif()

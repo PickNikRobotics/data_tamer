@@ -1,5 +1,5 @@
-// Compiled as strict C++17 (see tests/CMakeLists.txt): every public header must
-// remain usable by C++17 consumers even though the library is built as C++20.
+// Compiled as strict C++17 (see tests/CMakeLists.txt): every core public header
+// must remain usable by C++17 consumers even though the library is built as C++20.
 #if __cplusplus > 201703L
 #error "this translation unit must be compiled as C++17"
 #endif
@@ -17,9 +17,8 @@
 #include "data_tamer/details/write_mutex.hpp"
 #include "data_tamer/sinks/dummy_sink.hpp"
 #include "data_tamer/sinks/mcap_sink.hpp"
-#if defined(DATA_TAMER_CHECK_ROS_HEADERS)
-#include "data_tamer/sinks/ros2_publisher_sink.hpp"
-#endif
+// sinks/ros2_publisher_sink.hpp is not checked: rclcpp itself requires C++20 on
+// recent ROS 2 distributions, so that header follows rclcpp's standard.
 #include "data_tamer_parser/data_tamer_parser.hpp"
 
 // Instantiate the templates a consumer would.
