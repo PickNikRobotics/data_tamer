@@ -13,7 +13,8 @@ sources. Two artifacts keep it honest:
   decodes the same fixtures and checks them against `expected.json`.
 
 A change to any byte described here is a format revision: bump `SCHEMA_VERSION`
-in `data_tamer/types.hpp`, regenerate the vectors with
+in `data_tamer/types.hpp`, `data_tamer_parser/data_tamer_parser.hpp` and
+`python/data_tamer_parser.py`, regenerate the vectors with
 `DATA_TAMER_UPDATE_GOLDEN=1 datatamer_test --gtest_filter='WireFormat.*'`,
 update `expected.json` by hand (it is the oracle, never generated), update the
 Python decoder, and describe the change in this file.
@@ -69,7 +70,7 @@ trim spaces and `\r` at both ends of a line and skip empty lines.
 
 ```
 ### version: 4
-### hash: 64186643224329035
+### hash: <uint64>
 ### channel_name: wire_test
 
 bool flag
@@ -78,15 +79,18 @@ int32[4] arr
 Pose pose
 Point3D[] points
 ===========================================================
-MSG: Pose
-Point3D position
-uint32 stamp
-===========================================================
 MSG: Point3D
 float64 x
 float64 y
 float64 z
+===========================================================
+MSG: Pose
+Point3D position
+uint32 stamp
 ```
+
+(Abridged: the complete text, with the real hash, is
+`docs/wire_format/vectors/schema.txt`.)
 
 Grammar, in the order lines appear:
 
@@ -106,13 +110,14 @@ Grammar, in the order lines appear:
    by type name; decoders must not depend on that, since a type may reference
    another type declared later in the text. Nested fields are not individually
    maskable.
-6. Optionally, **opaque custom encodings**: a section whose `MSG:` line is
+6. Optionally, **one opaque custom encoding**: a section whose `MSG:` line is
    followed by `ENCODING: <name>` and then the foreign schema text. The writer
-   emits these after every ordinary section and they own the rest of the text,
-   because a foreign schema may itself contain `=====` and `MSG:` lines. The
-   payload bytes of such a field are produced by user code; this document does
-   not define them and generic decoders cannot skip them. Producers that need
-   generic decoding must not use them.
+   emits it after every ordinary section and it owns the rest of the text,
+   because a foreign schema may itself contain `=====` and `MSG:` lines; for
+   that reason a schema with more than one opaque type is not decodable and
+   producers must not emit one. The payload bytes of such a field are produced
+   by user code; this document does not define them and generic decoders
+   cannot skip them. Producers that need generic decoding must not use them.
 
 Legacy files (version < 4, before 2023) used upper-case type names (`DOUBLE`,
 `INT32`, ...) with the name first; the C++ parser still accepts them, new
@@ -212,8 +217,9 @@ For reference, the writer's algorithm is `AddFieldToHash` in
 `data_tamer/types.hpp`: start from `std::hash<std::string>(channel_name)`, then
 for each top-level field fold in name, type id, type name (custom types only),
 `is_vector` and `array_size` with the boost `hash_combine` recipe. The bundled
-C++ parser offers an opt-in `check_hash` that recomputes it; that check is only
-valid when reader and writer share a standard library. The golden `schema.txt`
+C++ parser takes `Schema::hash` from the `### hash:` line; its opt-in
+`check_hash` recomputes the value and is only valid when reader and writer share
+a standard library. The golden `schema.txt`
 carries the hash of the machine that generated it, and the C++ golden test
 ignores that line when comparing.
 

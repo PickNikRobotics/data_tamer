@@ -21,6 +21,8 @@
 #include <string>
 #include <vector>
 
+#include <unistd.h>
+
 using namespace DataTamer;
 using TestTypes::Point3D;
 
@@ -39,11 +41,16 @@ std::string_view TypeDefinition(StampedPose& p, AddField& add)
   return "Pose";
 }
 
-// DummySink without a worker thread: snapshots are delivered by drain().
+// Sinks without a worker thread, so delivery happens exactly when the test drains
+// them: no race between the worker and finishQueueAndStop(), deterministic order.
 struct SyncSink : DummySink
 {
   SyncSink() { stopThread(); }
   void drain() { processQueuedSnapshots(); }
+};
+struct SyncMcap : MCAPSink
+{
+  explicit SyncMcap(const std::string& path) : MCAPSink(path, false) { stopThread(); }
 };
 
 const std::string kDir = DATA_TAMER_WIRE_FORMAT_DIR;
@@ -83,10 +90,12 @@ std::string withoutHash(std::string text)
 TEST(WireFormat, SchemaTextAndSnapshotsMatchGoldenVectors)
 {
   const auto mcap_path =
-      (std::filesystem::temp_directory_path() / "data_tamer_wire_format.mcap").string();
+      (std::filesystem::temp_directory_path() /
+       ("data_tamer_wire_format_" + std::to_string(::getpid()) + ".mcap"))
+          .string();
   auto channel = LogChannel::create("wire_test");
   auto sink = std::make_shared<SyncSink>();
-  auto mcap = std::make_shared<MCAPSink>(mcap_path, false);
+  auto mcap = std::make_shared<SyncMcap>(mcap_path);
   channel->addDataSink(sink);
   channel->addDataSink(mcap);
 
@@ -141,6 +150,7 @@ TEST(WireFormat, SchemaTextAndSnapshotsMatchGoldenVectors)
   else
   {
     const auto golden = readFile("schema.txt");
+    ASSERT_FALSE(golden.empty()) << "missing fixture schema.txt";
     EXPECT_EQ(withoutHash(schema_text), withoutHash({ golden.begin(), golden.end() }));
   }
   checkGolden("snapshot_full.mask", full.active_mask);

@@ -140,7 +140,7 @@ struct Schema
   std::string channel_name;
 
   std::map<std::string, FieldsVector> custom_types;  // sorted: deterministic schema text
-  std::unordered_map<std::string, CustomSchema> custom_schemas;
+  std::map<std::string, CustomSchema> custom_schemas;
 
   friend std::ostream& operator<<(std::ostream& os, const Schema& schema);
 };
