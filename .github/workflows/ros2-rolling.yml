@@ -1,0 +1,13 @@
+name: ros2 rolling
+
+on: [push, pull_request]
+
+jobs:
+  industrial_ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: 'ros-industrial/industrial_ci@master'
+        # industrial_ci defaults rolling to Ubuntu 26.04 (resolute), for which
+        # packages.ros.org publishes no ros-rolling-* binaries yet; pin to noble.
+        env: {ROS_DISTRO: rolling, ROS_REPO: main, OS_CODE_NAME: noble}

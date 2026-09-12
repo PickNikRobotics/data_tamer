@@ -1,7 +1,10 @@
 ![Data Tamer](data_tamer_logo.png)
 
 [![cmake Ubuntu](https://github.com/facontidavide/data_tamer/actions/workflows/cmake_ubuntu.yml/badge.svg)](https://github.com/facontidavide/data_tamer/actions/workflows/cmake_ubuntu.yml)
-[![ros2](https://github.com/PickNikRobotics/data_tamer/actions/workflows/ros2.yml/badge.svg)](https://github.com/PickNikRobotics/data_tamer/actions/workflows/ros2.yml)
+[![ros2 humble](https://github.com/PickNikRobotics/data_tamer/actions/workflows/ros2-humble.yml/badge.svg)](https://github.com/PickNikRobotics/data_tamer/actions/workflows/ros2-humble.yml)
+[![ros2 jazzy](https://github.com/PickNikRobotics/data_tamer/actions/workflows/ros2-jazzy.yml/badge.svg)](https://github.com/PickNikRobotics/data_tamer/actions/workflows/ros2-jazzy.yml)
+[![ros2 lyrical](https://github.com/PickNikRobotics/data_tamer/actions/workflows/ros2-lyrical.yml/badge.svg)](https://github.com/PickNikRobotics/data_tamer/actions/workflows/ros2-lyrical.yml)
+[![ros2 rolling](https://github.com/PickNikRobotics/data_tamer/actions/workflows/ros2-rolling.yml/badge.svg)](https://github.com/PickNikRobotics/data_tamer/actions/workflows/ros2-rolling.yml)
 [![codecov](https://codecov.io/gh/facontidavide/data_tamer/graph/badge.svg?token=D0wtsntWds)](https://codecov.io/gh/facontidavide/data_tamer)
 
 **DataTamer** is a library to log/trace numerical variables over time and
