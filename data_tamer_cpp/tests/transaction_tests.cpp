@@ -147,8 +147,8 @@ private:
   std::string name_ = "CustomValue";
 };
 
-void nestTransactions(const std::vector<std::shared_ptr<LogChannel>>& channels, size_t index,
-                      bool probe_mutexes)
+void nestTransactions(const std::vector<std::shared_ptr<LogChannel>>& channels,
+                      size_t index, bool probe_mutexes)
 {
   if(index == channels.size())
   {
@@ -258,14 +258,19 @@ TEST(Transaction, ValuesWrittenTogetherAppearTogetherInDeliveredSnapshots)
   });
 
   size_t accepted = 0;
-  for(int i = 0; i < 2000; ++i)
+  // Keep snapshotting until the writer has actually raced us at least once; a
+  // busy two-core runner may not schedule it during the first 2000 calls.
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+  for(int i = 0;
+      i < 2000 || (iterations.load() == 0 && std::chrono::steady_clock::now() < deadline);
+      ++i)
   {
     accepted += channel->takeSnapshot();
   }
   stop = true;
   writer.join();
 
-  ASSERT_GT(iterations.load(), 0u);
+  ASSERT_GT(iterations.load(), 0u) << "writer thread never ran";
   ASSERT_GT(accepted, 0u);
   ASSERT_TRUE(sink->waitFor(accepted));
   ASSERT_EQ(sink->delivered(), accepted);
@@ -296,14 +301,19 @@ TEST(Transaction, RawPointerWritesAppearTogetherInDeliveredSnapshots)
   });
 
   size_t accepted = 0;
-  for(int i = 0; i < 2000; ++i)
+  // Keep snapshotting until the writer has actually raced us at least once; a
+  // busy two-core runner may not schedule it during the first 2000 calls.
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+  for(int i = 0;
+      i < 2000 || (iterations.load() == 0 && std::chrono::steady_clock::now() < deadline);
+      ++i)
   {
     accepted += channel->takeSnapshot();
   }
   stop = true;
   writer.join();
 
-  ASSERT_GT(iterations.load(), 0u);
+  ASSERT_GT(iterations.load(), 0u) << "writer thread never ran";
   ASSERT_GT(accepted, 0u);
   ASSERT_TRUE(sink->waitFor(accepted));
   ASSERT_EQ(sink->delivered(), accepted);
@@ -330,14 +340,19 @@ TEST(Transaction, VectorSetAndSnapshotRaceDeliversValidPayloads)
   });
 
   size_t accepted = 0;
-  for(int i = 0; i < 2000; ++i)
+  // Keep snapshotting until the writer has actually raced us at least once; a
+  // busy two-core runner may not schedule it during the first 2000 calls.
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+  for(int i = 0;
+      i < 2000 || (iterations.load() == 0 && std::chrono::steady_clock::now() < deadline);
+      ++i)
   {
     accepted += channel->takeSnapshot();
   }
   stop = true;
   writer.join();
 
-  ASSERT_GT(iterations.load(), 0u);
+  ASSERT_GT(iterations.load(), 0u) << "writer thread never ran";
   ASSERT_GT(accepted, 0u);
   ASSERT_TRUE(sink->waitFor(accepted));
   ASSERT_EQ(sink->delivered(), accepted);
@@ -355,7 +370,7 @@ TEST(Transaction, ContentionCountersReportSnapshotHandoffAndRemainStableWhenUnco
   ASSERT_EQ(channel->writeLockContended(), 0u);
   ASSERT_EQ(channel->writeLockWaitMaxNs(), 0u);
 
-  std::atomic_bool started{false}, finished{false};
+  std::atomic_bool started{ false }, finished{ false };
   std::thread snapshot;
   uint64_t elapsed = 0;
   {
@@ -365,10 +380,12 @@ TEST(Transaction, ContentionCountersReportSnapshotHandoffAndRemainStableWhenUnco
       const auto before = std::chrono::steady_clock::now();
       EXPECT_TRUE(channel->takeSnapshot());
       elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
-                    std::chrono::steady_clock::now() - before).count();
+                    std::chrono::steady_clock::now() - before)
+                    .count();
       finished = true;
     });
-    while(!started) std::this_thread::yield();
+    while(!started)
+      std::this_thread::yield();
     EXPECT_FALSE(finished.load());
   }
   snapshot.join();
@@ -377,7 +394,8 @@ TEST(Transaction, ContentionCountersReportSnapshotHandoffAndRemainStableWhenUnco
   // before the transaction ended. Either report is legal for this handoff.
   const auto stats = channel->stats();
   EXPECT_LE(stats.write_lock_contended, 1u);
-  if(stats.write_lock_contended == 0) EXPECT_EQ(stats.write_lock_wait_max_ns, 0u);
+  if(stats.write_lock_contended == 0)
+    EXPECT_EQ(stats.write_lock_wait_max_ns, 0u);
   EXPECT_LE(stats.write_lock_wait_max_ns, elapsed);
   EXPECT_EQ(stats.write_lock_contended, channel->writeLockContended());
   EXPECT_EQ(stats.write_lock_wait_max_ns, channel->writeLockWaitMaxNs());
@@ -389,7 +407,8 @@ TEST(Transaction, ContentionCountersReportSnapshotHandoffAndRemainStableWhenUnco
 TEST(Transaction, ObservedSleepingSnapshotAdvancesContentionCounters)
 {
 #if defined(__linux__)
-  if(!std::ifstream("/proc/self/stat")) GTEST_SKIP() << "needs readable procfs";
+  if(!std::ifstream("/proc/self/stat"))
+    GTEST_SKIP() << "needs readable procfs";
   auto channel = LogChannel::create("chan");
   auto sink = std::make_shared<CheckingSink>(CheckingSink::Payload::PAIR);
   channel->addDataSink(sink);
@@ -397,8 +416,8 @@ TEST(Transaction, ObservedSleepingSnapshotAdvancesContentionCounters)
   auto b = channel->createLoggedValue<double>("b", 1.0);
   ASSERT_TRUE(channel->takeSnapshot());
 
-  std::atomic<pid_t> tid{0};
-  std::atomic_bool finished{false};
+  std::atomic<pid_t> tid{ 0 };
+  std::atomic_bool finished{ false };
   std::thread snapshot;
   bool observed = false, accepted = false;
   {
