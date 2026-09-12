@@ -149,11 +149,12 @@ TEST(DataTamerParser, PlainParsing)
   channel->registerValue("v4", &v4);
 
   channel->takeSnapshot();
-  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  dummy_sink->flush();
 
   const auto& schema_in = channel->getSchema();
   const auto& schema_out = DataTamerParser::BuilSchemaFromText(ToStr(schema_in));
-  const auto snapshot_view = ConvertSnapshot(dummy_sink->latest_snapshot);
+  const auto snapshot = dummy_sink->latestSnapshot();
+  const auto snapshot_view = ConvertSnapshot(snapshot);
 
   std::map<std::string, double> parsed_values;
   auto callback = [&](const std::string& field_name,
@@ -188,11 +189,12 @@ TEST(DataTamerParser, CustomParsing)
   channel->registerValue("pose", &pose);
 
   channel->takeSnapshot();
-  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  dummy_sink->flush();
 
   const auto& schema_in = channel->getSchema();
   const auto& schema_out = DataTamerParser::BuilSchemaFromText(ToStr(schema_in));
-  const auto snapshot_view = ConvertSnapshot(dummy_sink->latest_snapshot);
+  const auto snapshot = dummy_sink->latestSnapshot();
+  const auto snapshot_view = ConvertSnapshot(snapshot);
 
   std::map<std::string, double> parsed_values;
   auto callback = [&](const std::string& field_name,
@@ -242,11 +244,12 @@ TEST(DataTamerParser, VectorParsing)
   channel->registerValue("quats", &quats);
 
   channel->takeSnapshot();
-  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  dummy_sink->flush();
 
   const auto& schema_in = channel->getSchema();
   const auto& schema_out = DataTamerParser::BuilSchemaFromText(ToStr(schema_in));
-  const auto snapshot_view = ConvertSnapshot(dummy_sink->latest_snapshot);
+  const auto snapshot = dummy_sink->latestSnapshot();
+  const auto snapshot_view = ConvertSnapshot(snapshot);
 
   std::map<std::string, double> parsed_values;
   auto callback = [&](const std::string& field_name,
