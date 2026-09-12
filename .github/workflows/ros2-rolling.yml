@@ -4,6 +4,7 @@ on: [push, pull_request]
 
 jobs:
   industrial_ci:
+    name: ros2 rolling
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
