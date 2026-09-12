@@ -1,10 +1,12 @@
 #include "data_tamer/data_tamer.hpp"
 #include "data_tamer/sinks/dummy_sink.hpp"
+#include "data_tamer/sinks/mcap_sink.hpp"
 
 #include "../examples/geometry_types.hpp"
 
 #include <gtest/gtest.h>
 
+#include <filesystem>
 #include <variant>
 #include <string>
 #include <thread>
@@ -269,4 +271,34 @@ TEST(DataTamerBasic, VectorWithChangingSize)
   std::this_thread::sleep_for(std::chrono::milliseconds(10));
   ASSERT_EQ(sink->latest_snapshot.payload.size(),
             vect.size() * sizeof(float) + sizeof(uint32_t));
+}
+
+TEST(DataTamerBasic, FinishQueue)
+{
+  auto channel = LogChannel::create("chan");
+  auto const temp_path =
+      std::filesystem::temp_directory_path() / std::filesystem::path("data_tamer_test."
+                                                                     "mcap");
+  auto sink = std::make_shared<MCAPSink>(temp_path.string());
+  channel->addDataSink(sink);
+
+  double const value = 1.;
+  channel->registerValue("value", &value);
+
+  EXPECT_TRUE(channel->takeSnapshot());
+
+  sink->finishQueueAndStop();
+
+  // now we shouldn't be able to take more snapshots
+  EXPECT_FALSE(channel->takeSnapshot());
+
+  // restart the recording
+  sink->restartRecording(temp_path);
+
+  EXPECT_TRUE(channel->takeSnapshot());
+
+  sink->stopRecording();
+
+  // since we just stopped recording but not snapshots, we'll still be able to take a snapshot (but it won't be written to disk)
+  EXPECT_TRUE(channel->takeSnapshot());
 }

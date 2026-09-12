@@ -41,6 +41,7 @@ public:
   {
     std::swap(ref_, other.ref_);
     std::swap(mutex_, other.mutex_);
+    return *this;
   }
 
   operator bool() const { return ref_ != nullptr; }
