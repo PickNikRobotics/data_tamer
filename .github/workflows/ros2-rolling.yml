@@ -8,7 +8,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: 'ros-industrial/industrial_ci@master'
+      # industrial_ci no longer tags releases (latest tag 0.10.0 is from 2020); pin the
+      # commit so its distro defaults change when we choose. master @ 2026-06-01.
+      - uses: ros-industrial/industrial_ci@125164b9f1883cdf1858897a7146d1bebf2be5c6
         # industrial_ci defaults rolling to Ubuntu 26.04 (resolute), for which
         # packages.ros.org publishes no ros-rolling-* binaries yet; pin to noble.
         env: {ROS_DISTRO: rolling, ROS_REPO: main, OS_CODE_NAME: noble}
