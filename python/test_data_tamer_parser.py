@@ -13,29 +13,36 @@ def read(name: str) -> bytes:
 
 
 class GoldenVectors(unittest.TestCase):
-    def setUp(self):
-        self.schema = dt.parse_schema(read("schema.txt").decode())
-        with open(VECTORS / "expected.json") as f:
-            self.expected = json.load(f)
+    @classmethod
+    def setUpClass(cls):
+        cls.schema = dt.parse_schema(read("schema.txt").decode())
+        cls.expected = json.loads(read("expected.json"))
 
     def test_schema(self):
         self.assertEqual(self.schema.channel_name, "wire_test")
-        self.assertEqual([f.name for f in self.schema.fields], self.expected["fields"])
+        self.assertGreater(self.schema.hash, 0)  # value is implementation-defined, see spec
+        self.assertEqual([f.field_name for f in self.schema.fields], self.expected["fields"])
         self.assertEqual(sorted(self.schema.custom_types), ["Point3D", "Pose"])
 
-    def check(self, stem: str, key: str):
-        values = dt.parse_snapshot(self.schema, read(stem + ".mask"), read(stem + ".payload"))
-        self.assertEqual(values, self.expected[key])
-        mask, payload = dt.split_mcap_message(read(stem + ".mcap_message"))
-        self.assertEqual((mask, payload), (read(stem + ".mask"), read(stem + ".payload")))
+    def decode(self, stem: str) -> dict:
+        mask, payload = read(stem + ".mask"), read(stem + ".payload")
+        self.assertEqual(dt.split_mcap_message(read(stem + ".mcap_message")), (mask, payload))
+        return dt.parse_snapshot(self.schema, mask, payload)
 
     def test_full_snapshot(self):
-        self.check("snapshot_full", "full")
+        self.assertEqual(self.decode("snapshot_full"), self.expected["full"])
 
     def test_masked_snapshot(self):
-        self.check("snapshot_masked", "masked")
-        self.assertNotIn("i16", self.expected["masked"])
-        self.assertNotIn("pose/stamp", self.expected["masked"])
+        values = self.decode("snapshot_masked")
+        self.assertEqual(values, self.expected["masked"])
+        self.assertNotIn("i16", values)
+        self.assertNotIn("pose/stamp", values)
+
+    def test_rejects_trailing_bytes_and_wrong_version(self):
+        with self.assertRaises(ValueError):
+            dt.parse_snapshot(self.schema, read("snapshot_full.mask"), read("snapshot_full.payload") + b"\0")
+        with self.assertRaises(ValueError):
+            dt.parse_schema("### version: 3\n")
 
 
 if __name__ == "__main__":

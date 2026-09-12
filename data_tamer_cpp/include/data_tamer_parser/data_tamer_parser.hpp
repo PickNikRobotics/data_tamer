@@ -19,7 +19,7 @@ namespace DataTamerParser
 
 constexpr int SCHEMA_VERSION = 4;
 
-enum class BasicType: uint8_t
+enum class BasicType : uint8_t
 {
   BOOL,
   CHAR,
@@ -432,7 +432,8 @@ inline bool ParseSnapshot(const Schema& schema, SnapshotView snapshot,
       ParseSnapshotRecursive(field, schema.custom_types, buffer, callback_number, "");
     }
   }
-  return true;
+  // every enabled field consumed exactly its bytes; leftovers mean schema/payload mismatch
+  return buffer.size == 0;
 }
 
 }  // namespace DataTamerParser

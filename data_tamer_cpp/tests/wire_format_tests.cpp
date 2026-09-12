@@ -2,53 +2,49 @@
 // docs/wire_format/vectors/ are the source of truth: a change in the schema text
 // or in the snapshot bytes fails here and must be a deliberate format revision.
 //
-// Regenerate the fixtures with DATA_TAMER_UPDATE_GOLDEN=1, then review the diff.
+// Regenerate the fixtures with DATA_TAMER_UPDATE_GOLDEN=1, then review the diff
+// and update expected.json by hand.
 #include "data_tamer/data_tamer.hpp"
 #include "data_tamer/sinks/dummy_sink.hpp"
-#include "data_tamer/contrib/SerializeMe.hpp"
+#include "data_tamer/sinks/mcap_sink.hpp"
+#include "../examples/geometry_types.hpp"
+
+#include <mcap/reader.hpp>
 
 #include <gtest/gtest.h>
 
-#include <algorithm>
 #include <array>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <string>
-#include <thread>
 #include <vector>
 
 using namespace DataTamer;
+using TestTypes::Point3D;
 
 namespace
 {
-struct Point3D
-{
-  double x = 0;
-  double y = 0;
-  double z = 0;
-};
-template <class AddField>
-std::string_view TypeDefinition(Point3D& p, AddField& add)
-{
-  add("x", &p.x);
-  add("y", &p.y);
-  add("z", &p.z);
-  return "Point3D";
-}
-
-struct Pose
+struct StampedPose
 {
   Point3D position;
   uint32_t stamp = 0;
 };
 template <class AddField>
-std::string_view TypeDefinition(Pose& p, AddField& add)
+std::string_view TypeDefinition(StampedPose& p, AddField& add)
 {
   add("position", &p.position);
   add("stamp", &p.stamp);
   return "Pose";
 }
+
+// DummySink without a worker thread: snapshots are delivered by drain().
+struct SyncSink : DummySink
+{
+  SyncSink() { stopThread(); }
+  void drain() { processQueuedSnapshots(); }
+};
 
 const std::string kDir = DATA_TAMER_WIRE_FORMAT_DIR;
 
@@ -58,23 +54,14 @@ std::vector<uint8_t> readFile(const std::string& name)
   return { std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>() };
 }
 
-void writeFile(const std::string& name, const void* data, size_t size)
-{
-  std::ofstream file(kDir + "/vectors/" + name, std::ios::binary);
-  file.write(static_cast<const char*>(data), std::streamsize(size));
-}
-
-bool updating()
-{
-  return std::getenv("DATA_TAMER_UPDATE_GOLDEN") != nullptr;
-}
-
-// Compare (or, when updating, record) `actual` against the fixture `name`.
+// Compare (or, with DATA_TAMER_UPDATE_GOLDEN set, record) `actual` against the fixture.
 void checkGolden(const std::string& name, const std::vector<uint8_t>& actual)
 {
-  if(updating())
+  if(std::getenv("DATA_TAMER_UPDATE_GOLDEN"))
   {
-    writeFile(name, actual.data(), actual.size());
+    std::ofstream file(kDir + "/vectors/" + name, std::ios::binary);
+    file.write(reinterpret_cast<const char*>(actual.data()),
+               std::streamsize(actual.size()));
     return;
   }
   const auto expected = readFile(name);
@@ -83,58 +70,25 @@ void checkGolden(const std::string& name, const std::vector<uint8_t>& actual)
                               << " (see docs/wire_format.md)";
 }
 
-// Two parts of the schema text are legitimately environment dependent (see the
-// spec): the hash line (std::hash is implementation-defined) and the order of
-// the MSG sections (unordered_map). Normalize both before comparing.
-std::vector<uint8_t> canonicalSchema(std::string text)
+// The hash is std::hash based and therefore implementation-defined (spec section 5):
+// the fixture keeps the value of the machine that generated it, comparisons ignore it.
+std::string withoutHash(std::string text)
 {
-  const std::string separator = "========================================================"
-                                "===\n";
-  std::vector<std::string> sections;
-  size_t start = 0;
-  for(size_t pos; (pos = text.find(separator, start)) != std::string::npos;
-      start = pos + separator.size())
-    sections.push_back(text.substr(start, pos - start));
-  sections.push_back(text.substr(start));
-  std::sort(sections.begin() + 1, sections.end());
-  std::string out;
-  for(size_t i = 0; i < sections.size(); ++i)
-    out += (i ? separator : "") + sections[i];
-  const auto hash_pos = out.find("### hash: ");
-  const auto hash_end = out.find('\n', hash_pos);
-  out.replace(hash_pos + 10, hash_end - hash_pos - 10, "<implementation-defined>");
-  return { out.begin(), out.end() };
-}
-
-// The exact bytes MCAPSink stores per message: two SerializeMe vectors.
-std::vector<uint8_t> mcapMessage(const Snapshot& snapshot)
-{
-  std::vector<uint8_t> out(2 * sizeof(uint32_t) + snapshot.active_mask.size() +
-                           snapshot.payload.size());
-  SerializeMe::SpanBytes buffer(out);
-  SerializeMe::SerializeIntoBuffer(buffer, snapshot.active_mask);
-  SerializeMe::SerializeIntoBuffer(buffer, snapshot.payload);
-  return out;
-}
-
-// DummySink delivers on its own thread and has no drain hook: wait until the
-// delivered count reaches `count` (bounded, so a regression fails instead of hanging).
-Snapshot waitDelivered(DummySink& sink, uint64_t hash, long count)
-{
-  for(int i = 0; i < 2500 && sink.snapshots_count[hash] < count; ++i)
-  {
-    std::this_thread::sleep_for(std::chrono::milliseconds(2));
-  }
-  EXPECT_EQ(sink.snapshots_count[hash], count);
-  return sink.latest_snapshot;
+  const auto start = text.find("### hash: ") + 10;
+  text.replace(start, text.find('\n', start) - start, "0");
+  return text;
 }
 }  // namespace
 
 TEST(WireFormat, SchemaTextAndSnapshotsMatchGoldenVectors)
 {
+  const auto mcap_path =
+      (std::filesystem::temp_directory_path() / "data_tamer_wire_format.mcap").string();
   auto channel = LogChannel::create("wire_test");
-  auto sink = std::make_shared<DummySink>();
+  auto sink = std::make_shared<SyncSink>();
+  auto mcap = std::make_shared<MCAPSink>(mcap_path, false);
   channel->addDataSink(sink);
+  channel->addDataSink(mcap);
 
   // One field of every basic type, in the order of the BasicType enum.
   bool flag = true;
@@ -152,7 +106,7 @@ TEST(WireFormat, SchemaTextAndSnapshotsMatchGoldenVectors)
   // Containers and custom types.
   std::vector<double> vec = { 10.0, 20.0, 30.0 };
   std::array<int32_t, 4> arr = { 1, -2, 3, -4 };
-  Pose pose;
+  StampedPose pose;
   pose.position = { 1.0, 2.0, 3.0 };
   pose.stamp = 42;
   std::vector<Point3D> points = { { 4.0, 5.0, 6.0 }, { 7.0, 8.0, 9.0 } };
@@ -174,26 +128,56 @@ TEST(WireFormat, SchemaTextAndSnapshotsMatchGoldenVectors)
   const auto id_pose = channel->registerValue("pose", &pose);
   channel->registerValue("points", &points);
 
-  const auto hash = channel->getSchema().hash;
-  ASSERT_TRUE(channel->takeSnapshot(std::chrono::nanoseconds(1234567890)));
-  const auto full = waitDelivered(*sink, hash, 1);
-  ASSERT_EQ(full.active_mask.size(), 2u);  // 16 fields -> 2 mask bytes
+  const std::chrono::nanoseconds stamp(1234567890);
+  ASSERT_TRUE(channel->takeSnapshot(stamp));
+  sink->drain();
+  const Snapshot full = sink->latest_snapshot;
 
   const std::string schema_text = ToStr(channel->getSchema());
-  checkGolden("schema.txt", canonicalSchema(schema_text));
+  if(std::getenv("DATA_TAMER_UPDATE_GOLDEN"))
+  {
+    checkGolden("schema.txt", { schema_text.begin(), schema_text.end() });
+  }
+  else
+  {
+    const auto golden = readFile("schema.txt");
+    EXPECT_EQ(withoutHash(schema_text), withoutHash({ golden.begin(), golden.end() }));
+  }
   checkGolden("snapshot_full.mask", full.active_mask);
   checkGolden("snapshot_full.payload", full.payload);
-  checkGolden("snapshot_full.mcap_message", mcapMessage(full));
 
   // Disable one scalar and one custom type: their bits clear and their bytes
   // disappear from the payload; everything else keeps its relative order.
   channel->setEnabled(id_i16, false);
   channel->setEnabled(id_pose, false);
-  ASSERT_TRUE(channel->takeSnapshot(std::chrono::nanoseconds(1234567890)));
-  const auto masked = waitDelivered(*sink, hash, 2);
-  ASSERT_EQ(masked.payload.size(), full.payload.size() - sizeof(int16_t) -
-                                       3 * sizeof(double) - sizeof(uint32_t));
+  ASSERT_TRUE(channel->takeSnapshot(stamp));
+  sink->drain();
+  const Snapshot masked = sink->latest_snapshot;
   checkGolden("snapshot_masked.mask", masked.active_mask);
   checkGolden("snapshot_masked.payload", masked.payload);
-  checkGolden("snapshot_masked.mcap_message", mcapMessage(masked));
+
+  // The MCAP records MCAPSink actually wrote: schema, channel and message bodies.
+  mcap->finishQueueAndStop();
+  mcap::McapReader reader;
+  ASSERT_TRUE(reader.open(mcap_path).ok());
+  std::vector<std::vector<uint8_t>> bodies;
+  for(const auto& view : reader.readMessages())
+  {
+    EXPECT_EQ(view.schema->name,
+              "wire_test::" + std::to_string(channel->getSchema().hash));
+    EXPECT_EQ(view.schema->encoding, "data_tamer");
+    EXPECT_EQ(std::string(reinterpret_cast<const char*>(view.schema->data.data()),
+                          view.schema->data.size()),
+              schema_text);
+    EXPECT_EQ(view.channel->topic, "wire_test");
+    EXPECT_EQ(view.channel->messageEncoding, "data_tamer");
+    EXPECT_EQ(view.message.logTime, mcap::Timestamp(stamp.count()));
+    const auto* data = reinterpret_cast<const uint8_t*>(view.message.data);
+    bodies.emplace_back(data, data + view.message.dataSize);
+  }
+  reader.close();
+  std::filesystem::remove(mcap_path);
+  ASSERT_EQ(bodies.size(), 2u);
+  checkGolden("snapshot_full.mcap_message", bodies[0]);
+  checkGolden("snapshot_masked.mcap_message", bodies[1]);
 }

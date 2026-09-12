@@ -1,5 +1,5 @@
 ### version: 4
-### hash: <implementation-defined>
+### hash: 64186643224329035
 ### channel_name: wire_test
 
 bool flag

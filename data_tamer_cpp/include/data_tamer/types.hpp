@@ -5,6 +5,7 @@
 
 #include <ostream>
 #include <string>
+#include <map>
 #include <unordered_map>
 #include <vector>
 #include <variant>
@@ -138,7 +139,7 @@ struct Schema
   FieldsVector fields;
   std::string channel_name;
 
-  std::unordered_map<std::string, FieldsVector> custom_types;
+  std::map<std::string, FieldsVector> custom_types;  // sorted: deterministic schema text
   std::unordered_map<std::string, CustomSchema> custom_schemas;
 
   friend std::ostream& operator<<(std::ostream& os, const Schema& schema);

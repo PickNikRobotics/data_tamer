@@ -15,7 +15,8 @@ sources. Two artifacts keep it honest:
 A change to any byte described here is a format revision: bump `SCHEMA_VERSION`
 in `data_tamer/types.hpp`, regenerate the vectors with
 `DATA_TAMER_UPDATE_GOLDEN=1 datatamer_test --gtest_filter='WireFormat.*'`,
-update the Python decoder, and describe the change in this file.
+update `expected.json` by hand (it is the oracle, never generated), update the
+Python decoder, and describe the change in this file.
 
 ## 1. Data model
 
@@ -56,10 +57,10 @@ never on the wire.
 | 9 | `uint64` | 8 | little-endian |
 | 10 | `float32` | 4 | IEEE 754 binary32, little-endian |
 | 11 | `float64` | 8 | IEEE 754 binary64, little-endian |
-| 12 | `other` | | a custom struct, named in the schema |
 
-Enums are recorded as their underlying integer type; the schema does not
-preserve the enum name.
+Type id 12, `other`, denotes a custom struct named in the schema. Enums are
+recorded as their underlying integer type; the schema does not preserve the
+enum name.
 
 ## 2. Schema text
 
@@ -90,8 +91,7 @@ float64 z
 Grammar, in the order lines appear:
 
 1. `### version: <int>` – must equal 4. Reject other values.
-2. `### hash: <uint64>` – the schema hash, see section 5. Decoders must not
-   recompute it; use it only to match snapshots to schemas.
+2. `### hash: <uint64>` – the schema hash, see section 5.
 3. `### channel_name: <text>` – everything after the first space following the
    colon, trimmed. May contain spaces.
 4. Zero or more **field lines**: `<type-spec> <name>`. Exactly one space
@@ -102,13 +102,16 @@ Grammar, in the order lines appear:
    order.
 5. Zero or more **custom type sections**. Each starts with a line consisting of
    `=` characters (at least 30; the writer emits 59), then `MSG: <TypeName>`,
-   then field lines with the same grammar as above. The order of sections is
-   unspecified and must not be relied upon. A type may reference another type
-   declared later in the text. Nested fields are not individually maskable.
+   then field lines with the same grammar as above. Sections are emitted sorted
+   by type name; decoders must not depend on that, since a type may reference
+   another type declared later in the text. Nested fields are not individually
+   maskable.
 6. Optionally, **opaque custom encodings**: a section whose `MSG:` line is
-   followed by `ENCODING: <name>` and then the foreign schema text. The payload
-   bytes of such a field are produced by user code; this document does not
-   define them and generic decoders cannot skip them. Producers that need
+   followed by `ENCODING: <name>` and then the foreign schema text. The writer
+   emits these after every ordinary section and they own the rest of the text,
+   because a foreign schema may itself contain `=====` and `MSG:` lines. The
+   payload bytes of such a field are produced by user code; this document does
+   not define them and generic decoders cannot skip them. Producers that need
    generic decoding must not use them.
 
 Legacy files (version < 4, before 2023) used upper-case type names (`DOUBLE`,
@@ -200,21 +203,19 @@ Two topics under a user-chosen prefix:
 is computed by the writer from the channel name and the top-level fields with
 `std::hash`, whose result is **implementation-defined**: the same schema hashes
 differently under libstdc++ and libc++, and may change between compiler
-releases. Consequently:
-
-- Decoders match a snapshot to a schema by comparing the snapshot's hash with
-  the `### hash:` line (MCAP: the schema record attached to the channel; ROS:
-  the `Schemas` entry). They must not recompute it.
-- Two files recorded on different platforms may carry different hashes for the
-  same schema. Custom type bodies do not contribute to the hash at all.
+releases. Decoders therefore match a snapshot to a schema by comparing the
+snapshot's hash with the `### hash:` line of the schema shipped next to it
+(MCAP: the schema record attached to the channel; ROS: the `Schemas` entry) and
+never recompute it. Custom type bodies do not contribute to the hash.
 
 For reference, the writer's algorithm is `AddFieldToHash` in
 `data_tamer/types.hpp`: start from `std::hash<std::string>(channel_name)`, then
 for each top-level field fold in name, type id, type name (custom types only),
-`is_vector` and `array_size` with the boost `hash_combine` recipe. The golden
-`schema.txt` therefore carries the placeholder `<implementation-defined>` on its
-hash line, and the C++ golden test normalizes that line and the section order
-before comparing.
+`is_vector` and `array_size` with the boost `hash_combine` recipe. The bundled
+C++ parser offers an opt-in `check_hash` that recomputes it; that check is only
+valid when reader and writer share a standard library. The golden `schema.txt`
+carries the hash of the machine that generated it, and the C++ golden test
+ignores that line when comparing.
 
 ## 6. Worked example
 
@@ -256,15 +257,11 @@ fc ff ff ff              arr[3]   int32    -4
 `pose` (bit 14): mask `ef bf`, payload 30 bytes shorter, every other byte at the
 same relative position.
 
-## 7. Conformance checklist for a new decoder
+## 7. Conformance
 
-1. Parse `schema.txt` from the vectors directory and reproduce the field list in
-   `expected.json["fields"]` and the two custom types.
-2. Decode `snapshot_full.mask` + `snapshot_full.payload` and match
-   `expected.json["full"]` exactly (compare floats bit-exactly; they are
-   representable).
-3. Decode `snapshot_masked.*` and match `expected.json["masked"]`; the keys for
-   `i16` and `pose/*` must be absent, not zero.
-4. Split `snapshot_*.mcap_message` into mask and payload and obtain the same two
-   byte strings.
-5. Reject a payload with trailing bytes and a schema with the wrong version.
+A decoder conforms when it reproduces `expected.json` from the vectors
+directory the way `python/test_data_tamer_parser.py` does: parse `schema.txt`,
+decode both snapshots from mask and payload (disabled fields absent, not zero;
+floats compared bit-exactly), split both `.mcap_message` bodies into the same
+mask and payload bytes, and reject a payload with trailing bytes or a schema
+with another version.

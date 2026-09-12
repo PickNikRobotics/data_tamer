@@ -13,31 +13,27 @@ from __future__ import annotations
 
 import struct
 from dataclasses import dataclass, field
-from typing import Dict, List, Tuple
 
 SCHEMA_VERSION = 4
 
-# BasicType names in enum order; the index is the wire type id.
-BASIC_TYPES = ["bool", "char", "int8", "uint8", "int16", "uint16", "int32",
-               "uint32", "int64", "uint64", "float32", "float64"]
-
-# struct format (little-endian) and size in bytes for each basic type
+# Basic type name -> little-endian struct; the order is the BasicType id order.
 _STRUCT = {
-    "bool": ("<?", 1), "char": ("<c", 1),
-    "int8": ("<b", 1), "uint8": ("<B", 1),
-    "int16": ("<h", 2), "uint16": ("<H", 2),
-    "int32": ("<i", 4), "uint32": ("<I", 4),
-    "int64": ("<q", 8), "uint64": ("<Q", 8),
-    "float32": ("<f", 4), "float64": ("<d", 8),
+    "bool": struct.Struct("<?"), "char": struct.Struct("<c"),
+    "int8": struct.Struct("<b"), "uint8": struct.Struct("<B"),
+    "int16": struct.Struct("<h"), "uint16": struct.Struct("<H"),
+    "int32": struct.Struct("<i"), "uint32": struct.Struct("<I"),
+    "int64": struct.Struct("<q"), "uint64": struct.Struct("<Q"),
+    "float32": struct.Struct("<f"), "float64": struct.Struct("<d"),
 }
 
 
 @dataclass
 class Field:
-    name: str
-    type_name: str          # one of BASIC_TYPES, or a custom type name
+    """Mirrors TypeField in the C++ headers."""
+    field_name: str
+    type_name: str           # one of _STRUCT, or a custom type name
     is_vector: bool = False  # true for "T[]" and "T[N]"
-    array_size: int = 0     # N for "T[N]", 0 for "T[]" (size prefix on the wire)
+    array_size: int = 0      # N for "T[N]", 0 for "T[]" (count prefix on the wire)
 
     @property
     def is_basic(self) -> bool:
@@ -48,10 +44,10 @@ class Field:
 class Schema:
     channel_name: str = ""
     hash: int = 0
-    fields: List[Field] = field(default_factory=list)
-    custom_types: Dict[str, List[Field]] = field(default_factory=dict)
+    fields: list[Field] = field(default_factory=list)
+    custom_types: dict[str, list[Field]] = field(default_factory=dict)
     # opaque custom encodings: type name -> (encoding, schema text)
-    custom_schemas: Dict[str, Tuple[str, str]] = field(default_factory=dict)
+    custom_schemas: dict[str, tuple[str, str]] = field(default_factory=dict)
 
 
 def _parse_field_line(line: str) -> Field:
@@ -71,31 +67,26 @@ def parse_schema(text: str) -> Schema:
     schema = Schema()
     lines = iter(text.splitlines())
     target = schema.fields
+    last_type = ""
     for raw in lines:
         line = raw.strip()
-        if not line:
+        if not line or line.startswith("====="):
             continue
         if line.startswith("### version:"):
             if int(line.split(":", 1)[1]) != SCHEMA_VERSION:
                 raise ValueError(f"unsupported schema version in {line!r}")
         elif line.startswith("### hash:"):
-            value = line.split(":", 1)[1].strip()
-            schema.hash = int(value) if value.isdigit() else 0  # implementation-defined, see spec
+            schema.hash = int(line.split(":", 1)[1])
         elif line.startswith("### channel_name:"):
             schema.channel_name = line.split(":", 1)[1].strip()
-        elif line.startswith("====="):
-            header = next(lines).strip()
-            if not header.startswith("MSG: "):
-                raise ValueError(f"expected 'MSG: <type>' after separator, got {header!r}")
-            type_name = header[5:].strip()
-            nxt = next(lines).strip()
-            if nxt.startswith("ENCODING: "):
-                body = "\n".join(l for l in lines)  # rest of the text belongs to it
-                schema.custom_schemas[type_name] = (nxt[10:].strip(), body)
-                break
-            target = schema.custom_types.setdefault(type_name, [])
-            if nxt:
-                target.append(_parse_field_line(nxt))
+        elif line.startswith("MSG: "):
+            last_type = line[5:].strip()
+            target = schema.custom_types.setdefault(last_type, [])
+        elif line.startswith("ENCODING: "):
+            # Opaque sections come last and own the rest of the text (spec section 2).
+            schema.custom_schemas[last_type] = (line[10:].strip(), "\n".join(lines))
+            del schema.custom_types[last_type]
+            break
         else:
             target.append(_parse_field_line(line))
     return schema
@@ -111,42 +102,36 @@ class _Reader:
         self.pos = 0
 
     def number(self, type_name: str):
-        fmt, size = _STRUCT[type_name]
-        if self.pos + size > len(self.data):
+        fmt = _STRUCT[type_name]
+        if self.pos + fmt.size > len(self.data):
             raise ValueError("payload truncated")
-        (value,) = struct.unpack_from(fmt, self.data, self.pos)
-        self.pos += size
+        (value,) = fmt.unpack_from(self.data, self.pos)
+        self.pos += fmt.size
         return value.decode("latin-1") if type_name == "char" else value
-
-    def u32(self) -> int:
-        return self.number("uint32")
 
 
 def _parse_field(f: Field, schema: Schema, reader: _Reader, prefix: str, out: dict) -> None:
-    name = f.name if not prefix else f"{prefix}/{f.name}"
-    count = f.array_size
-    if f.is_vector and f.array_size == 0:
-        count = reader.u32()
-
-    def one(var_name: str) -> None:
-        if f.is_basic:
-            out[var_name] = reader.number(f.type_name)
-        elif f.type_name in schema.custom_types:
-            for sub in schema.custom_types[f.type_name]:
-                _parse_field(sub, schema, reader, var_name, out)
-        else:
-            raise ValueError(f"type {f.type_name!r} has an opaque encoding; cannot continue")
-
-    if not f.is_vector:
-        one(name)
+    name = f.field_name if not prefix else f"{prefix}/{f.field_name}"
+    if f.is_vector:
+        count = f.array_size or reader.number("uint32")  # dynamic vector: count prefix
+        names = [f"{name}[{i}]" for i in range(count)]
     else:
-        for i in range(count):
-            one(f"{name}[{i}]")
+        names = [name]
+    if f.is_basic:
+        for n in names:
+            out[n] = reader.number(f.type_name)
+    elif f.type_name in schema.custom_types:
+        subs = schema.custom_types[f.type_name]
+        for n in names:
+            for sub in subs:
+                _parse_field(sub, schema, reader, n, out)
+    else:
+        raise ValueError(f"type {f.type_name!r} has an opaque encoding; cannot continue")
 
 
-def parse_snapshot(schema: Schema, active_mask: bytes, payload: bytes) -> Dict[str, object]:
+def parse_snapshot(schema: Schema, active_mask: bytes, payload: bytes) -> dict[str, object]:
     """Decode one snapshot into {"field/path[i]": value}. Disabled fields are absent."""
-    out: Dict[str, object] = {}
+    out: dict[str, object] = {}
     reader = _Reader(payload)
     for index, f in enumerate(schema.fields):
         if get_bit(active_mask, index):
@@ -156,7 +141,7 @@ def parse_snapshot(schema: Schema, active_mask: bytes, payload: bytes) -> Dict[s
     return out
 
 
-def split_mcap_message(data: bytes) -> Tuple[bytes, bytes]:
+def split_mcap_message(data: bytes) -> tuple[bytes, bytes]:
     """Split an MCAPSink message body into (active_mask, payload)."""
     (mask_len,) = struct.unpack_from("<I", data, 0)
     mask = data[4:4 + mask_len]

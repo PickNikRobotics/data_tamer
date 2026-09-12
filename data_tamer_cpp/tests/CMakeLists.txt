@@ -45,6 +45,13 @@ else()
     add_test(NAME datatamer_test COMMAND $<TARGET_FILE:datatamer_test>)
 endif()
 
+# The wire-format test reads back the MCAP file written by MCAPSink.
+if(USE_VENDORED_MCAP)
+    target_include_directories(datatamer_test PRIVATE ${PROJECT_SOURCE_DIR}/3rdparty/mcap/include)
+elseif(NOT DATA_TAMER_BUILD_ROS)
+    target_link_libraries(datatamer_test mcap::mcap)
+endif()
+
 # Golden vectors for docs/wire_format.md, shared with the Python reference decoder.
 target_compile_definitions(datatamer_test PRIVATE
     DATA_TAMER_WIRE_FORMAT_DIR="${PROJECT_SOURCE_DIR}/../docs/wire_format")
