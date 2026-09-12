@@ -234,8 +234,9 @@ recomputed value is optional (`check_hash` in the C++ parser, `verify_hash` in
 the Python decoder) and only meaningful for version 5 texts.
 
 **Version 4 texts** carried a hash computed with `std::hash`, which is
-implementation-defined and did not cover custom type bodies. Readers handle
-them by trusting the declared value, as before; they cannot be verified.
+implementation-defined and did not cover custom type bodies. Readers match them
+by the declared value; the C++ parser still recomputes the version 4 recipe for
+`check_hash`, which only agrees on the writer's platform.
 Parsers older than version 5 recompute the version-4 hash themselves and
 therefore reject version 5 files with "Wrong SCHEMA_VERSION" instead of
 decoding them wrongly.

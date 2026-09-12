@@ -184,7 +184,34 @@ inline bool GetBit(BufferSpan mask, size_t index)
   return 0 != (byte & uint8_t(1 << (index % 8)));
 }
 
-/// FNV-1a 64 of the schema text without its "### hash:" line (wire format, section 5).
+/// Hash recipe of schema version 4 (std::hash based, so only reproducible on the
+/// writer's platform). Kept so that version 4 texts are read and verified exactly
+/// as before.
+[[nodiscard]] inline uint64_t AddFieldToHash(const TypeField& field, uint64_t hash)
+{
+  // https://stackoverflow.com/questions/2590677/how-do-i-combine-hash-values-in-c0x
+  const std::hash<std::string> str_hasher;
+  const std::hash<uint8_t> type_hasher;
+  const std::hash<bool> bool_hasher;
+  const std::hash<uint32_t> uint_hasher;
+
+  auto combine = [&hash](const auto& hasher, const auto& val) {
+    hash ^= hasher(val) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
+  };
+
+  combine(str_hasher, field.field_name);
+  combine(type_hasher, static_cast<uint8_t>(field.type));
+  if(field.type == BasicType::OTHER)
+  {
+    combine(str_hasher, field.type_name);
+  }
+  combine(bool_hasher, field.is_vector);
+  combine(uint_hasher, field.array_size);
+  return hash;
+}
+
+/// Hash recipe of schema version 5: FNV-1a 64 of the schema text without its
+/// "### hash:" line (wire format, section 5). Platform independent.
 [[nodiscard]] inline uint64_t SchemaTextHash(const std::string& text)
 {
   uint64_t hash = 0xcbf29ce484222325ULL;
@@ -234,6 +261,8 @@ inline Schema BuilSchemaFromText(const std::string& txt, bool check_hash = false
   std::string line;
   Schema schema;
   uint64_t declared_schema = 0;
+  int version = SCHEMA_VERSION;
+  uint64_t legacy_hash = 0;  // version 4 recomputation, field by field
 
   std::vector<TypeField>* field_vector = &schema.fields;
 
@@ -280,9 +309,8 @@ inline Schema BuilSchemaFromText(const std::string& txt, bool check_hash = false
 
     if(str_left == "### version:")
     {
-      // Version 4 differs only in how the hash was computed; its declared value
-      // is still the one to match snapshots against.
-      const int version = std::stoi(str_right);
+      // Version 4 differs only in how the hash was computed.
+      version = std::stoi(str_right);
       if(version != SCHEMA_VERSION && version != 4)
       {
         throw std::runtime_error("Wrong SCHEMA_VERSION");
@@ -300,6 +328,7 @@ inline Schema BuilSchemaFromText(const std::string& txt, bool check_hash = false
     {
       // check compatibility
       schema.channel_name = str_right;
+      legacy_hash = std::hash<std::string>()(schema.channel_name);
       continue;
     }
 
@@ -355,12 +384,16 @@ inline Schema BuilSchemaFromText(const std::string& txt, bool check_hash = false
     field.field_name = *str_name;
     trimString(field.field_name);
 
+    if(version == 4 && field_vector == &schema.fields)
+    {
+      legacy_hash = AddFieldToHash(field, legacy_hash);
+    }
     field_vector->push_back(field);
   }
   // Snapshots carry the writer's declared hash: that is what to match against.
-  // check_hash verifies it against the defined recomputation (version 5 texts only;
-  // version 4 used an implementation-defined std::hash and cannot be verified).
-  const uint64_t computed = SchemaTextHash(txt);
+  // check_hash verifies it against the recomputation of the text's own version
+  // (version 4's std::hash recipe only agrees on the writer's platform).
+  const uint64_t computed = version == 4 ? legacy_hash : SchemaTextHash(txt);
   if(check_hash && declared_schema != 0 && declared_schema != computed)
   {
     throw std::runtime_error("Error in hash calculation");
