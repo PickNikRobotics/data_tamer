@@ -391,7 +391,7 @@ inline void DeserializeFromBuffer(SpanBytesConst& buffer, T& dest)
     {
       throw std::runtime_error("DeserializeFromBuffer: buffer overflow");
     }
-    dest = *(reinterpret_cast<T const*>(buffer.data()));
+    std::memcpy(&dest, buffer.data(), S);  // buffer.data() may be misaligned for T
 
 #if SERIALIZE_LITTLEENDIAN == 0
     dest = EndianSwap<T>(dest);
@@ -555,7 +555,7 @@ inline void SerializeIntoBuffer(SpanBytes& buffer, std::array<T, N> const& vect)
 
   if constexpr(sizeof(T) == 1)
   {
-    std::memcpy(vect.data(), buffer.data(), N);
+    std::memcpy(buffer.data(), vect.data(), N);
     buffer.trimFront(N);
   }
   else
