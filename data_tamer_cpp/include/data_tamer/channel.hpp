@@ -49,9 +49,13 @@ enum class SnapshotResult : uint8_t
 {
   /// Captured and accepted by every attached sink.
   ok,
-  /// Captured, but at least one sink queue was full; see droppedSnapshots(sink).
+  /// Captured; some sinks accepted it, others refused (queue full or worker
+  /// stopped). droppedSnapshots(sink) tells which.
   partial,
-  /// No sink is attached: nothing captured, schema left open.
+  /// Captured, but every attached sink refused it.
+  rejected,
+  /// No sink is attached: nothing captured. Before prepare() this also leaves
+  /// the schema open.
   no_sinks,
   /// tryTakeSnapshot() before prepare(): nothing captured.
   not_prepared,
@@ -205,7 +209,8 @@ public:
    * then left exactly as before (schema still open, no pool), so fixing the
    * cause and calling prepare() again is enough. Sinks that were announced
    * successfully are not announced twice unless the schema changes.
-   * Sink callbacks run without channel locks held.
+   * onSchema() runs without channel locks held (here and in addDataSink), so
+   * a sink may call the channel's const queries from it.
    */
   void prepare();
 
@@ -227,11 +232,13 @@ public:
   takeSnapshot(std::chrono::nanoseconds timestamp = NsecSinceEpoch());
 
   /**
-   * @brief Real-time variant of takeSnapshot(): never allocates and never
-   * blocks. Requires prepare(); spins on the write mutex for its budget and
-   * returns `blocked` instead of waiting; returns `oversize` instead of growing
-   * a slot whose payload no longer fits (see setPayloadCapacity()).
-   * Custom serializers must not throw on this path.
+   * @brief Real-time variant of takeSnapshot(). Requires prepare(). The
+   * library itself performs no allocation and no blocking acquisition on this
+   * path: it spins on the write mutex for its budget and returns `blocked`
+   * instead of waiting, sizes the payload against the slot and returns
+   * `oversize` instead of growing it, and publishes through lock-free queues.
+   * What custom serializers do inside serializedSize()/serialize() is up to
+   * them: on this path they must not throw, allocate or block.
    */
   [[nodiscard]] SnapshotResult
   tryTakeSnapshot(std::chrono::nanoseconds timestamp = NsecSinceEpoch());

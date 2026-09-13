@@ -115,12 +115,15 @@ public:
   Schema schema;
   std::vector<Snapshot> snapshots;
   std::function<void(const SnapshotRef&)> on_store;
+  std::function<void(const Schema&)> on_schema;  // e.g. query the channel
   void onSchema(const Schema& value) override
   {
     if(add_gate)
       add_gate->pause();
     if(reject_schema)
       throw std::runtime_error("schema");
+    if(on_schema)
+      on_schema(value);
     ++registrations;
     schema = value;
   }
@@ -391,23 +394,58 @@ TEST(ChannelControl, SchemaChangeAfterFailedPrepareIsAnnouncedAgain)
   checkPayloads(*good, 2);
 }
 
-// onSchema runs with the control mutex released: a sink may query the channel.
+// onSchema runs with the control mutex released, both from prepare() and from a
+// late addDataSink(): a sink may query the channel from inside the callback.
 TEST(ChannelControl, SinksMayQueryTheChannelFromOnSchema)
 {
   auto channel = LogChannel::create("control");
-  auto sink = controlSink();
   uint64_t value = 42;
   channel->registerValue("value", &value);
-  channel->addDataSink(sink);
+  size_t queries = 0;
+  const auto query = [&](const Schema& announced) {
+    EXPECT_EQ(channel->getSchema().hash, announced.hash);  // would deadlock if locked
+    EXPECT_GE(channel->getNumberOfSinks(), 0u);
+    ++queries;
+  };
+  auto first = controlSink();
+  first->on_schema = query;
+  channel->addDataSink(first);
+  channel->prepare();
+  EXPECT_EQ(queries, 1u);
+  auto late = controlSink();
+  late->on_schema = query;
+  channel->addDataSink(late);  // announced immediately, without the lock
+  EXPECT_EQ(queries, 2u);
+  EXPECT_EQ(channel->getNumberOfSinks(), 2u);
+  EXPECT_EQ(channel->takeSnapshot(), SnapshotResult::ok);
+  first.drain();
+  late.drain();
+  EXPECT_EQ(first->snapshots.size(), 1u);
+  EXPECT_EQ(late->snapshots.size(), 1u);
+}
+
+// While a late attachment is inside onSchema, other control operations proceed
+// and a concurrent duplicate attachment of the same sink is still a no-op.
+TEST(ChannelControl, LateAttachmentAnnouncesWithoutTheControlMutex)
+{
+  auto channel = LogChannel::create("control");
+  uint64_t value = 42;
+  channel->registerValue("value", &value);
+  channel->prepare();
+  auto sink = controlSink();
   Gate gate;
   sink->add_gate = &gate;
-  auto prepare = std::async(std::launch::async, [&] { channel->prepare(); });
+  auto add = std::async(std::launch::async, [&] { channel->addDataSink(sink); });
   ASSERT_TRUE(gate.wait());                    // inside onSchema
-  EXPECT_EQ(channel->getNumberOfSinks(), 1u);  // control mutex is free
-  EXPECT_FALSE(channel->getSchema().fields.empty());
+  EXPECT_EQ(channel->getNumberOfSinks(), 0u);  // not published yet, mutex free
+  auto other = controlSink();
+  channel->addDataSink(other);  // proceeds while the first callback is parked
   gate.release();
-  prepare.get();
-  EXPECT_TRUE(channel->isPrepared());
+  add.get();
+  EXPECT_EQ(channel->getNumberOfSinks(), 2u);
+  channel->addDataSink(sink);  // duplicate: no second announcement
+  EXPECT_EQ(sink->registrations, 1u);
+  EXPECT_EQ(channel->getNumberOfSinks(), 2u);
 }
 
 TEST(ChannelControl, RejectedCustomRegistrationDoesNotMutateFrozenSchema)

@@ -5,8 +5,8 @@ Changelog for package data_tamer
 Unreleased
 ----------
 * **Breaking, snapshots**: ``takeSnapshot()`` returns a ``[[nodiscard]]``
-  ``SnapshotResult`` instead of ``bool`` (``ok``, ``partial``, ``no_sinks``,
-  ``not_prepared``, ``pool_exhausted``, ``oversize``, ``blocked``). New
+  ``SnapshotResult`` instead of ``bool`` (``ok``, ``partial``, ``rejected``,
+  ``no_sinks``, ``not_prepared``, ``pool_exhausted``, ``oversize``, ``blocked``). New
   ``tryTakeSnapshot()`` for real-time producers: never blocks on the write mutex
   and never grows a slot; it requires ``prepare()``. ``setStrictMode()`` is
   removed (it was ``tryTakeSnapshot()``'s no-growth behaviour); the

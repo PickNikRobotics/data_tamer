@@ -64,10 +64,11 @@ object. If you prefer a safer RAII interface, use `DataTamer::createLoggedValue`
   a pool of 64 snapshots and announces the schema to the sinks; the first `takeSnapshot()` with
   sinks attached calls it for you. Tune beforehand with `setPoolCapacity()` and
   `setPayloadCapacity()`.
-- `takeSnapshot()` returns a `SnapshotResult` (`ok`, `partial`, `no_sinks`, `pool_exhausted`,
-  ...). It may wait for a writer holding the mutex and grows a slot whose payload no longer
-  fits. `tryTakeSnapshot()` is the real-time variant: never blocks (`blocked`) and never
-  allocates (`oversize`), and requires `prepare()` (`not_prepared`).
+- `takeSnapshot()` returns a `SnapshotResult` (`ok`, `partial`, `rejected`, `no_sinks`,
+  `pool_exhausted`, ...). It may wait for a writer holding the mutex and grows a slot whose
+  payload no longer fits. `tryTakeSnapshot()` is the real-time variant: the library does no
+  blocking acquisition (`blocked`) and no allocation (`oversize`) on that path, and it requires
+  `prepare()` (`not_prepared`). Custom serializers must follow the same rules there.
 - Scalar `LoggedValue::set()` / `get()` are wait-free atomics. To capture several values
   together, group the writes:
 

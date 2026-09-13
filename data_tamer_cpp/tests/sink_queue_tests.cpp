@@ -303,6 +303,34 @@ TEST(SinkQueue, StopDuringPublicationDrainsEveryAcceptedSnapshot)
   sink.worker->stop();
 }
 
+TEST(SinkQueue, RejectedWhenEverySinkRefusesPartialWhenSomeDo)
+{
+  uint64_t value = 1;
+  auto stopped = queueSink(1024, Delivery::Threaded);
+  auto full = queueSink(1);
+  auto channel = channelWith(stopped, &value);
+  ASSERT_EQ(channel->takeSnapshot(), SnapshotResult::ok);
+  stopped.worker->stop();  // admission closed: refuses without a full queue
+  EXPECT_EQ(channel->takeSnapshot(), SnapshotResult::rejected);
+  channel->addDataSink(full);
+  // `full` accepts until its (block-rounded) queue fills, then both refuse.
+  SnapshotResult result = SnapshotResult::partial;
+  uint64_t attempts = 0;
+  while(result == SnapshotResult::partial && attempts < 1000)
+  {
+    result = channel->takeSnapshot();
+    ++attempts;
+  }
+  EXPECT_EQ(result, SnapshotResult::rejected);
+  EXPECT_GT(attempts, 1u);
+  EXPECT_EQ(channel->droppedSnapshots(stopped), 1 + attempts);
+  EXPECT_EQ(channel->droppedSnapshots(full), 1u);
+  stopped.worker->start();
+  full.drain();
+  EXPECT_EQ(channel->takeSnapshot(), SnapshotResult::ok);
+  stopped.worker->stop();
+}
+
 TEST(SinkQueue, WorkerDestructionDeliversQueuedSnapshotsBeforeTheSink)
 {
   uint64_t value = 7;

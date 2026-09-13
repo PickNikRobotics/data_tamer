@@ -108,16 +108,57 @@ TEST(ChannelCapacity, TryTakeSnapshotReportsBlockedInsteadOfWaiting)
   auto channel = LogChannel::create("capacity");
   CapacityWorker sink;
   auto value = channel->createLoggedValue<uint64_t>("value", 1);
+  channel->setPoolCapacity(1);  // a leaked slot would show as pool_exhausted
   channel->addDataSink(sink);
   channel->prepare();
   EXPECT_EQ(channel->tryTakeSnapshot(), SnapshotResult::ok);
+  sink.drain();
   {
     auto tx = channel->scopedWrite();  // holds the write mutex
     EXPECT_EQ(channel->tryTakeSnapshot(), SnapshotResult::blocked);
   }
   EXPECT_EQ(channel->writeLockContended(), 1u);
-  EXPECT_EQ(channel->tryTakeSnapshot(), SnapshotResult::ok);
+  EXPECT_EQ(channel->tryTakeSnapshot(), SnapshotResult::ok);  // slot was released
+  sink.drain();
   EXPECT_EQ(channel->poolExhausted(), 0u);
+}
+
+// The RT path never throws for sizes it cannot store: an impossible
+// serializedSize() is reported as oversize, and the whole call stays free of
+// allocations on the calling thread, including its rejection paths.
+TEST(ChannelCapacity, TryTakeSnapshotDoesNotThrowOrAllocateOnRejection)
+{
+  auto channel = LogChannel::create("capacity");
+  CapacityWorker sink;
+  auto serializer = std::make_shared<SizedSerializer>();
+  SizedValue value;
+  channel->registerCustomValue("value", &value, serializer);
+  channel->registerCustomValue("second", &value, serializer);
+  channel->setPoolCapacity(1);
+  channel->addDataSink(sink);
+  channel->prepare();
+  size_t allocations = 0;
+  {
+    DataTamerTest::AllocCounter::Scope scope;
+    EXPECT_EQ(channel->tryTakeSnapshot(), SnapshotResult::ok);
+    EXPECT_EQ(channel->tryTakeSnapshot(), SnapshotResult::pool_exhausted);
+    sink.drain();
+    serializer->size = std::numeric_limits<size_t>::max();  // would overflow the sum
+    EXPECT_EQ(channel->tryTakeSnapshot(), SnapshotResult::oversize);
+    serializer->size = 1000;  // fits a vector, not the slot
+    EXPECT_EQ(channel->tryTakeSnapshot(), SnapshotResult::oversize);
+    serializer->size = 8;
+    EXPECT_EQ(channel->tryTakeSnapshot(), SnapshotResult::ok);
+    sink.drain();
+    allocations = scope.allocations();
+  }
+  EXPECT_EQ(allocations, 0u);
+  EXPECT_EQ(channel->droppedOversize(), 2u);
+  EXPECT_EQ(channel->poolExhausted(), 1u);
+  serializer->size = std::numeric_limits<size_t>::max();
+  EXPECT_THROW((void)channel->takeSnapshot(), std::length_error) << "the blocking path "
+                                                                    "keeps validating "
+                                                                    "sizes";
 }
 
 TEST(ChannelCapacity, TwoSlotsExhaustBeforeSizingAndRecover)

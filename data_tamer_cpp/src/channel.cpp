@@ -77,17 +77,22 @@ struct LogChannel::Pimpl
   }
 
   // Caller holds write_mutex; size and serialization use this same cached mask.
-  size_t payloadSize() const
+  // Returns SIZE_MAX as soon as the sum exceeds `limit` (the RT path passes the
+  // slot capacity and never throws); with the default limit it throws instead.
+  size_t payloadSize(size_t limit = std::vector<uint8_t>().max_size()) const
   {
     size_t size = 0;
-    const auto limit = std::vector<uint8_t>().max_size();
     for(size_t i = 0; i < series.size(); ++i)
     {
       if(GetBit(active_mask, i))
       {
         const auto field_size = series[i].holder.getSerializedSize();
         if(field_size > limit - size)
-          throw std::length_error("Snapshot payload is too large");
+        {
+          if(limit == std::vector<uint8_t>().max_size())
+            throw std::length_error("Snapshot payload is too large");
+          return std::numeric_limits<size_t>::max();
+        }
         size += field_size;
       }
     }
@@ -206,12 +211,15 @@ const std::string& LogChannel::channelName() const
 LogChannel::~LogChannel()
 {
   // Calls using the channel object must already be externally synchronized.
-  std::lock_guard const lock(_p->control_mutex);
-  for(auto& link : _p->published_sinks)
-    link.store(nullptr, std::memory_order_seq_cst);
-  _p->waitQuiescent();
-  for(auto& link : _p->sinks)
-    link.reset();
+  // Links are released without the lock: a dying worker runs sink callbacks.
+  std::array<std::unique_ptr<Pimpl::SinkLink>, Pimpl::kMaxSinks> links;
+  {
+    std::lock_guard const lock(_p->control_mutex);
+    for(auto& link : _p->published_sinks)
+      link.store(nullptr, std::memory_order_seq_cst);
+    _p->waitQuiescent();
+    links = std::move(_p->sinks);
+  }
 }
 
 void LogChannel::setEnabled(const RegistrationID& id, bool enable)
@@ -232,43 +240,64 @@ void LogChannel::addDataSink(std::shared_ptr<SinkWorker> sink)
 {
   if(!sink)
     throw std::invalid_argument("Can't add a null sink");
-  std::lock_guard const lock(_p->control_mutex);
-  size_t free_slot = Pimpl::kMaxSinks;
-  for(size_t i = 0; i < _p->sinks.size(); ++i)
-  {
-    if(_p->sinks[i] && _p->sinks[i]->sink == sink)
-      return;
-    if(!_p->sinks[i])
-      free_slot = i;
-  }
-  if(free_slot == Pimpl::kMaxSinks)
-    throw std::runtime_error("A channel supports at most eight sinks");
+  std::unique_lock lock(_p->control_mutex);
+  // Duplicate check and free slot; repeated after an unlocked announcement.
+  const auto find_slot = [&]() -> std::optional<size_t> {
+    size_t free_slot = Pimpl::kMaxSinks;
+    for(size_t i = 0; i < _p->sinks.size(); ++i)
+    {
+      if(_p->sinks[i] && _p->sinks[i]->sink == sink)
+        return std::nullopt;  // already attached
+      if(!_p->sinks[i])
+        free_slot = i;
+    }
+    if(free_slot == Pimpl::kMaxSinks)
+      throw std::runtime_error("A channel supports at most eight sinks");
+    return free_slot;
+  };
+  auto free_slot = find_slot();
+  if(!free_slot)
+    return;
   auto link = std::make_unique<Pimpl::SinkLink>();
-  link->sink = std::move(sink);
+  link->sink = sink;
   link->token = link->sink->makeProducerToken();
   if(_p->schema_frozen)
   {
-    link->sink->addSchema(_p->schema);
+    // Same protocol as prepare(): the sink hears a copy of the final schema
+    // with the control mutex released, so it may query the channel.
+    const Schema schema = _p->schema;
+    lock.unlock();
+    sink->addSchema(schema);
+    lock.lock();
     link->schema_registered = true;
+    free_slot = find_slot();
+    if(!free_slot)
+      return;  // attached concurrently by someone else
   }
   // Neither a throwing token allocation nor onSchema can publish a partial link.
-  _p->sinks[free_slot] = std::move(link);
+  _p->sinks[*free_slot] = std::move(link);
   if(_p->logging_started.load(std::memory_order_relaxed))
-    _p->published_sinks[free_slot].store(_p->sinks[free_slot].get(),
-                                         std::memory_order_seq_cst);
+    _p->published_sinks[*free_slot].store(_p->sinks[*free_slot].get(),
+                                          std::memory_order_seq_cst);
 }
 
 void LogChannel::removeDataSink(std::shared_ptr<SinkWorker> sink)
 {
-  std::lock_guard const lock(_p->control_mutex);
-  for(size_t i = 0; i < _p->sinks.size(); ++i)
+  // The link (and with it, possibly the last reference to the worker, whose
+  // destructor drains and runs sink callbacks) dies after the lock is released:
+  // callbacks may query the channel.
+  std::unique_ptr<Pimpl::SinkLink> removed;
   {
-    if(_p->sinks[i] && _p->sinks[i]->sink == sink)
+    std::lock_guard const lock(_p->control_mutex);
+    for(size_t i = 0; i < _p->sinks.size(); ++i)
     {
-      _p->published_sinks[i].store(nullptr, std::memory_order_seq_cst);
-      _p->waitQuiescent();
-      _p->sinks[i].reset();
-      return;
+      if(_p->sinks[i] && _p->sinks[i]->sink == sink)
+      {
+        _p->published_sinks[i].store(nullptr, std::memory_order_seq_cst);
+        _p->waitQuiescent();
+        removed = std::move(_p->sinks[i]);
+        break;
+      }
     }
   }
 }
@@ -521,7 +550,9 @@ SnapshotResult LogChannel::takeSnapshotImpl(std::chrono::nanoseconds timestamp,
       {
       }
     }
-    const auto payload_size = _p->payloadSize();
+    // The RT path sizes against the slot: it neither throws nor allocates.
+    const auto payload_size =
+        real_time ? _p->payloadSize(snapshot.payload.capacity()) : _p->payloadSize();
     if(payload_size > snapshot.payload.capacity())
     {
       if(real_time)
@@ -544,16 +575,20 @@ SnapshotResult LogChannel::takeSnapshotImpl(std::chrono::nanoseconds timestamp,
   snapshot.schema_hash = _p->schema.hash;
   snapshot.timestamp = timestamp;
 
-  bool all_pushed = true;
+  size_t attached = 0, accepted = 0;
   for(auto* link : links)
   {
-    if(link && !link->sink->tryPush(*link->token, parent.clone()))
-    {
+    if(!link)
+      continue;
+    ++attached;
+    if(link->sink->tryPush(*link->token, parent.clone()))
+      ++accepted;
+    else
       link->dropped.fetch_add(1, std::memory_order_relaxed);
-      all_pushed = false;
-    }
   }
-  return all_pushed ? SnapshotResult::ok : SnapshotResult::partial;
+  if(accepted == attached)
+    return SnapshotResult::ok;
+  return accepted == 0 ? SnapshotResult::rejected : SnapshotResult::partial;
 }
 
 }  // namespace DataTamer
