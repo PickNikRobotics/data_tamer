@@ -150,7 +150,7 @@ TEST(DataTamerParser, PlainParsing)
   channel->registerValue("v3", &v3);
   channel->registerValue("v4", &v4);
 
-  channel->takeSnapshot();
+  ASSERT_EQ(channel->takeSnapshot(), DataTamer::SnapshotResult::ok);
   dummy_sink.drain();
 
   const auto& schema_in = channel->getSchema();
@@ -190,7 +190,7 @@ TEST(DataTamerParser, CustomParsing)
   pose.rot = { 4, 5, 6, 7 };
   channel->registerValue("pose", &pose);
 
-  channel->takeSnapshot();
+  ASSERT_EQ(channel->takeSnapshot(), DataTamer::SnapshotResult::ok);
   dummy_sink.drain();
 
   const auto& schema_in = channel->getSchema();
@@ -245,7 +245,7 @@ TEST(DataTamerParser, VectorParsing)
   channel->registerValue("points", &points);
   channel->registerValue("quats", &quats);
 
-  channel->takeSnapshot();
+  ASSERT_EQ(channel->takeSnapshot(), DataTamer::SnapshotResult::ok);
   dummy_sink.drain();
 
   const auto& schema_in = channel->getSchema();
@@ -345,7 +345,7 @@ TEST(DataTamerParser, RejectsMalformedInput)
   channel->registerValue("samples", &samples);
   DataTamerTest::Attached<DataTamer::DummySink> sink;
   channel->addDataSink(sink);
-  ASSERT_TRUE(channel->takeSnapshot());
+  ASSERT_EQ(channel->takeSnapshot(), DataTamer::SnapshotResult::ok);
   sink.drain();
   const auto snapshot = sink->latestSnapshot();
   const auto schema = BuilSchemaFromText(ToStr(channel->getSchema()));
