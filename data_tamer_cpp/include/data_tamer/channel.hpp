@@ -270,10 +270,34 @@ public:
    */
   [[nodiscard]] Schema getSchema() const;
 
-  /// Hold the channel write mutex so a group of writes appears in one
-  /// snapshot or in none. Required around writes to registerValue()'d
-  /// variables from any thread other than the snapshot thread. Nested
-  /// transactions and LoggedValue guards on this thread are safe.
+  /**
+   * @brief Hold the channel write mutex for the scope of the returned object,
+   * so that a group of writes appears in one snapshot or in none.
+   *
+   * When to use it: the values are written by a thread other than the one
+   * calling takeSnapshot(), and you need several of them to be consistent with
+   * each other in the recorded snapshot (for instance a position and the
+   * velocity computed from it). Without a transaction each LoggedValue is
+   * captured untorn on its own, but a snapshot may see the new position with
+   * the old velocity. Inside a transaction the snapshot thread waits until the
+   * scope ends, and sees either all of the writes or none of them.
+   *
+   * It is also the only correct way to write, from another thread, a variable
+   * registered with registerValue(): those are read directly by the snapshot
+   * thread and have no lock of their own.
+   *
+   * Keep the scope short and free of blocking calls: the snapshot thread spins
+   * briefly, then blocks on it (priority inheritance where available). Nested
+   * transactions and LoggedValue guards on the same thread are safe.
+   *
+   * @code
+   * {
+   *   auto tx = channel->scopedWrite();
+   *   position->set(p);
+   *   velocity->set(v);   // both, or neither, in the next snapshot
+   * }
+   * @endcode
+   */
   [[nodiscard]] WriteTransaction scopedWrite();
 
   /// Snapshots that exhausted the write-mutex spin budget: takeSnapshot() then

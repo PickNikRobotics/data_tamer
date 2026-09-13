@@ -78,8 +78,11 @@ on a real-time thread.
   payload no longer fits. `tryTakeSnapshot()` is the real-time variant: the library does no
   blocking acquisition (`blocked`) and no allocation (`oversize`) on that path, and it requires
   `prepare()` (`not_prepared`). Custom serializers must follow the same rules there.
-- Scalar `LoggedValue::set()` / `get()` are wait-free atomics. To capture several values
-  together, group the writes:
+- Scalar `LoggedValue::set()` / `get()` are wait-free atomics: each value is captured
+  untorn, but two separate writes may land in different snapshots. When the values are
+  written by a thread other than the one calling `takeSnapshot()` and several of them must be
+  consistent with each other in the recording (a position and its velocity, for instance),
+  group the writes in a transaction; the snapshot thread then sees all of them or none:
 
 ```cpp
 {
