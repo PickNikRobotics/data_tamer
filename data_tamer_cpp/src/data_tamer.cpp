@@ -29,7 +29,9 @@ ChannelsRegistry& ChannelsRegistry::Global()
 void ChannelsRegistry::addDefaultSink(std::shared_ptr<SinkWorker> sink)
 {
   if(!sink)
+  {
     throw std::invalid_argument("addDefaultSink: null sink");
+  }
   std::scoped_lock lk(_p->mutex);
   _p->default_sinks.insert(std::move(sink));
 }

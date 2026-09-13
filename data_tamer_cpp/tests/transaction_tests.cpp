@@ -339,7 +339,9 @@ TEST(Transaction, ContentionCountersReportSnapshotHandoffAndRemainStableWhenUnco
       finished = true;
     });
     while(!started)
+    {
       std::this_thread::yield();
+    }
     EXPECT_FALSE(finished.load());
   }
   snapshot.join();
@@ -349,7 +351,9 @@ TEST(Transaction, ContentionCountersReportSnapshotHandoffAndRemainStableWhenUnco
   const auto stats = channel->stats();
   EXPECT_LE(stats.write_lock_contended, 1u);
   if(stats.write_lock_contended == 0)
+  {
     EXPECT_EQ(stats.write_lock_wait_max_ns, 0u);
+  }
   EXPECT_LE(stats.write_lock_wait_max_ns, elapsed);
   EXPECT_EQ(channel->takeSnapshot(),
             SnapshotResult::ok);  // an uncontended snapshot moves neither counter
@@ -361,7 +365,9 @@ TEST(Transaction, ObservedSleepingSnapshotAdvancesContentionCounters)
 {
 #if defined(__linux__)
   if(!std::ifstream("/proc/self/stat"))
+  {
     GTEST_SKIP() << "needs readable procfs";
+  }
   auto channel = LogChannel::create("chan");
   DataTamerTest::Attached<CheckingSink> sink(CheckingSink::Payload::PAIR);
   channel->addDataSink(sink);
@@ -455,7 +461,9 @@ TEST(Transaction, ValuesEnabledInsideATransactionAppearTogether)
 {
 #if defined(__linux__)
   if(!std::ifstream("/proc/self/stat"))
+  {
     GTEST_SKIP() << "needs readable procfs";
+  }
   auto channel = LogChannel::create("chan");
   DataTamerTest::Attached<CheckingSink> sink(CheckingSink::Payload::PAIR);
   channel->addDataSink(sink);

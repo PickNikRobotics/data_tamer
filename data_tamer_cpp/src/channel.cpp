@@ -18,7 +18,9 @@ namespace
 size_t checkedDouble(size_t size)
 {
   if(size > std::vector<uint8_t>().max_size() / 2)
+  {
     throw std::length_error("Snapshot payload is too large to reserve");
+  }
   return 2 * size;
 }
 }  // namespace
@@ -54,16 +56,24 @@ struct LogChannel::Pimpl
   void invalidateAnnouncements()
   {
     for(auto& link : sinks)
+    {
       if(link)
+      {
         link->schema_registered = false;
+      }
+    }
   }
 
   void rebuildMask()
   {
     std::fill(active_mask.begin(), active_mask.end(), 0xFF);
     for(size_t i = 0; i < series.size(); ++i)
+    {
       if(!shared->isEnabled(i))
+      {
         SetBit(active_mask, i, false);
+      }
+    }
   }
 
   // Reader side of the mask handshake. Both operations are SC, so a reader that
@@ -73,7 +83,9 @@ struct LogChannel::Pimpl
   {
     if(shared->mask_dirty.load(std::memory_order_seq_cst) &&
        shared->mask_dirty.exchange(false, std::memory_order_seq_cst))
+    {
       rebuildMask();
+    }
   }
 
   // Caller holds write_mutex; size and serialization use this same cached mask.
@@ -90,7 +102,9 @@ struct LogChannel::Pimpl
         if(field_size > limit - size)
         {
           if(limit == std::vector<uint8_t>().max_size())
+          {
             throw std::length_error("Snapshot payload is too large");
+          }
           return std::numeric_limits<size_t>::max();
         }
         size += field_size;
@@ -121,7 +135,9 @@ struct LogChannel::Pimpl
   {
     const auto observed = epoch.load(std::memory_order_seq_cst);
     if(observed & 1)
+    {
       epoch.wait(observed, std::memory_order_seq_cst);  // returns once the value changed
+    }
   }
 
   // Reader side of waitQuiescent(): odd epoch while a snapshot is in progress.
@@ -146,13 +162,17 @@ RegistrationID LogChannel::registerValueImpl(const std::string& name,
 {
   // The public registration template holds control_mutex, including type discovery.
   if(name.find(' ') != std::string::npos)
+  {
     throw std::runtime_error("name can not contain spaces");
+  }
 
   auto it = _p->registered_values.find(name);
   if(it == _p->registered_values.end())
   {
     if(_p->schema_frozen)
+    {
       throw std::runtime_error("Can't register a new value once recording started");
+    }
     const auto type = value_ptr.type();
     const std::string type_name = type_info ? type_info->typeName() : ToStr(type);
     TypeField field{ name, type, type_name, value_ptr.isVector(),
@@ -161,7 +181,9 @@ RegistrationID LogChannel::registerValueImpl(const std::string& name,
     // leaves the channel exactly as it was.
     std::optional<CustomSchema> custom_schema;
     if(type_info && !_p->schema.custom_types.contains(type_info->typeName()))
+    {
       custom_schema = type_info->typeSchema();
+    }
     _p->series.reserve(_p->series.size() + 1);
     _p->schema.fields.reserve(_p->schema.fields.size() + 1);
 
@@ -174,7 +196,9 @@ RegistrationID LogChannel::registerValueImpl(const std::string& name,
     _p->registered_values.insert({ name, index });
     _p->schema.fields.emplace_back(std::move(field));
     if(custom_schema)
+    {
       _p->schema.custom_schemas.insert({ type_info->typeName(), *custom_schema });
+    }
     _p->schema.hash = ComputeSchemaHash(_p->schema);
     _p->invalidateAnnouncements();
     return RegistrationID(uint32_t(index), generation);
@@ -183,9 +207,18 @@ RegistrationID LogChannel::registerValueImpl(const std::string& name,
   const size_t index = it->second;
   auto& instance = _p->series[index];
   if(_p->shared->isRegistered(index))
+  {
     throw std::runtime_error("This name was already registered. Unregister it first");
+  }
   if(instance.holder != value_ptr)
+  {
     throw std::runtime_error("Can't change the type of a previously registered value");
+  }
+  if(!_p->shared->canReregister(index))
+  {
+    throw std::length_error("registration slot exhausted: '" + name +
+                            "' was re-registered 16 million times");
+  }
   instance.holder = std::move(value_ptr);
   // Publish the fully initialized replacement before a mask may enable it.
   // The new generation makes every handle to the previous registration stale.
@@ -216,7 +249,9 @@ LogChannel::~LogChannel()
   {
     std::lock_guard const lock(_p->control_mutex);
     for(auto& link : _p->published_sinks)
+    {
       link.store(nullptr, std::memory_order_seq_cst);
+    }
     _p->waitQuiescent();
     links = std::move(_p->sinks);
   }
@@ -224,8 +259,15 @@ LogChannel::~LogChannel()
 
 void LogChannel::setEnabled(const RegistrationID& id, bool enable)
 {
-  if(!_p->shared->setEnabled(id, enable))
+  if(!trySetEnabled(id, enable))
+  {
     throw std::invalid_argument("setEnabled: stale or invalid RegistrationID");
+  }
+}
+
+bool LogChannel::trySetEnabled(const RegistrationID& id, bool enable) noexcept
+{
+  return _p->shared->setEnabled(id, enable);
 }
 
 bool LogChannel::isEnabled(const RegistrationID& id) const
@@ -237,7 +279,9 @@ void LogChannel::unregister(const RegistrationID& id)
 {
   std::lock_guard const lock(_p->control_mutex);
   if(!_p->shared->isCurrent(id))
+  {
     throw std::invalid_argument("unregister: stale or invalid RegistrationID");
+  }
   _p->shared->setUnregistered(id.index_);
   _p->waitQuiescent();
   _p->series[id.index_].holder.detach();
@@ -246,7 +290,9 @@ void LogChannel::unregister(const RegistrationID& id)
 void LogChannel::addDataSink(std::shared_ptr<SinkWorker> sink)
 {
   if(!sink)
+  {
     throw std::invalid_argument("Can't add a null sink");
+  }
   std::unique_lock lock(_p->control_mutex);
   // Duplicate check and free slot; repeated after an unlocked announcement.
   const auto find_slot = [&]() -> std::optional<size_t> {
@@ -254,17 +300,25 @@ void LogChannel::addDataSink(std::shared_ptr<SinkWorker> sink)
     for(size_t i = 0; i < _p->sinks.size(); ++i)
     {
       if(_p->sinks[i] && _p->sinks[i]->sink == sink)
+      {
         return std::nullopt;  // already attached
+      }
       if(!_p->sinks[i])
+      {
         free_slot = i;
+      }
     }
     if(free_slot == Pimpl::kMaxSinks)
+    {
       throw std::runtime_error("A channel supports at most eight sinks");
+    }
     return free_slot;
   };
   auto free_slot = find_slot();
   if(!free_slot)
+  {
     return;
+  }
   auto link = std::make_unique<Pimpl::SinkLink>();
   link->sink = sink;
   link->token = link->sink->makeProducerToken();
@@ -279,13 +333,17 @@ void LogChannel::addDataSink(std::shared_ptr<SinkWorker> sink)
     link->schema_registered = true;
     free_slot = find_slot();
     if(!free_slot)
+    {
       return;  // attached concurrently by someone else
+    }
   }
   // Neither a throwing token allocation nor onSchema can publish a partial link.
   _p->sinks[*free_slot] = std::move(link);
   if(_p->logging_started.load(std::memory_order_relaxed))
+  {
     _p->published_sinks[*free_slot].store(_p->sinks[*free_slot].get(),
                                           std::memory_order_seq_cst);
+  }
 }
 
 void LogChannel::removeDataSink(std::shared_ptr<SinkWorker> sink)
@@ -314,7 +372,9 @@ size_t LogChannel::getNumberOfSinks() const
   std::lock_guard const lock(_p->control_mutex);
   size_t count = 0;
   for(const auto& link : _p->sinks)
+  {
     count += bool(link);
+  }
   return count;
 }
 
@@ -355,9 +415,13 @@ void LogChannel::setPayloadCapacity(size_t bytes)
 {
   std::lock_guard const lock(_p->control_mutex);
   if(_p->schema_frozen)
+  {
     throw std::runtime_error("Payload capacity is frozen");
+  }
   if(bytes > std::vector<uint8_t>().max_size())
+  {
     throw std::length_error("Snapshot payload capacity is too large");
+  }
   _p->payload_capacity = bytes;
 }
 
@@ -365,11 +429,17 @@ void LogChannel::setPoolCapacity(size_t count)
 {
   std::lock_guard const lock(_p->control_mutex);
   if(_p->schema_frozen)
+  {
     throw std::runtime_error("Pool capacity is frozen");
+  }
   if(count == 0)
+  {
     throw std::invalid_argument("Pool capacity must be positive");
+  }
   if(count > std::numeric_limits<std::ptrdiff_t>::max() / sizeof(PoolSlot))
+  {
     throw std::length_error("Snapshot pool capacity is too large");
+  }
   _p->pool_capacity = count;
 }
 
@@ -387,8 +457,12 @@ uint64_t LogChannel::droppedSnapshots(const std::shared_ptr<SinkWorker>& sink) c
 {
   std::lock_guard const lock(_p->control_mutex);
   for(const auto& link : _p->sinks)
+  {
     if(link && link->sink == sink)
+    {
       return link->dropped.load(std::memory_order_relaxed);
+    }
+  }
   return 0;
 }
 
@@ -432,7 +506,9 @@ void LogChannel::prepare()
 {
   std::lock_guard const serialize(_p->prepare_mutex);
   if(_p->logging_started.load(std::memory_order_relaxed))
+  {
     return;
+  }
   std::unique_lock lock(_p->control_mutex);
   // Frozen while sinks are announced so that the schema they receive is final;
   // any failure below reopens it and drops the pool, so a retry starts clean.
@@ -458,26 +534,34 @@ void LogChannel::prepare()
     for(size_t i = 0; i < _p->sinks.size(); ++i)
     {
       if(!_p->sinks[i] || _p->sinks[i]->schema_registered)
+      {
         continue;
+      }
       auto sink = _p->sinks[i]->sink;
       const Schema schema = _p->schema;
       lock.unlock();
       sink->addSchema(schema);
       lock.lock();
       if(_p->sinks[i] && _p->sinks[i]->sink == sink)
+      {
         _p->sinks[i]->schema_registered = true;
+      }
     }
   }
   catch(...)
   {
     if(!lock.owns_lock())
+    {
       lock.lock();
+    }
     _p->schema_frozen = was_frozen;
     _p->pool.reset();
     throw;
   }
   for(size_t i = 0; i < _p->sinks.size(); ++i)
+  {
     _p->published_sinks[i].store(_p->sinks[i].get(), std::memory_order_seq_cst);
+  }
   _p->logging_started.store(true, std::memory_order_release);
 }
 
@@ -486,7 +570,9 @@ SnapshotResult LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
   if(!_p->logging_started.load(std::memory_order_acquire))
   {
     if(getNumberOfSinks() == 0)
+    {
       return SnapshotResult::no_sinks;  // nothing to deliver to: stay open
+    }
     prepare();
   }
   return takeSnapshotImpl(timestamp, false);
@@ -495,7 +581,9 @@ SnapshotResult LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
 SnapshotResult LogChannel::tryTakeSnapshot(std::chrono::nanoseconds timestamp)
 {
   if(!_p->logging_started.load(std::memory_order_acquire))
+  {
     return SnapshotResult::not_prepared;
+  }
   return takeSnapshotImpl(timestamp, true);
 }
 
@@ -512,11 +600,15 @@ SnapshotResult LogChannel::takeSnapshotImpl(std::chrono::nanoseconds timestamp,
     has_sinks |= links[i] != nullptr;
   }
   if(!has_sinks)
+  {
     return SnapshotResult::no_sinks;
+  }
 
   auto* slot = _p->pool->tryAcquire();  // counts exhaustion itself
   if(!slot)
+  {
     return SnapshotResult::pool_exhausted;
+  }
   SnapshotRef parent(_p->pool, slot);
   auto& snapshot = slot->snapshot;
 
@@ -568,8 +660,12 @@ SnapshotResult LogChannel::takeSnapshotImpl(std::chrono::nanoseconds timestamp,
     snapshot.payload.resize(payload_size);
     SerializeMe::SpanBytes payload_buffer(snapshot.payload);
     for(size_t i = 0; i < _p->series.size(); i++)
+    {
       if(GetBit(_p->active_mask, i))
+      {
         _p->series[i].holder.serialize(payload_buffer);
+      }
+    }
     snapshot.payload.resize(snapshot.payload.size() - payload_buffer.size());
   }
 
@@ -581,15 +677,23 @@ SnapshotResult LogChannel::takeSnapshotImpl(std::chrono::nanoseconds timestamp,
   for(auto* link : links)
   {
     if(!link)
+    {
       continue;
+    }
     ++attached;
     if(link->sink->tryPush(*link->token, parent.clone()))
+    {
       ++accepted;
+    }
     else
+    {
       link->dropped.fetch_add(1, std::memory_order_relaxed);
+    }
   }
   if(accepted == attached)
+  {
     return SnapshotResult::ok;
+  }
   return accepted == 0 ? SnapshotResult::rejected : SnapshotResult::partial;
 }
 

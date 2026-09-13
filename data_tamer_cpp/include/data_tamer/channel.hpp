@@ -180,10 +180,16 @@ public:
   /** Enabling / disabling a value is much faster than
    *  registering / unregistering.
    *  It should be preferred when we want to temporary remove a
-   *  value from the snapshot. Lock-free, callable from any thread.
-   *  Throws std::invalid_argument for a stale or invalid id.
+   *  value from the snapshot. Callable from any thread; lock-free and
+   *  allocation-free for a valid id. Throws std::invalid_argument for a stale
+   *  or invalid id (see trySetEnabled for a noexcept variant).
    */
   void setEnabled(const RegistrationID& id, bool enable);
+
+  /// Same as setEnabled(), but returns false instead of throwing for a stale
+  /// or invalid id. Lock-free, never allocates: safe on real-time threads that
+  /// may race with re-registration.
+  bool trySetEnabled(const RegistrationID& id, bool enable) noexcept;
 
   /// Whether the value is registered and enabled (false after unregister()).
   [[nodiscard]] bool isEnabled(const RegistrationID& id) const;
@@ -425,7 +431,9 @@ inline void LogChannel::updateTypeRegistry()
     if(schemaFrozen())
     {
       if(!hasCustomType(type_name))
+      {
         throw std::runtime_error("Can't add a custom type after recording started");
+      }
       return;
     }
     if(auto added_serializer = _type_registry.addType<T>(type_name, true))

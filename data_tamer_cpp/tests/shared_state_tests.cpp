@@ -57,7 +57,9 @@ TEST(ChannelSharedState, SetEnabledDoesNotAllocateOrLock)
   for(int i = 0; i < 1000; i++)
   {
     for(size_t index = 0; index < 8; index++)
+    {
       state.setEnabled(index, (i & 1) != 0);
+    }
   }
   ASSERT_EQ(scope.allocations(), 0u);
 }
@@ -87,7 +89,9 @@ TEST(ChannelSharedState, ConcurrentToggleAndReadIsRaceFree)
     while(!stop)
     {
       for(size_t index = 0; index < 16; index++)
+      {
         state.setEnabled(index, v);
+      }
       v = !v;
     }
   });
@@ -122,6 +126,49 @@ TEST(ChannelSharedState, EnableUpdatesNeverRestoreRegistration)
   EXPECT_TRUE(state.isRegistered(0));
   EXPECT_TRUE(state.isEnabled(0));
   EXPECT_TRUE(state.mask_dirty.exchange(false, std::memory_order_seq_cst));
+}
+
+// Exhausting a slot's generation counter is refused before it can wrap to the
+// never-valid generation zero.
+TEST(ChannelSharedState, GenerationExhaustionIsRefused)
+{
+  ChannelSharedState state;
+  state.addSeries();
+  while(state.canReregister(0))
+  {
+    state.setReregistered(0);
+  }
+  EXPECT_EQ(state.generation(0), ChannelSharedState::kMaxGeneration);
+  EXPECT_THROW(state.setReregistered(0), std::length_error);
+  EXPECT_EQ(state.generation(0), ChannelSharedState::kMaxGeneration);
+  EXPECT_TRUE(state.isEnabled(0));
+}
+
+// Reads of existing flags and of the count race with appends without a lock.
+TEST(ChannelSharedState, ReadsAreSafeWhileTheTableGrows)
+{
+  ChannelSharedState state;
+  state.addSeries();
+  std::atomic<bool> stop{ false };
+  std::thread reader([&] {
+    while(!stop)
+    {
+      const size_t count = state.seriesCount();
+      for(size_t i = 0; i < count; ++i)
+      {
+        state.setEnabled(i, (i & 1) != 0);
+      }
+      (void)state.isEnabled(0);
+    }
+  });
+  for(int i = 0; i < 5000; ++i)
+  {
+    state.addSeries();
+  }
+  stop = true;
+  reader.join();
+  EXPECT_EQ(state.seriesCount(), 5001u);
+  EXPECT_TRUE(state.isRegistered(5000));
 }
 
 // The generation shares the atomic word with the flags: unregistering keeps

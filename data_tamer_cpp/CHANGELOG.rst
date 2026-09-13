@@ -11,7 +11,10 @@ Unreleased
     ``unregister()`` and a new registration of the same name the old handle is
     stale, and ``LogChannel::setEnabled`` / ``unregister`` throw
     ``std::invalid_argument`` instead of acting on the replacement. New
-    ``LogChannel::isEnabled(id)``.
+    ``LogChannel::isEnabled(id)`` and noexcept ``trySetEnabled(id, enable)``.
+    The per-series flags live in an append-only table whose reads are safe to
+    race with registration (they were a ``std::deque`` before).
+    Re-registering the same name more than 16 million times throws.
   - ``LoggedValue::set(value)`` only stores; the ``auto_enable`` parameter is
     gone. Re-enable with ``setEnabled(true)``.
   - ``LoggedValue::getMutablePtr()`` / ``getConstPtr()`` exist only for

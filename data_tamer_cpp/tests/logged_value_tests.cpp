@@ -139,11 +139,13 @@ public:
     }
     std::memcpy(&seen, snapshot->payload.data(), sizeof(seen));
     for(int b = 1; b < 8; b++)
+    {
       if(((seen >> (8 * b)) & 0xFF) != (seen & 0xFF))
       {
         torn++;
         return;
       }
+    }
     checked++;
   }
 };

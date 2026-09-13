@@ -62,8 +62,9 @@ unregisters, which waits for a snapshot in progress, so do not drop the last `sh
 on a real-time thread.
 - `registerValue()` returns an opaque `RegistrationID` for `setEnabled()` / `isEnabled()` /
   `unregister()`. After a value is unregistered and registered again under the same name, the
-  old id is stale and those calls throw `std::invalid_argument` instead of touching the
-  replacement.
+  old id is stale: `setEnabled()` and `unregister()` throw `std::invalid_argument` instead of
+  touching the replacement, `isEnabled()` returns false, and `trySetEnabled()` returns false
+  without throwing (use it on real-time threads).
 - `LoggedValue::set()` only stores; a value disabled with `setEnabled(false)` stays disabled
   until `setEnabled(true)`.
 
