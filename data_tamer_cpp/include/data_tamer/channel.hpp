@@ -25,6 +25,10 @@ class SinkWorker;
 class LogChannel;
 class ChannelsRegistry;
 
+/// What LogChannel::scopedWrite() returns: holds the channel's write mutex for
+/// its scope; nested transactions on the same thread are no-ops.
+using WriteTransaction = ChannelSharedState::Transaction;
+
 //---------------------------------------------------------
 
 /**
@@ -90,8 +94,9 @@ public:
 
   /**
    * @brief registerValue add a value to be monitored.
-   * You must guaranty that the pointer to the value is still valid,
-   * when calling takeSnapshot.
+   * The channel borrows the pointer: it must stay valid until unregister()
+   * has returned (or the channel is destroyed). Writes from another thread
+   * than the snapshot thread must happen inside scopedWrite().
    * If you want to change the pointer T* to a new one,
    * you must first call unregister(), otherwise this method will throw
    * an exception.
@@ -175,11 +180,17 @@ public:
   /** Enabling / disabling a value is much faster than
    *  registering / unregistering.
    *  It should be preferred when we want to temporary remove a
-   *  value from the snapshot.
+   *  value from the snapshot. Lock-free, callable from any thread.
+   *  Throws std::invalid_argument for a stale or invalid id.
    */
   void setEnabled(const RegistrationID& id, bool enable);
 
-  /// NOTE: the unregistered value will not be removed from the Schema
+  /// Whether the value is registered and enabled (false after unregister()).
+  [[nodiscard]] bool isEnabled(const RegistrationID& id) const;
+
+  /// NOTE: the unregistered value will not be removed from the Schema.
+  /// Waits for a snapshot in progress; do not call from a real-time thread.
+  /// Throws std::invalid_argument for a stale or invalid id.
   void unregister(const RegistrationID& id);
 
   /**
@@ -259,18 +270,11 @@ public:
    */
   [[nodiscard]] Schema getSchema() const;
 
-  /** You will need to use this if:
-   *
-  * - your variables were registered using LogChannel::registerValue AND
-  * - the variables are being modified in a thread different than the one calling takeSnapshot()
-  *
-  * No need to worry about LoggedValues (they use the mutex internally)
-  */
-  Mutex& writeMutex();
-
   /// Hold the channel write mutex so a group of writes appears in one
-  /// snapshot or in none. Nested transactions on this thread are safe.
-  [[nodiscard]] ChannelSharedState::Transaction scopedWrite();
+  /// snapshot or in none. Required around writes to registerValue()'d
+  /// variables from any thread other than the snapshot thread. Nested
+  /// transactions and LoggedValue guards on this thread are safe.
+  [[nodiscard]] WriteTransaction scopedWrite();
 
   /// Snapshots that exhausted the write-mutex spin budget: takeSnapshot() then
   /// blocked, tryTakeSnapshot() returned `blocked`.
@@ -309,10 +313,12 @@ public:
 
   [[nodiscard]] Stats stats() const;
 
+private:
+  template <typename T>
+  friend class LoggedValue;
   /// State shared with this channel's LoggedValues (enable flags, write mutex).
   [[nodiscard]] std::shared_ptr<ChannelSharedState> sharedState() const;
 
-private:
   struct Pimpl;
   SnapshotResult takeSnapshotImpl(std::chrono::nanoseconds timestamp, bool real_time);
   std::unique_ptr<Pimpl> _p;
@@ -519,17 +525,17 @@ inline LoggedValue<T>::~LoggedValue()
 template <typename T>
 inline void LoggedValue<T>::setEnabled(bool enabled)
 {
-  state_->setEnabled(id_, enabled);
+  state_->setEnabled(id_.index_, enabled);  // own registration: never stale
 }
 
 template <typename T>
 inline bool LoggedValue<T>::isEnabled() const
 {
-  return state_->isEnabled(id_.first_index);
+  return state_->isEnabled(id_.index_);
 }
 
 template <typename T>
-inline void LoggedValue<T>::set(const T& val, bool auto_enable)
+inline void LoggedValue<T>::set(const T& val)
 {
   if constexpr(kAtomic)
   {
@@ -539,10 +545,6 @@ inline void LoggedValue<T>::set(const T& val, bool auto_enable)
   {
     ChannelSharedState::Transaction transaction(*state_);
     value_ = val;
-  }
-  if(auto_enable && !isEnabled())
-  {
-    setEnabled(true);
   }
 }
 
@@ -561,31 +563,17 @@ inline T LoggedValue<T>::get() const
 }
 
 template <typename T>
-template <typename U, std::enable_if_t<is_atomic_scalar_v<U>, bool>>
-inline AtomicProxy<T> LoggedValue<T>::getMutablePtr()
-{
-  return AtomicProxy<T>(&value_);
-}
-
-template <typename T>
-template <typename U, std::enable_if_t<!is_atomic_scalar_v<U>, bool>>
 inline MutablePtr<T> LoggedValue<T>::getMutablePtr()
 {
-  return MutablePtr<T>(&value_, &state_->write_mutex);
+  static_assert(!kAtomic, "scalar LoggedValues are atomic: use set()/get()");
+  return MutablePtr<T>(&value_, *state_);
 }
 
 template <typename T>
-template <typename U, std::enable_if_t<is_atomic_scalar_v<U>, bool>>
-inline AtomicConstProxy<T> LoggedValue<T>::getConstPtr()
-{
-  return AtomicConstProxy<T>(&value_);
-}
-
-template <typename T>
-template <typename U, std::enable_if_t<!is_atomic_scalar_v<U>, bool>>
 inline ConstPtr<T> LoggedValue<T>::getConstPtr()
 {
-  return ConstPtr<T>(&value_, &state_->write_mutex);
+  static_assert(!kAtomic, "scalar LoggedValues are atomic: use set()/get()");
+  return ConstPtr<T>(&value_, *state_);
 }
 
 }  // namespace DataTamer

@@ -169,7 +169,7 @@ RegistrationID LogChannel::registerValueImpl(const std::string& name,
     instance.name = name;
     instance.holder = std::move(value_ptr);
     _p->series.emplace_back(std::move(instance));
-    _p->shared->addSeries();
+    const uint32_t generation = _p->shared->addSeries();
     const size_t index = _p->series.size() - 1;
     _p->registered_values.insert({ name, index });
     _p->schema.fields.emplace_back(std::move(field));
@@ -177,7 +177,7 @@ RegistrationID LogChannel::registerValueImpl(const std::string& name,
       _p->schema.custom_schemas.insert({ type_info->typeName(), *custom_schema });
     _p->schema.hash = ComputeSchemaHash(_p->schema);
     _p->invalidateAnnouncements();
-    return { index, 1 };
+    return RegistrationID(uint32_t(index), generation);
   }
 
   const size_t index = it->second;
@@ -188,8 +188,8 @@ RegistrationID LogChannel::registerValueImpl(const std::string& name,
     throw std::runtime_error("Can't change the type of a previously registered value");
   instance.holder = std::move(value_ptr);
   // Publish the fully initialized replacement before a mask may enable it.
-  _p->shared->setRegistered(index, true);
-  return { index, 1 };
+  // The new generation makes every handle to the previous registration stale.
+  return RegistrationID(uint32_t(index), _p->shared->setReregistered(index));
 }
 
 LogChannel::LogChannel(std::string name) : _p(new Pimpl)
@@ -224,16 +224,23 @@ LogChannel::~LogChannel()
 
 void LogChannel::setEnabled(const RegistrationID& id, bool enable)
 {
-  _p->shared->setEnabled(id, enable);
+  if(!_p->shared->setEnabled(id, enable))
+    throw std::invalid_argument("setEnabled: stale or invalid RegistrationID");
+}
+
+bool LogChannel::isEnabled(const RegistrationID& id) const
+{
+  return _p->shared->isEnabled(id);
 }
 
 void LogChannel::unregister(const RegistrationID& id)
 {
   std::lock_guard const lock(_p->control_mutex);
-  _p->shared->setRegistered(id, false);
+  if(!_p->shared->isCurrent(id))
+    throw std::invalid_argument("unregister: stale or invalid RegistrationID");
+  _p->shared->setUnregistered(id.index_);
   _p->waitQuiescent();
-  for(size_t i = 0; i < id.fields_count; i++)
-    _p->series[id.first_index + i].holder.detach();
+  _p->series[id.index_].holder.detach();
 }
 
 void LogChannel::addDataSink(std::shared_ptr<SinkWorker> sink)
@@ -317,14 +324,9 @@ Schema LogChannel::getSchema() const
   return _p->schema;
 }
 
-Mutex& LogChannel::writeMutex()
+WriteTransaction LogChannel::scopedWrite()
 {
-  return _p->shared->write_mutex;
-}
-
-ChannelSharedState::Transaction LogChannel::scopedWrite()
-{
-  return ChannelSharedState::Transaction(*_p->shared);
+  return WriteTransaction(*_p->shared);
 }
 
 uint64_t LogChannel::writeLockContended() const

@@ -56,7 +56,16 @@ visualize your logs offline or in real-time.
   point only with its compatible original type, reusing its schema slot.
 - Focused on periodic recording. Not the best option for sporadic, asynchronous events.
 - If you use `DataTamer::registerValue` you must be careful about the lifetime of the
-object. If you prefer a safer RAII interface, use `DataTamer::createLoggedValue` instead.
+object: the channel borrows the pointer until `unregister()` has returned. If you prefer a
+safer RAII interface, use `DataTamer::createLoggedValue` instead; note that its destructor
+unregisters, which waits for a snapshot in progress, so do not drop the last `shared_ptr`
+on a real-time thread.
+- `registerValue()` returns an opaque `RegistrationID` for `setEnabled()` / `isEnabled()` /
+  `unregister()`. After a value is unregistered and registered again under the same name, the
+  old id is stale and those calls throw `std::invalid_argument` instead of touching the
+  replacement.
+- `LoggedValue::set()` only stores; a value disabled with `setEnabled(false)` stays disabled
+  until `setEnabled(true)`.
 
 ## Real-time snapshot contract
 
@@ -80,8 +89,9 @@ object. If you prefer a safer RAII interface, use `DataTamer::createLoggedValue`
 }
 ```
 
-- Non-scalar values lock automatically. Keep transactions and pointer guards short: the
-  snapshot thread waits on them.
+- Non-scalar values lock automatically. `getMutablePtr()` / `getConstPtr()` guards join a
+  `scopedWrite()` on the same thread instead of deadlocking. Keep transactions and guards
+  short: the snapshot thread waits on them.
 - Backpressure counters: `poolExhausted()`, `droppedSnapshots(sink)`, `payloadReallocations()`,
   `droppedOversize()`, or all at once with `stats()`.
 - Registering, unregistering and changing sinks are safe while logging, but call them outside

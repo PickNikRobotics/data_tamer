@@ -29,7 +29,8 @@ TEST(ChannelSharedState, SetEnabledFlipsFlagsAndDirtiesMaskOnlyOnChange)
   }
   state.mask_dirty.store(false);
 
-  state.setEnabled(RegistrationID{ 1, 2 }, false);
+  state.setEnabled(1, false);
+  state.setEnabled(2, false);
   ASSERT_TRUE(state.isEnabled(0));
   ASSERT_FALSE(state.isEnabled(1));
   ASSERT_FALSE(state.isEnabled(2));
@@ -37,7 +38,7 @@ TEST(ChannelSharedState, SetEnabledFlipsFlagsAndDirtiesMaskOnlyOnChange)
   ASSERT_TRUE(state.mask_dirty.exchange(false));
 
   // same value again: no change, mask stays clean
-  state.setEnabled(RegistrationID{ 1, 2 }, false);
+  state.setEnabled(1, false);
   ASSERT_FALSE(state.mask_dirty.load());
 
   state.setEnabled(2, true);
@@ -55,7 +56,8 @@ TEST(ChannelSharedState, SetEnabledDoesNotAllocateOrLock)
   AllocCounter::Scope scope;
   for(int i = 0; i < 1000; i++)
   {
-    state.setEnabled(RegistrationID{ 0, 8 }, (i & 1) != 0);
+    for(size_t index = 0; index < 8; index++)
+      state.setEnabled(index, (i & 1) != 0);
   }
   ASSERT_EQ(scope.allocations(), 0u);
 }
@@ -84,7 +86,8 @@ TEST(ChannelSharedState, ConcurrentToggleAndReadIsRaceFree)
     bool v = false;
     while(!stop)
     {
-      state.setEnabled(RegistrationID{ 0, 16 }, v);
+      for(size_t index = 0; index < 16; index++)
+        state.setEnabled(index, v);
       v = !v;
     }
   });
@@ -107,16 +110,34 @@ TEST(ChannelSharedState, EnableUpdatesNeverRestoreRegistration)
 {
   ChannelSharedState state;
   state.addSeries();
-  state.setRegistered(0, false);
+  state.setUnregistered(0);
   EXPECT_FALSE(state.isRegistered(0));
-  for(bool enabled : {false, true, false, true})
+  for(bool enabled : { false, true, false, true })
   {
     state.setEnabled(0, enabled);
     EXPECT_FALSE(state.isEnabled(0));
     EXPECT_FALSE(state.isRegistered(0));
   }
-  state.setRegistered(0, true);
+  EXPECT_EQ(state.setReregistered(0), 2u);
   EXPECT_TRUE(state.isRegistered(0));
   EXPECT_TRUE(state.isEnabled(0));
   EXPECT_TRUE(state.mask_dirty.exchange(false, std::memory_order_seq_cst));
+}
+
+// The generation shares the atomic word with the flags: unregistering keeps
+// it, re-registering bumps it, and enable toggles never disturb it.
+TEST(ChannelSharedState, GenerationLivesInTheFlagsWord)
+{
+  ChannelSharedState state;
+  EXPECT_EQ(state.addSeries(), 1u);
+  EXPECT_EQ(state.generation(0), 1u);
+  state.setEnabled(0, false);
+  state.setEnabled(0, true);
+  EXPECT_EQ(state.generation(0), 1u);
+  state.setUnregistered(0);
+  EXPECT_EQ(state.generation(0), 1u);
+  EXPECT_EQ(state.setReregistered(0), 2u);
+  EXPECT_EQ(state.generation(0), 2u);
+  EXPECT_TRUE(state.isEnabled(0));
+  EXPECT_EQ(state.setReregistered(0), 3u);
 }
