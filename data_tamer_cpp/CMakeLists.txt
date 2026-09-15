@@ -107,6 +107,9 @@ target_include_directories(data_tamer
 )
 target_compile_definitions(data_tamer PUBLIC -DDATA_TAMER_VERSION="${CMAKE_PROJECT_VERSION}")
 target_compile_definitions(data_tamer PUBLIC DATA_TAMER_EIGEN_SUPPORT=$<BOOL:${DATA_TAMER_EIGEN_SUPPORT}>)
+if (DATA_TAMER_EIGEN_SUPPORT)
+    target_link_libraries(data_tamer PUBLIC Eigen3::Eigen)
+endif()
 
 set(INSTALL_TARGETS data_tamer)
 
@@ -137,10 +140,6 @@ if (DATA_TAMER_BUILD_ROS)
         ${MCAP_LIBRARY}
     )
 
-    if (DATA_TAMER_EIGEN_SUPPORT)
-        target_link_libraries(data_tamer PUBLIC Eigen3::Eigen)
-    endif()
-
     ament_export_targets(data_tamerTargets HAS_LIBRARY_TARGET)
     ament_export_dependencies(mcap_vendor rclcpp rclcpp_lifecycle data_tamer_msgs)
     if (DATA_TAMER_EIGEN_SUPPORT)
@@ -153,17 +152,10 @@ elseif( USE_VENDORED_MCAP )
     target_include_directories(data_tamer PRIVATE
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/mcap/include> )
     target_link_libraries(data_tamer PRIVATE mcap_lib)
-    if (DATA_TAMER_EIGEN_SUPPORT)
-        target_link_libraries(data_tamer PUBLIC Eigen3::Eigen)
-    endif()
-
     list(APPEND INSTALL_TARGETS mcap_lib)
 else()
     find_package(mcap REQUIRED)
     target_link_libraries(data_tamer PRIVATE mcap::mcap)
-    if (DATA_TAMER_EIGEN_SUPPORT)
-        target_link_libraries(data_tamer PUBLIC Eigen3::Eigen)
-    endif()
 endif()
 
 install(

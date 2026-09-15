@@ -8,7 +8,7 @@
 #include <memory>
 
 #if DATA_TAMER_EIGEN_SUPPORT
-#include <Eigen/Dense>
+#include <Eigen/Core>
 #endif
 
 namespace DataTamer
@@ -78,7 +78,7 @@ public:
    * @param value  pointer to the value
    * @return       the ID to be used to unregister or enable/disable this value.
    */
-  template <typename T, bool = true>
+  template <typename T, std::enable_if_t<!IsEigenType<T>, bool> = true>
   RegistrationID registerValue(const std::string& name, const T* value);
 
   /**
@@ -110,7 +110,28 @@ public:
   RegistrationID registerValue(const std::string& name, const std::array<T, N>* value);
 
 #if DATA_TAMER_EIGEN_SUPPORT
-  RegistrationID registerValue(const std::string& prefix, const Eigen::VectorXd* value);
+  /**
+   * @brief registerValue add an Eigen vector, fixed or dynamic size.
+   * You must guaranty that the pointer to the vector is still valid,
+   * when calling takeSnapshot.
+   *
+   * Accepts Eigen::Matrix and Eigen::Array with a single row or column, i.e.
+   * Eigen::Vector3d, Eigen::VectorXd, Eigen::ArrayXf, Eigen::RowVectorXi, ...
+   * A fixed-size vector is logged as "type[N]", a dynamic one as "type[]" and
+   * may change size between snapshots.
+   *
+   * @param name   name of the vector
+   * @param value  pointer to the vector
+   * @return       the ID to be used to unregister or enable/disable the values.
+   */
+  template <class Derived, std::enable_if_t<IsEigenPlainObject<Derived>, bool> = true>
+  RegistrationID registerValue(const std::string& name, const Derived* value);
+
+  /// Rejects Eigen views and expressions. Declared only to report why.
+  template <
+      class Derived,
+      std::enable_if_t<IsEigenType<Derived> && !IsEigenPlainObject<Derived>, bool> = true>
+  RegistrationID registerValue(const std::string& name, const Derived* value);
 #endif
 
   /**
@@ -281,7 +302,7 @@ inline void LogChannel::updateTypeRegistry()
   }
 }
 
-template <typename T, bool>
+template <typename T, std::enable_if_t<!IsEigenType<T>, bool>>
 inline RegistrationID LogChannel::registerValue(const std::string& name,
                                                 const T* value_ptr)
 {
@@ -345,10 +366,25 @@ inline RegistrationID LogChannel::registerValue(const std::string& prefix,
 }
 
 #if DATA_TAMER_EIGEN_SUPPORT
-inline RegistrationID LogChannel::registerValue(const std::string& prefix,
-                                                const Eigen::VectorXd* value)
+template <class Derived, std::enable_if_t<IsEigenPlainObject<Derived>, bool>>
+inline RegistrationID LogChannel::registerValue(const std::string& name,
+                                                const Derived* value)
 {
-  return registerValueImpl(prefix, ValuePtr(value), {});
+  return registerValueImpl(name, ValuePtr(value), {});
+}
+
+template <class Derived,
+          std::enable_if_t<IsEigenType<Derived> && !IsEigenPlainObject<Derived>, bool>>
+inline RegistrationID LogChannel::registerValue(const std::string&, const Derived*)
+{
+  // clang-format off
+  static_assert(IsEigenPlainObject<Derived>,
+                "DataTamer: Eigen views and expressions (Block, Map, Ref, Transpose, "
+                "arithmetic expressions) cannot be registered, because the channel keeps "
+                "the pointer and reads it at every snapshot. Copy into an Eigen::Matrix "
+                "or Eigen::Array and register that instead.");
+  // clang-format on
+  return {};
 }
 #endif
 

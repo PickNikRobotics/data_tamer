@@ -3,16 +3,35 @@
 #include <functional>
 #include <cstring>
 #include <typeindex>
+#include <type_traits>
 
 #include "data_tamer/custom_types.hpp"
 #include "data_tamer/contrib/SerializeMe.hpp"
 
 #if DATA_TAMER_EIGEN_SUPPORT
-#include <Eigen/Dense>
+#include <Eigen/Core>
 #endif
+
 namespace DataTamer
 {
 using SerializeMe::has_TypeDefinition;
+
+#if DATA_TAMER_EIGEN_SUPPORT
+/// Any Eigen type: plain objects, views (Block, Map, Ref) and expressions.
+template <class T>
+inline constexpr bool IsEigenType =
+    std::is_base_of_v<Eigen::EigenBase<std::remove_cv_t<T>>, std::remove_cv_t<T>>;
+
+/// Eigen::Matrix and Eigen::Array, i.e. the Eigen types that own their storage.
+/// Only these can be registered, because the channel keeps the pointer and
+/// dereferences it at every snapshot.
+template <class T>
+inline constexpr bool IsEigenPlainObject =
+    std::is_base_of_v<Eigen::PlainObjectBase<std::remove_cv_t<T>>, std::remove_cv_t<T>>;
+#else
+template <class T>
+inline constexpr bool IsEigenType = false;
+#endif
 
 /**
  * @brief The ValuePtr is a non-owning pointer to
@@ -23,7 +42,7 @@ class ValuePtr
 public:
   ValuePtr() = default;
 
-  template <typename T, bool = true>
+  template <typename T, std::enable_if_t<!IsEigenType<T>, bool> = true>
   ValuePtr(const T* pointer, CustomSerializer::Ptr type_info = {});
 
   template <
@@ -45,7 +64,8 @@ public:
   ValuePtr(const std::array<T, N>* vect, CustomSerializer::Ptr type_info);
 
 #if DATA_TAMER_EIGEN_SUPPORT
-  ValuePtr(const Eigen::VectorXd* vect);
+  template <class Derived, std::enable_if_t<IsEigenPlainObject<Derived>, bool> = true>
+  ValuePtr(const Derived* vect);
 #endif
 
   ValuePtr(ValuePtr const& other) = delete;
@@ -84,7 +104,7 @@ private:
 //------------------------------------------------------------
 //------------------------------------------------------------
 
-template <typename T, bool>
+template <typename T, std::enable_if_t<!IsEigenType<T>, bool>>
 inline ValuePtr::ValuePtr(const T* pointer, CustomSerializer::Ptr type_info)
   : v_ptr_(pointer)
   , type_(GetBasicType<T>())
@@ -198,28 +218,46 @@ inline ValuePtr::ValuePtr(const std::array<T, N>* array, CustomSerializer::Ptr t
 }
 
 #if DATA_TAMER_EIGEN_SUPPORT
-inline ValuePtr::ValuePtr(const Eigen::VectorXd* vect)
+template <class Derived, std::enable_if_t<IsEigenPlainObject<Derived>, bool>>
+inline ValuePtr::ValuePtr(const Derived* vect)
   : v_ptr_(vect)
-  , type_(GetBasicType<double>())         // element type
-  , type_index_(typeid(Eigen::VectorXd))  // identifies the "container type"
-  , memory_size_(sizeof(double))          // element size (consistent with containers)
+  , type_(GetBasicType<typename Derived::Scalar>())
+  , type_index_(typeid(Derived))
+  , memory_size_(sizeof(typename Derived::Scalar))
   , is_vector_(true)
+  , array_size_(Derived::SizeAtCompileTime == Eigen::Dynamic ?
+                    0 :
+                    static_cast<uint16_t>(Derived::SizeAtCompileTime))
 {
-  serialize_impl_ = [vect](SerializeMe::SpanBytes& buffer) -> void {
-    const uint32_t n = static_cast<uint32_t>(vect->size());
-    SerializeMe::SerializeIntoBuffer(buffer, n);
+  using Scalar = typename Derived::Scalar;
+  constexpr bool kFixedSize = Derived::SizeAtCompileTime != Eigen::Dynamic;
 
-    // contiguous block of doubles
-    const size_t bytes = static_cast<size_t>(n) * sizeof(double);
-    if(bytes > 0)
+  // clang-format off
+  static_assert(GetBasicType<Scalar>() != BasicType::OTHER,
+                "DataTamer: unsupported Eigen scalar type");
+  static_assert(Derived::IsVectorAtCompileTime,
+                "DataTamer: only Eigen vectors are supported, not matrices. Flattening "
+                "a matrix would lose its shape and record the coefficients in Eigen's "
+                "storage order.");
+  static_assert(!kFixedSize || Derived::SizeAtCompileTime <= 65535,
+                "DataTamer: fixed-size vectors are limited to 65535 elements");
+  // clang-format on
+
+  serialize_impl_ = [vect](SerializeMe::SpanBytes& buffer) -> void {
+    const auto count = static_cast<uint32_t>(vect->size());
+    if constexpr(!kFixedSize)
     {
-      std::memcpy(buffer.data(), vect->data(), bytes);
-      buffer.trimFront(bytes);
+      SerializeMe::SerializeIntoBuffer(buffer, count);
+    }
+    for(uint32_t i = 0; i < count; i++)
+    {
+      SerializeMe::SerializeIntoBuffer(buffer, (*vect)[i]);
     }
   };
 
   get_size_impl_ = [vect]() -> size_t {
-    return sizeof(uint32_t) + static_cast<size_t>(vect->size()) * sizeof(double);
+    const size_t prefix = kFixedSize ? 0 : sizeof(uint32_t);
+    return prefix + static_cast<size_t>(vect->size()) * sizeof(Scalar);
   };
 }
 #endif
