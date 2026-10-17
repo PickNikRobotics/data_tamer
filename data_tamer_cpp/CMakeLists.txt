@@ -24,6 +24,12 @@ if(DATA_TAMER_BUILD_ROS)
     endif()
 endif()
 
+# Under ROS 2, tests also follow BUILD_TESTING (defined by ament_cmake), as colcon and
+# bloom expect: -DBUILD_TESTING=OFF builds no test.
+if(DATA_TAMER_BUILD_ROS AND NOT BUILD_TESTING)
+    set(DATA_TAMER_BUILD_TESTS OFF)
+endif()
+
 find_package(Threads REQUIRED)
 
 # MCAP: under ROS 2 from mcap_vendor, whose libmcap contains the implementation.
@@ -92,9 +98,7 @@ target_include_directories(data_tamer
 )
 target_compile_definitions(data_tamer PUBLIC DATA_TAMER_VERSION="${PROJECT_VERSION}")
 target_link_libraries(data_tamer PUBLIC Threads::Threads)
-if(DATA_TAMER_BUILD_ROS)
-    target_link_libraries(data_tamer PRIVATE ${DATA_TAMER_MCAP_TARGET})
-elseif(DATA_TAMER_USE_SYSTEM_MCAP)
+if(DATA_TAMER_BUILD_ROS OR DATA_TAMER_USE_SYSTEM_MCAP)
     # PUBLIC: sinks/mcap_encoding.hpp includes the MCAP headers.
     target_link_libraries(data_tamer PUBLIC ${DATA_TAMER_MCAP_TARGET})
 else()
@@ -132,6 +136,19 @@ if(DATA_TAMER_BUILD_ROS)
 
     ament_export_targets(data_tamerTargets HAS_LIBRARY_TARGET)
     ament_export_dependencies(Threads mcap_vendor rclcpp rclcpp_lifecycle data_tamer_msgs)
+
+    # find_package(data_tamer 2) and data_tamer::data_tamer work under ROS 2 too: a
+    # package "data_tamer" next to data_tamer_cpp forwards to data_tamer_cpp::data_tamer.
+    include(CMakePackageConfigHelpers)
+    write_basic_package_version_file(
+        ${CMAKE_CURRENT_BINARY_DIR}/ros/data_tamerConfigVersion.cmake
+        VERSION ${PROJECT_VERSION}
+        COMPATIBILITY SameMajorVersion)
+    install(FILES cmake/data_tamerConfig-ros.cmake
+        DESTINATION share/data_tamer/cmake
+        RENAME data_tamerConfig.cmake)
+    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/ros/data_tamerConfigVersion.cmake
+        DESTINATION share/data_tamer/cmake)
     ament_package()
 endif()
 
