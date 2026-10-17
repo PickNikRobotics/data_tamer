@@ -4,6 +4,8 @@ Changelog for package data_tamer
 
 Unreleased
 ----------
+* Docs: ``docs/MIGRATION.md`` lists what code written for 1.x must change for 2.0,
+  with the behaviour changes that compile silently.
 * **API**: ``data_tamer/data_tamer.hpp`` includes ``channel.hpp`` again, as in 1.x, so
   one include gives ``ChannelsRegistry``, ``LogChannel``, ``LoggedValue`` and the sink
   interface. ``data_tamer/fwd.hpp`` stays for headers that only name the types.
