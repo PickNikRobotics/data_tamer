@@ -158,33 +158,70 @@ More examples, including publishing on ROS 2 and the flight recorder, are in
 
 # Compilation
 
-## Compiling with ROS2
+The library builds with CMake 3.22 and a C++20 compiler; programs that use it need
+C++17. Under any build, a consumer links it the same way:
 
-Just use colcon :)
+```cmake
+find_package(data_tamer 2 REQUIRED)
+target_link_libraries(my_app PRIVATE data_tamer::data_tamer)
+```
 
-## Compiling with Conan (not ROS2 support)
+## Compiling with ROS 2
 
-Note that the ROS2 publisher will **NOT** be built when using this method.
+The ROS 2 package of 2.x is `data_tamer_v2` (in the `data_tamer_cpp/` folder): it
+installs side by side with `data_tamer_cpp`, the 1.x package: its headers are in
+`include/data_tamer_v2` and its library is `libdata_tamer_v2.so`. Depend on it with
+`<depend>data_tamer_v2</depend>`; `find_package(data_tamer_v2 REQUIRED)` with the target
+`data_tamer_v2::data_tamer` works as well as `data_tamer::data_tamer`.
 
-Assuming conan 2.x installed. From the `data_tamer_cpp` directory:
+Put the repository in the `src/` folder of a colcon workspace and run `colcon build`. The
+tests are built when `BUILD_TESTING` is ON (colcon's default); pass
+`--cmake-args -DBUILD_TESTING=OFF` to skip them.
 
-**Release**:
+## Compiling with CMake
+
+Needs zstd and lz4 (on Ubuntu, `libzstd-dev liblz4-dev`); the MCAP headers are bundled.
+From the repository root:
+
+```
+cmake -S data_tamer_cpp -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel
+cmake --install build --prefix /usr/local
+```
+
+| Option | Default | |
+|---|---|---|
+| `BUILD_SHARED_LIBS` | `OFF` | Shared library (always ON under ROS 2). |
+| `DATA_TAMER_BUILD_TESTS`, `_EXAMPLES`, `_BENCHMARKS` | top level | Under ROS 2, tests also need `BUILD_TESTING`. |
+| `DATA_TAMER_BUILD_ROS` | top level | The ROS 2 package, when `ament_cmake` is found. |
+| `DATA_TAMER_INSTALL` | top level | Install rules. |
+| `DATA_TAMER_WERROR` | `OFF` | Warnings in the library are errors (the presets and CI turn it ON). |
+| `DATA_TAMER_USE_SYSTEM_MCAP` | `OFF` | `find_package(mcap)` instead of the bundled MCAP headers. |
+
+"Top level" means ON when data_tamer is the project being built and OFF when it is
+added with `add_subdirectory()` or FetchContent: then it is a plain library target,
+`data_tamer::data_tamer`, without ROS 2, and installs nothing.
+
+## Compiling with Conan
+
+The ROS 2 publisher is not built this way. Conan 2.4 or later. From `data_tamer_cpp/`,
+`conan create . --build=missing` packages the library (MCAP from the `mcap` package) and
+builds [test_package](data_tamer_cpp/test_package) against it. To develop with
+dependencies from conan:
 
 ```
 conan install . -s compiler.cppstd=gnu17 --build=missing -s build_type=Release
-cmake -S . -B build/Release -DCMAKE_BUILD_TYPE=Release \
+cmake -S . -B build/Release -DCMAKE_BUILD_TYPE=Release -DDATA_TAMER_USE_SYSTEM_MCAP=ON \
       -DCMAKE_TOOLCHAIN_FILE="build/Release/generators/conan_toolchain.cmake"
 cmake --build build/Release --parallel
 ```
 
-**Debug**:
+## Third-party code
 
-```
-conan install . -s compiler.cppstd=gnu17 --build=missing -s build_type=Debug
-cmake -S . -B build/Debug -DCMAKE_BUILD_TYPE=Debug \
-      -DCMAKE_TOOLCHAIN_FILE="build/Debug/generators/conan_toolchain.cmake"
-cmake --build build/Debug --parallel
-```
+- `data_tamer_cpp/3rdparty/mcap`: the headers of [MCAP](https://github.com/foxglove/mcap)
+  C++ 2.1.3, by Foxglove, MIT licence (`3rdparty/mcap/LICENSE`, installed with them).
+- `data_tamer_cpp/cmake/Findzstd.cmake` and `Findlz4.cmake`: adapted from find modules by
+  Meta Platforms, Apache License 2.0 (notice in each file).
 
 # How to deserialize data recorded with DataTamer
 

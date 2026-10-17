@@ -331,8 +331,8 @@ their own clock.
 `data_tamer_v2/sinks/mcap_encoding.hpp` (`AddChannel`, `WriteSnapshot`,
 `WriteMessage`, `EncodeMessageBody`); any other C++ writer, for example one that
 stores snapshots and writes them later, should use them too. They still need
-the data_tamer library (and, under ROS 2, `mcap_vendor`); the header explains
-how to build against them.
+the data_tamer library, whose CMake target also provides the MCAP headers; the
+header explains how to build against them.
 
 - Writer profile: `data_tamer`. Compression: none, or `zstd` when enabled.
 - One MCAP **schema** record per channel schema: `name` = `<channel_name>::<hash>`,

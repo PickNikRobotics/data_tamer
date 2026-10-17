@@ -40,12 +40,10 @@
  * file, as MCAPSink does, so that readers can detect gaps.
  *
  * Building against it: link data_tamer::data_tamer (AddChannel uses the library's
- * operator<<(Schema)) and use the MCAP headers the library was built with.
- * - Outside ROS 2, data_tamer::data_tamer provides them and libdata_tamer contains the
- *   MCAP implementation: do NOT define MCAP_IMPLEMENTATION, and do not mix in another
- *   MCAP version.
- * - Under ROS 2, MCAP comes from mcap_vendor and is not part of libdata_tamer: link
- *   mcap_vendor::mcap as well.
+ * operator<<(Schema)), which provides the MCAP headers the library was built with.
+ * - Outside ROS 2, libdata_tamer contains the MCAP implementation: do NOT define
+ *   MCAP_IMPLEMENTATION, and do not mix in another MCAP version.
+ * - Under ROS 2, MCAP comes from mcap_vendor, which the target links publicly.
  */
 namespace DataTamer::mcap_encoding
 {

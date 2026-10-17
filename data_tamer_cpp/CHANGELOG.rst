@@ -8,6 +8,40 @@ Unreleased
   (``#include "data_tamer_v2/channel.hpp"``), and the standalone parser from
   ``data_tamer_parser/data_tamer_parser.hpp`` to ``data_tamer_v2/data_tamer_parser.hpp``,
   so that 2.x installs side by side with 1.x, whose headers keep their paths.
+* **Packaging, ROS 2**: 2.x is released as a new package, ``data_tamer_v2``, which
+  installs side by side with ``data_tamer_cpp`` 1.x in one prefix: the headers are in
+  ``include/data_tamer_v2``, the library is ``libdata_tamer_v2.so.2``, the example runs
+  as ``ros2 run data_tamer_v2 ros2_publisher``.
+  Depend on ``data_tamer_v2`` and link ``data_tamer_v2::data_tamer``, or use
+  ``find_package(data_tamer 2)`` and ``data_tamer::data_tamer``, which a ROS 2 install now
+  provides too (``share/data_tamer/cmake``). ``data_tamer_msgs`` keeps its name.
+* **Packaging, ROS 2**: ``mcap_vendor::mcap`` is linked PUBLIC, so code that includes
+  ``sinks/mcap_encoding.hpp`` no longer links it by hand. ``-DBUILD_TESTING=OFF`` builds
+  no test; the gtest packages are ``<test_depend>``, ``lz4`` and ``libzstd-dev`` are no
+  longer dependencies. ``data_tamer_msgs`` drops ``builtin_interfaces`` and
+  ``ament_lint_common``. Both manifests have a description and urls.
+* **ABI, MCAP**: the bundled MCAP C++ headers are 2.1.3 (they were 1.3.0, which does not
+  compile with GCC 15), with their MIT licence. libdata_tamer compiles the MCAP
+  implementation and exports its ``mcap::`` symbols, which change with it; from 2.0.0
+  the bundled MCAP version is part of the 2.x ABI. An installed MCAP package is no longer
+  used silently instead of the bundled headers: ``DATA_TAMER_USE_SYSTEM_MCAP=ON`` opts in
+  (conan does, with ``mcap/2.1.3`` and conan 2.4 or later).
+* **Packaging**: the bundled MCAP headers install in ``include/data_tamer_v2_mcap/mcap``,
+  an include directory of ``data_tamer::data_tamer`` that holds nothing else. The
+  ``mcap_lib`` target is gone (1.x installed ``libmcap_lib.a``). zstd and lz4 are
+  linked privately, preferring the shared libraries of their own CMake packages, with a
+  plain search as fallback (``cmake/Findzstd.cmake``, ``Findlz4.cmake``). A shared
+  install exports no dependency besides Threads and no zstd or lz4 symbol
+  (``--exclude-libs,ALL``); a static one finds zstd and lz4 again in its CMake package,
+  and no install contains an absolute path of the build machine.
+* **Build**: ``-Werror`` is opt-in, ``DATA_TAMER_WERROR`` (OFF), so a release builds with
+  newer compilers; the presets and CI turn it on. Added to a parent project
+  (``add_subdirectory()``, FetchContent) data_tamer builds no ROS 2 package, tests or
+  examples, installs nothing (``DATA_TAMER_INSTALL``, default: top level) and prints no
+  warning about ament.
+* CI: the ``install`` job builds ``data_tamer_cpp/test_package``, a
+  ``find_package(data_tamer 2)`` consumer, against a static and a shared install, and
+  the conan job runs ``conan create``, which builds it as the conan test package.
 * **ABI**: ``ChannelSharedState``, its ``WriteMutex`` and the series flag words are
   library-private (``src/``): the headers ``details/shared_state.hpp``,
   ``details/write_mutex.hpp`` and ``details/spin_pause.hpp`` are no longer installed, and
@@ -419,15 +453,12 @@ Unreleased
   for stored data) and ``EncodeMessageBody()`` that write the MCAP records of
   ``docs/wire_format.md``. ``MCAPSink`` uses them. The caller provides the
   sequence number and a reusable scratch buffer (no allocation once it is large
-  enough). They need ``data_tamer::data_tamer`` (and ``mcap_vendor::mcap`` under
-  ROS 2); outside ROS 2 the bundled MCAP headers are now installed (under
-  ``include/data_tamer_mcap``) and exported with data_tamer through the
-  header-only ``data_tamer::mcap_headers`` target, so a shared install exports
-  no zstd/lz4 library paths; libdata_tamer already contains the MCAP
-  implementation (do not define ``MCAP_IMPLEMENTATION``). A shared build no
-  longer installs ``libmcap_lib.a``. ``SerializeMe::Span<const T>`` converts from a
-  ``const std::vector<T>&``. The ``DataSink`` documentation now explains that a
-  slow ``onSnapshot()`` exhausts the channel's shared snapshot pool for every sink.
+  enough). They need ``data_tamer::data_tamer``, which provides the MCAP headers
+  (see the packaging entries above); outside ROS 2 libdata_tamer contains the MCAP
+  implementation (do not define ``MCAP_IMPLEMENTATION``).
+  ``SerializeMe::Span<const T>`` converts from a ``const std::vector<T>&``. The
+  ``DataSink`` documentation now explains that a slow ``onSnapshot()`` exhausts the
+  channel's shared snapshot pool for every sink.
 * **Breaking, channel API cleanup** (2.0 review items 20-24, 33):
 
   - ``RegistrationID`` is an opaque handle (no public ``first_index`` /

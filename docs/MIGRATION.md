@@ -333,17 +333,34 @@ Python has a decoder now, `pip install "data-tamer-parser[mcap]"` (see
 
 ## Building and linking
 
-- The target names are unchanged: `data_tamer_cpp::data_tamer` under ROS 2,
-  `data_tamer::data_tamer` otherwise. Consumers still need C++17. Building the library
-  needs CMake 3.22 and a C++20 compiler.
-- The shared library's SONAME is `libdata_tamer.so.2`. In 1.x it was the bare
+- Under ROS 2, 2.x is a new package, `data_tamer_v2`, released next to `data_tamer_cpp`
+  1.x: replace `<depend>data_tamer_cpp</depend>` with `<depend>data_tamer_v2</depend>`,
+  `find_package(data_tamer_cpp)` with `find_package(data_tamer_v2)` and the target
+  `data_tamer_cpp::data_tamer` with `data_tamer_v2::data_tamer` (or use
+  `find_package(data_tamer 2)` and `data_tamer::data_tamer`, which a ROS 2 install now
+  provides too). The two install side by side in one prefix: the 2.x headers are in
+  `include/data_tamer_v2` (see step 2), the library is `libdata_tamer_v2.so.2`, and the
+  example runs as `ros2 run data_tamer_v2 ros2_publisher`. `data_tamer_msgs` keeps its name and messages. Port one package at a
+  time, but don't link 1.x and 2.x into the same program.
+- Without ROS the package is `data_tamer` and the target `data_tamer::data_tamer`, as in
+  1.x. Consumers still need C++17. Building the library needs CMake 3.22 and a C++20
+  compiler.
+- Warnings no longer stop the build of the library: `-Werror` is the option
+  `DATA_TAMER_WERROR`, OFF by default.
+- As a subproject (`add_subdirectory()`, FetchContent) data_tamer installs nothing and
+  builds no ROS 2 sink, tests or examples by default (`DATA_TAMER_INSTALL`,
+  `DATA_TAMER_BUILD_ROS`, ...). Under ROS 2, `-DBUILD_TESTING=OFF` builds no test.
+- Without ROS, the shared library's SONAME is `libdata_tamer.so.2`. In 1.x it was the bare
   `libdata_tamer.so`, which the 2.0 install still provides as a symlink, so a 1.x binary
   that is not rebuilt loads the 2.0 library and fails on missing symbols.
-- Without ROS, `find_package(data_tamer 2 REQUIRED)` accepts any 2.x. The bundled MCAP
-  headers are installed with the library, which also contains the MCAP implementation:
-  don't define `MCAP_IMPLEMENTATION` in a program that links data_tamer.
-- Under ROS 2, data_tamer links `mcap_vendor` privately: a program that uses MCAP itself
-  links `mcap_vendor::mcap`. `ros2_publisher_sink.hpp` no longer includes the
+- `find_package(data_tamer 2 REQUIRED)` accepts any 2.x. The bundled MCAP is 2.1.3
+  (1.x had 1.3.0); its headers are installed with the library, which also contains the
+  MCAP implementation: don't define `MCAP_IMPLEMENTATION` in a program that links
+  data_tamer. An MCAP package installed on the build machine is no longer used instead
+  of the bundled one unless the build sets `DATA_TAMER_USE_SYSTEM_MCAP=ON`. The
+  `mcap_lib` target is gone: link `data_tamer::data_tamer`.
+- Under ROS 2, data_tamer links `mcap_vendor` publicly: the target gives a program the
+  MCAP headers and `libmcap`. `ros2_publisher_sink.hpp` no longer includes the
   `data_tamer_msgs` headers: include the ones you use.
 - From 2.0 on, a program built against any 2.x release runs with any later 2.x library.
   `ROS2PublisherSink` is the exception: its ABI also follows the rclcpp release.

@@ -27,7 +27,13 @@ under "Unreleased" in `data_tamer_cpp/CHANGELOG.rst`.
 
 ## Repository layout
 
-- `data_tamer_cpp/`: the library. ROS 2 package `data_tamer_cpp`, CMake target `data_tamer`.
+- `data_tamer_cpp/`: the library. ROS 2 package and CMake project `data_tamer_v2`, which
+  installs side by side with the released 1.x package `data_tamer_cpp`: no installed file
+  may collide with 1.x (`share/data_tamer_cpp`, `include/data_tamer`,
+  `include/data_tamer_parser`, `lib/libdata_tamer.so`), so under ROS the library is
+  `libdata_tamer_v2.so`. CMake target `data_tamer`, exported as
+  `data_tamer_v2::data_tamer` under ROS and `data_tamer::data_tamer` (package
+  `data_tamer`) otherwise.
   - `include/data_tamer_v2/`: public headers. `channel.hpp` (LogChannel, SnapshotResult),
     `data_tamer.hpp` (ChannelsRegistry), `data_sink.hpp` (DataSink, SinkWorker, Snapshot,
     SnapshotRef), `logged_value.hpp`, `names.hpp`, `types.hpp` (Schema, BasicType),
@@ -48,7 +54,17 @@ under "Unreleased" in `data_tamer_cpp/CHANGELOG.rst`.
     The gtest programs come from `data_tamer_add_gtest()`.
   - `examples/`: T01 to T04, `mcap_1m_per_sec`, `mcap_reader`, `ros2_publisher` (ROS only).
   - `benchmarks/`: built only when Google Benchmark is found.
-  - `3rdparty/`: vendored MCAP.
+  - `3rdparty/mcap/`: the headers of MCAP C++ 2.1.3 and their MIT `LICENSE`, copied
+    unmodified from foxglove/mcap (`cpp/mcap/include/mcap`, tag `releases/cpp/v2.1.3`).
+    No CMake code lives there. Installed (not under ROS, not with
+    `DATA_TAMER_USE_SYSTEM_MCAP`) in `include/data_tamer_v2_mcap/mcap`, an include
+    directory of the target that holds nothing else.
+  - `cmake/`: `Findzstd.cmake` and `Findlz4.cmake` (the imported targets
+    `data_tamer::zstd` and `data_tamer::lz4`, adapted from Meta's modules: keep their
+    Apache-2.0 notice), the installed config `data_tamerConfig.cmake.in`, and
+    `data_tamerConfig-ros.cmake`, the `data_tamer` package of a ROS 2 install.
+  - `test_package/`: a `find_package(data_tamer 2)` consumer, built by `conan create` and
+    by the CI install job.
 - `data_tamer_msgs/`: ROS 2 messages `Schema`, `Schemas`, `Snapshot`, `SnapshotBatch`.
 - `python/`: `data_tamer_parser.py`, the reference decoder (standard library only),
   packaged as `data-tamer-parser`; its tests; `ros2_subscriber.py`.
@@ -57,9 +73,10 @@ under "Unreleased" in `data_tamer_cpp/CHANGELOG.rst`.
   `wire_format/vectors/` (`v4/`: a 1.0.4 recording).
 - `tools/`: `check_versions.py` (every version number agrees), `abi_check.sh` (the
   libabigail comparison) and `abi_probe.cpp` (the consumer side of that comparison).
-- `.github/workflows/`: plain CMake through conan, one ROS 2 job per distribution
-  (industrial_ci), asan and tsan presets, Python tests and PyPI release, and the `abi`
-  job (libabigail).
+- `.github/workflows/`: plain CMake through conan plus `conan create`, the `install` job
+  (static and shared installs, `test_package/` built against each, Ubuntu 22.04 and
+  24.04), one ROS 2 job per distribution (industrial_ci), asan and tsan presets, Python
+  tests and PyPI release, and the `abi` job (libabigail).
 
 ## Build and test
 
@@ -67,22 +84,29 @@ ROS 2, with the repository under `src/` of a colcon workspace:
 
 ```bash
 source /opt/ros/jazzy/setup.bash
-colcon build --packages-up-to data_tamer_cpp
-colcon test --packages-select data_tamer_cpp
+colcon build --packages-up-to data_tamer_v2
+colcon test --packages-select data_tamer_v2
 colcon test-result --verbose
 ```
+
+`--cmake-args -DBUILD_TESTING=OFF` builds no test target (as bloom does); the gtest
+packages are `<test_depend>` in `package.xml`. Under ROS, MCAP comes from `mcap_vendor`,
+linked PUBLIC, and the install also provides `share/data_tamer/cmake` so that
+`find_package(data_tamer 2)` works there.
 
 Under ROS the whole gtest binary is one ctest entry. Run a subset directly:
 
 ```bash
 source install/setup.bash
-./build/data_tamer_cpp/tests/datatamer_test --gtest_filter='WireFormat.*'
+./build/data_tamer_v2/tests/datatamer_test --gtest_filter='WireFormat.*'
 ```
 
 Plain CMake without ROS, from `data_tamer_cpp/` (needs GTest, zstd and lz4, e.g.
-`libgtest-dev libzstd-dev liblz4-dev`). The presets set `DATA_TAMER_BUILD_ROS=OFF`;
-without them, pass that option yourself when ROS is sourced, because CMake builds the
-ROS flavour whenever it finds `ament_cmake`.
+`libgtest-dev libzstd-dev liblz4-dev`). The presets set `DATA_TAMER_BUILD_ROS=OFF` and
+`DATA_TAMER_WERROR=ON`; without them, pass `DATA_TAMER_BUILD_ROS=OFF` yourself when ROS
+is sourced, because a top-level build is the ROS flavour whenever it finds
+`ament_cmake`. `DATA_TAMER_WERROR` is OFF by default so that a release builds with
+newer compilers; CI turns it on everywhere.
 
 ```bash
 cmake --preset debug            # build/debug: tests on, examples and benchmarks off
@@ -93,6 +117,21 @@ ctest --preset debug -R 'WireFormat'
 
 Other presets: `release` (adds examples and benchmarks), `asan`, `tsan` (runs the tests
 through `tests/run_under_tsan.sh`). CI runs `asan` and `tsan`.
+
+Install check, as the CI `install` job does it (repeat with `-DBUILD_SHARED_LIBS=ON`):
+
+```bash
+cmake -S . -B /tmp/dt -DDATA_TAMER_BUILD_TESTS=OFF -DDATA_TAMER_BUILD_EXAMPLES=OFF
+cmake --build /tmp/dt && cmake --install /tmp/dt --prefix /tmp/dt-prefix
+cmake -S test_package -B /tmp/dt-consumer -DCMAKE_PREFIX_PATH=/tmp/dt-prefix
+cmake --build /tmp/dt-consumer && /tmp/dt-consumer/test_package
+```
+
+`conan create . --build=missing -o "data_tamer/*:tests=False"` builds the conan package
+(MCAP from conan's `mcap`, `DATA_TAMER_USE_SYSTEM_MCAP=ON`) and runs `test_package/`.
+As a subproject (`add_subdirectory()`, FetchContent) the library has no install rules
+(`DATA_TAMER_INSTALL`), no ROS flavour, tests or examples by default, and defines no
+global target besides `data_tamer` (the MCAP, zstd and lz4 targets are imported).
 
 Python decoder tests, from the repository root (ctest runs them too, as
 `python_reference_decoder`). The `iter_mcap` tests are skipped unless the `mcap` package
@@ -117,8 +156,9 @@ DATA_TAMER_UPDATE_GOLDEN=1 \
   the `public_headers_cxx17` target (`tests/public_headers_cxx17.cpp`) includes every
   core public header, so add new headers there. `sinks/ros2_publisher_sink.hpp` is
   exempt (rclcpp sets its own standard). Examples build as C++17 consumers.
-- The library builds with `-Wall -Wextra -Wpedantic -Wconversion -Wno-sign-conversion
-  -Werror`.
+- The library builds with `-Wall -Wextra -Wpedantic -Wconversion -Wno-sign-conversion`,
+  and `-Werror` with `DATA_TAMER_WERROR=ON` (presets and CI). The bundled MCAP headers
+  are a SYSTEM include directory.
 - The real-time path allocates nothing, takes no blocking lock, does no I/O and does not
   throw. It covers `tryTakeSnapshot()` and what it reaches (`SnapshotPool::tryAcquire`,
   `WriteMutex::tryLockWithSpin`, `ValuePtr` serialization, `SinkWorker::tryPush` and
@@ -205,7 +245,9 @@ DATA_TAMER_UPDATE_GOLDEN=1 \
   `fwd_header_*` targets check it). `data_tamer.hpp` is the umbrella header: it
   includes `channel.hpp` (and through it `data_sink.hpp`), as 1.x did. Keep heavy
   includes out of the other public headers.
-- `3rdparty/` is vendored: do not edit it. pre-commit excludes it.
+- `3rdparty/` is vendored: do not edit it. pre-commit excludes it. Update MCAP by copying
+  the upstream headers and LICENSE unmodified; after the 2.0.0 tag that is an ABI change
+  (see "Versioning and ABI policy").
 
 ## Versioning and ABI policy
 
@@ -215,8 +257,9 @@ One version number covers the C++ library, the ROS packages and the Python decod
 - `data_tamer_cpp/CMakeLists.txt`, `project(... VERSION x.y.z)`. The shared library gets
   `VERSION x.y.z` and `SOVERSION x` (the major), so it installs as
   `libdata_tamer.so.x.y.z` with the symlinks `libdata_tamer.so.x` (the SONAME) and
-  `libdata_tamer.so`. The compile definition `DATA_TAMER_VERSION` and the CMake package
-  version file (non-ROS install, `SameMajorVersion`) derive from it;
+  `libdata_tamer.so` (under ROS `libdata_tamer_v2.so.x.y.z`, `OUTPUT_NAME`). The compile
+  definition `DATA_TAMER_VERSION` and the CMake package version files (`data_tamer`,
+  `SameMajorVersion`, also the ROS shim in `share/data_tamer/cmake`) derive from it;
 - `data_tamer_cpp/package.xml` and `data_tamer_msgs/package.xml`, `<version>`;
 - `data_tamer_cpp/conanfile.py`, `version`;
 - `python/data_tamer_parser.py`, `__version__`;
@@ -258,7 +301,15 @@ that major. That is frozen inside 2.x:
 - the inline protocols: the `registerValue` templates, the payload encoding and schema
   text (any wire revision, see Invariants). The transaction chain and the series flag
   word are not among them: their code is in the library, and only the size of
-  `WriteTransaction` reaches consumers.
+  `WriteTransaction` reaches consumers;
+- the bundled MCAP version (`3rdparty/mcap`, 2.1.3). libdata_tamer compiles the MCAP
+  implementation and exports its `mcap::` symbols, and `sinks/mcap_encoding.hpp` hands
+  consumers MCAP types, so vendoring another MCAP release after the 2.0.0 tag is a
+  break. Under ROS 2 MCAP's ABI is `mcap_vendor`'s; a build with
+  `DATA_TAMER_USE_SYSTEM_MCAP` (conan) has the ABI of the MCAP package it found, which
+  its packager keeps fixed within 2.x. No other library's symbols are exported:
+  zstd and lz4 are linked PRIVATE, shared first, and `--exclude-libs,ALL` hides the
+  symbols of any static archive linked into the shared library.
 
 Adding a function, an overload, a class or an appended enumerator is compatible. Header
 defaults (member initializers, default arguments) take effect only in rebuilt
