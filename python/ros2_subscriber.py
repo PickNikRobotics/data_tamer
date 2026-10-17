@@ -6,7 +6,7 @@ Handles both modes of the sink: one data_tamer_msgs/Snapshot per sample on
 sourced ROS 2 workspace that contains data_tamer_msgs:
 
     python3 python/ros2_subscriber.py --prefix /test
-    ros2 run data_tamer_cpp ros2_publisher --aggregate --yaml   # in another shell
+    ros2 run data_tamer_v2 ros2_publisher --aggregate --yaml   # in another shell
 """
 import argparse
 

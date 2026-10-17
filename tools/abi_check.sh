@@ -59,8 +59,8 @@ for tool in cmake abidiff readelf nm; do
   command -v "$tool" >/dev/null || { echo "missing tool: $tool" >&2; exit 2; }
 done
 
-project_version() {  # $1: source tree
-  sed -n 's/^[[:space:]]*project(data_tamer_cpp[[:space:]]*VERSION[[:space:]]*\([0-9][0-9.]*\).*/\1/p' \
+project_version() {  # $1: source tree (the project was data_tamer_cpp before data_tamer_v2)
+  sed -n 's/^[[:space:]]*project(data_tamer_\(cpp\|v2\)[[:space:]]*VERSION[[:space:]]*\([0-9][0-9.]*\).*/\2/p' \
     "$1/data_tamer_cpp/CMakeLists.txt" | head -n1
 }
 

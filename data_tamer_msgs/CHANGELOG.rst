@@ -6,7 +6,8 @@ Unreleased
 ----------
 * New ``SnapshotBatch`` message: several ``Snapshot`` plus, optionally, the
   ``Schema`` of each, to publish fewer, self-contained messages.
-* The package version is 2.0.0, like ``data_tamer_cpp``.
+* The package version is 2.0.0, like ``data_tamer_v2``, the ROS 2 package of
+  data_tamer 2.x.
 
 1.0.4 (2026-07-26)
 ------------------

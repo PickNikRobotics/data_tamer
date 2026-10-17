@@ -1,10 +1,11 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>data_tamer_cpp</name>
+  <name>data_tamer_v2</name>
   <version>2.0.0</version>
   <description>
-  DataTamer data logging library
+  DataTamer data logging library, version 2. Installs side by side with data_tamer_cpp
+  (1.x): its own headers (include/data_tamer_v2) and library (libdata_tamer_v2.so).
   </description>
 
   <maintainer email="davide.faconti@gmail.com">Davide Faconti</maintainer>

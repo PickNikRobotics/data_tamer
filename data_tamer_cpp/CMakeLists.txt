@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(data_tamer_cpp VERSION 2.0.0 LANGUAGES CXX)
+# The ROS 2 package of 2.x is data_tamer_v2: it installs side by side with the released
+# data_tamer_cpp 1.x. Plain CMake and conan installs are the package data_tamer.
+project(data_tamer_v2 VERSION 2.0.0 LANGUAGES CXX)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
@@ -82,6 +84,12 @@ add_library(data_tamer::data_tamer ALIAS data_tamer)
 set_target_properties(data_tamer PROPERTIES
     VERSION ${PROJECT_VERSION}
     SOVERSION ${PROJECT_VERSION_MAJOR})
+# Under ROS 2 nothing may collide with the files of data_tamer_cpp 1.x in the same prefix
+# (/opt/ros/<distro>), which has an unversioned libdata_tamer.so: libdata_tamer_v2.so.
+# The headers (include/data_tamer_v2) differ from 1.x everywhere.
+if(DATA_TAMER_BUILD_ROS)
+    set_target_properties(data_tamer PROPERTIES OUTPUT_NAME ${PROJECT_NAME})
+endif()
 
 target_compile_options(data_tamer PRIVATE
     $<$<CXX_COMPILER_ID:MSVC>:/W4>
@@ -177,7 +185,8 @@ if(DATA_TAMER_INSTALL)
         ament_export_dependencies(Threads mcap_vendor rclcpp rclcpp_lifecycle data_tamer_msgs)
 
         # find_package(data_tamer 2) and data_tamer::data_tamer work under ROS 2 too: a
-        # package "data_tamer" next to data_tamer_cpp forwards to data_tamer_cpp::data_tamer.
+        # package "data_tamer" next to data_tamer_v2 forwards to data_tamer_v2::data_tamer.
+        # data_tamer_cpp 1.x installs no package of that name under ROS 2.
         write_basic_package_version_file(
             ${CMAKE_CURRENT_BINARY_DIR}/ros/data_tamerConfigVersion.cmake
             VERSION ${PROJECT_VERSION}
