@@ -4,8 +4,9 @@
   <name>data_tamer_v2</name>
   <version>2.0.0</version>
   <description>
-  DataTamer data logging library, version 2. Installs side by side with data_tamer_cpp
-  (1.x): its own headers (include/data_tamer_v2) and library (libdata_tamer_v2.so).
+  Logs C++ variables of real-time programs as periodic snapshots (allocation-free,
+  lock-free) to MCAP files, a RAM flight recorder or ROS 2 topics. Version 2 of
+  data_tamer_cpp; installs side by side with it.
   </description>
 
   <maintainer email="davide.faconti@gmail.com">Davide Faconti</maintainer>
@@ -13,6 +14,10 @@
   <maintainer email="nathanbrooks@picknik.ai">Nathan Brooks</maintainer>
 
   <license>MIT</license>
+
+  <url type="website">https://github.com/facontidavide/data_tamer</url>
+  <url type="repository">https://github.com/facontidavide/data_tamer.git</url>
+  <url type="bugtracker">https://github.com/facontidavide/data_tamer/issues</url>
 
   <author>Davide Faconti</author>
 
