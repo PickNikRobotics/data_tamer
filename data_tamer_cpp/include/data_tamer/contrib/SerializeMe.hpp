@@ -477,9 +477,10 @@ inline void SerializeIntoBuffer(SpanBytes& buffer, T const& value)
       throw std::runtime_error("SerializeIntoBuffer: buffer overflow");
     }
 #if SERIALIZE_LITTLEENDIAN == 0
-    *(reinterpret_cast<T*>(buffer.data())) = EndianSwap<T>(value);
+    T swapped = EndianSwap<T>(value);
+    std::memcpy(buffer.data(), &swapped, S);
 #else
-    *(reinterpret_cast<T*>(buffer.data())) = value;
+    std::memcpy(buffer.data(), &value, S);
 #endif
     buffer.trimFront(S);   // NOLINT
   }

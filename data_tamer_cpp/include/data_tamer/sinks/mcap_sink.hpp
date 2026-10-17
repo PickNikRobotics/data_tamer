@@ -49,6 +49,10 @@ public:
   /// Stop recording and save the file
   void stopRecording();
 
+  /// Stop taking snapshots, finish the existing queue, then `stopRecording`
+  /// will block for at least 250 us to ensure the queue is empty
+  void finishQueueAndStop();
+
   /**
    * @brief restartRecording saves the current file (unless we did it already,
    * calling stopRecording) and start recording into a new one.
