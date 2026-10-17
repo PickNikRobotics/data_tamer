@@ -17,5 +17,7 @@ target_link_libraries(mcap_reader PRIVATE ${DATA_TAMER_MCAP_TARGET})
 
 if(DATA_TAMER_BUILD_ROS)
     CompileExample(ros2_publisher)
-    install(TARGETS ros2_publisher DESTINATION lib/${PROJECT_NAME})
+    if(DATA_TAMER_INSTALL)
+        install(TARGETS ros2_publisher DESTINATION lib/${PROJECT_NAME})
+    endif()
 endif()

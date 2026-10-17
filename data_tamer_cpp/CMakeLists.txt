@@ -5,10 +5,14 @@ project(data_tamer_cpp VERSION 2.0.0 LANGUAGES CXX)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
 
+# As a subproject (add_subdirectory, FetchContent) data_tamer is a plain library: no
+# ROS 2 package, no tests, examples or benchmarks, and no install rules unless asked.
 option(DATA_TAMER_BUILD_TESTS "Build tests" ${PROJECT_IS_TOP_LEVEL})
 option(DATA_TAMER_BUILD_EXAMPLES "Build examples" ${PROJECT_IS_TOP_LEVEL})
 option(DATA_TAMER_BUILD_BENCHMARKS "Build benchmarks" ${PROJECT_IS_TOP_LEVEL})
-option(DATA_TAMER_BUILD_ROS "Build for ROS 2" ON)
+option(DATA_TAMER_BUILD_ROS "Build the ROS 2 package when ament_cmake is found"
+    ${PROJECT_IS_TOP_LEVEL})
+option(DATA_TAMER_INSTALL "Generate the install rules" ${PROJECT_IS_TOP_LEVEL})
 option(DATA_TAMER_USE_SYSTEM_MCAP
     "Use an installed MCAP package (find_package(mcap)) instead of the bundled headers" OFF)
 # OFF by default, so that a release builds with the next compiler (ROS buildfarm, conda,
@@ -20,7 +24,7 @@ if(DATA_TAMER_BUILD_ROS)
     find_package(ament_cmake QUIET)
     if(NOT ament_cmake_FOUND)
         set(DATA_TAMER_BUILD_ROS OFF)
-        message(WARNING "ament_cmake not found, building without ROS 2 support. Set DATA_TAMER_BUILD_ROS to OFF to disable this warning.")
+        message(STATUS "ament_cmake not found: building without ROS 2")
     endif()
 endif()
 
@@ -118,8 +122,6 @@ endif()
 # its symbols to the exported ones, which the ABI policy freezes. Ignored when static.
 target_link_options(data_tamer PRIVATE $<$<PLATFORM_ID:Linux>:LINKER:--exclude-libs,ALL>)
 
-set(INSTALL_TARGETS data_tamer)
-
 if(DATA_TAMER_BUILD_ROS)
     message(STATUS "Compiling for ROS 2")
     find_package(rclcpp REQUIRED)
@@ -133,75 +135,6 @@ if(DATA_TAMER_BUILD_ROS)
         rclcpp_lifecycle::rclcpp_lifecycle
         ${data_tamer_msgs_TARGETS}
     )
-
-    ament_export_targets(data_tamerTargets HAS_LIBRARY_TARGET)
-    ament_export_dependencies(Threads mcap_vendor rclcpp rclcpp_lifecycle data_tamer_msgs)
-
-    # find_package(data_tamer 2) and data_tamer::data_tamer work under ROS 2 too: a
-    # package "data_tamer" next to data_tamer_cpp forwards to data_tamer_cpp::data_tamer.
-    include(CMakePackageConfigHelpers)
-    write_basic_package_version_file(
-        ${CMAKE_CURRENT_BINARY_DIR}/ros/data_tamerConfigVersion.cmake
-        VERSION ${PROJECT_VERSION}
-        COMPATIBILITY SameMajorVersion)
-    install(FILES cmake/data_tamerConfig-ros.cmake
-        DESTINATION share/data_tamer/cmake
-        RENAME data_tamerConfig.cmake)
-    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/ros/data_tamerConfigVersion.cmake
-        DESTINATION share/data_tamer/cmake)
-    ament_package()
-endif()
-
-install(DIRECTORY include/ DESTINATION include)
-if(NOT DATA_TAMER_BUILD_ROS AND NOT DATA_TAMER_USE_SYSTEM_MCAP)
-    install(DIRECTORY 3rdparty/mcap/include/mcap DESTINATION include/data_tamer_mcap)
-    install(FILES 3rdparty/mcap/LICENSE DESTINATION include/data_tamer_mcap/mcap)
-endif()
-
-install(
-    TARGETS ${INSTALL_TARGETS}
-    EXPORT data_tamerTargets
-    LIBRARY DESTINATION lib
-    ARCHIVE DESTINATION lib
-    RUNTIME DESTINATION bin
-    INCLUDES DESTINATION include
-)
-
-if(NOT DATA_TAMER_BUILD_ROS)
-    include(CMakePackageConfigHelpers)
-
-    set(INCLUDE_INSTALL_DIR include)
-    get_target_property(DATA_TAMER_LIBRARY_TYPE data_tamer TYPE)
-    if(DATA_TAMER_LIBRARY_TYPE STREQUAL "STATIC_LIBRARY")
-        set(DATA_TAMER_STATIC ON)
-    else()
-        set(DATA_TAMER_STATIC OFF)
-    endif()
-
-    configure_package_config_file(
-        ${CMAKE_CURRENT_SOURCE_DIR}/cmake/data_tamerConfig.cmake.in
-        ${CMAKE_CURRENT_BINARY_DIR}/data_tamerConfig.cmake
-        INSTALL_DESTINATION lib/cmake/data_tamer
-        PATH_VARS INCLUDE_INSTALL_DIR)
-
-    write_basic_package_version_file(
-        data_tamerConfigVersion.cmake
-        VERSION ${PROJECT_VERSION}
-        COMPATIBILITY SameMajorVersion)
-
-    install(EXPORT data_tamerTargets
-        FILE data_tamerTargets.cmake
-        NAMESPACE data_tamer::
-        DESTINATION lib/cmake/data_tamer)
-
-    install(FILES
-        ${CMAKE_CURRENT_BINARY_DIR}/data_tamerConfig.cmake
-        ${CMAKE_CURRENT_BINARY_DIR}/data_tamerConfigVersion.cmake
-        DESTINATION lib/cmake/data_tamer)
-    if(DATA_TAMER_STATIC AND NOT DATA_TAMER_USE_SYSTEM_MCAP)
-        install(FILES cmake/Findzstd.cmake cmake/Findlz4.cmake
-            DESTINATION lib/cmake/data_tamer)
-    endif()
 endif()
 
 if(DATA_TAMER_BUILD_TESTS)
@@ -219,5 +152,75 @@ if(DATA_TAMER_BUILD_BENCHMARKS)
         add_subdirectory(benchmarks)
     else()
         message(STATUS "Google Benchmark library not found, benchmarks skipped")
+    endif()
+endif()
+
+# Last: ament_package() must follow every other ament call.
+if(DATA_TAMER_INSTALL)
+    include(CMakePackageConfigHelpers)
+    install(DIRECTORY include/ DESTINATION include)
+    if(NOT DATA_TAMER_BUILD_ROS AND NOT DATA_TAMER_USE_SYSTEM_MCAP)
+        install(DIRECTORY 3rdparty/mcap/include/mcap DESTINATION include/data_tamer_mcap)
+        install(FILES 3rdparty/mcap/LICENSE DESTINATION include/data_tamer_mcap/mcap)
+    endif()
+
+    install(
+        TARGETS data_tamer
+        EXPORT data_tamerTargets
+        LIBRARY DESTINATION lib
+        ARCHIVE DESTINATION lib
+        RUNTIME DESTINATION bin
+        INCLUDES DESTINATION include
+    )
+
+    if(DATA_TAMER_BUILD_ROS)
+        ament_export_targets(data_tamerTargets HAS_LIBRARY_TARGET)
+        ament_export_dependencies(Threads mcap_vendor rclcpp rclcpp_lifecycle data_tamer_msgs)
+
+        # find_package(data_tamer 2) and data_tamer::data_tamer work under ROS 2 too: a
+        # package "data_tamer" next to data_tamer_cpp forwards to data_tamer_cpp::data_tamer.
+        write_basic_package_version_file(
+            ${CMAKE_CURRENT_BINARY_DIR}/ros/data_tamerConfigVersion.cmake
+            VERSION ${PROJECT_VERSION}
+            COMPATIBILITY SameMajorVersion)
+        install(FILES cmake/data_tamerConfig-ros.cmake
+            DESTINATION share/data_tamer/cmake
+            RENAME data_tamerConfig.cmake)
+        install(FILES ${CMAKE_CURRENT_BINARY_DIR}/ros/data_tamerConfigVersion.cmake
+            DESTINATION share/data_tamer/cmake)
+        ament_package()
+    else()
+        set(INCLUDE_INSTALL_DIR include)
+        get_target_property(DATA_TAMER_LIBRARY_TYPE data_tamer TYPE)
+        if(DATA_TAMER_LIBRARY_TYPE STREQUAL "STATIC_LIBRARY")
+            set(DATA_TAMER_STATIC ON)
+        else()
+            set(DATA_TAMER_STATIC OFF)
+        endif()
+
+        configure_package_config_file(
+            ${CMAKE_CURRENT_SOURCE_DIR}/cmake/data_tamerConfig.cmake.in
+            ${CMAKE_CURRENT_BINARY_DIR}/data_tamerConfig.cmake
+            INSTALL_DESTINATION lib/cmake/data_tamer
+            PATH_VARS INCLUDE_INSTALL_DIR)
+
+        write_basic_package_version_file(
+            data_tamerConfigVersion.cmake
+            VERSION ${PROJECT_VERSION}
+            COMPATIBILITY SameMajorVersion)
+
+        install(EXPORT data_tamerTargets
+            FILE data_tamerTargets.cmake
+            NAMESPACE data_tamer::
+            DESTINATION lib/cmake/data_tamer)
+
+        install(FILES
+            ${CMAKE_CURRENT_BINARY_DIR}/data_tamerConfig.cmake
+            ${CMAKE_CURRENT_BINARY_DIR}/data_tamerConfigVersion.cmake
+            DESTINATION lib/cmake/data_tamer)
+        if(DATA_TAMER_STATIC AND NOT DATA_TAMER_USE_SYSTEM_MCAP)
+            install(FILES cmake/Findzstd.cmake cmake/Findlz4.cmake
+                DESTINATION lib/cmake/data_tamer)
+        endif()
     endif()
 endif()
