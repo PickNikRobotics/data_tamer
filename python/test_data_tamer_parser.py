@@ -4,6 +4,7 @@ import io
 import json
 import pathlib
 import re
+import struct
 import unittest
 from types import SimpleNamespace
 
@@ -11,10 +12,32 @@ import data_tamer_parser as dt
 
 VECTORS = pathlib.Path(__file__).resolve().parent.parent / "docs" / "wire_format" / "vectors"
 SEPARATOR = "=" * 59  # the line that starts a custom type section
+FOREIGN_HASH = 1234567890123456789  # a version 4 hash of another writer's std::hash
 
 
 def read(name: str) -> bytes:
     return (VECTORS / name).read_bytes()
+
+
+def declared_hash(text: str) -> int:
+    return int(re.search(r"^### hash: (\d+)$", text, re.M).group(1))
+
+
+def read_expected_104() -> dict:
+    """v4/expected.tsv as {(topic, log time): {name: value text}}."""
+    out: dict = {}
+    for line in read("v4/expected.tsv").decode().splitlines():
+        if line and not line.startswith("#"):
+            topic, time, name, value = line.split("\t")
+            out.setdefault((topic, int(time)), {})[name] = value
+    return out
+
+
+def as_text(value) -> str:
+    """A decoded value as v4/expected.tsv writes it: floats by their binary64 bits."""
+    if isinstance(value, float):
+        return "f:" + struct.pack(">d", value).hex()
+    return str(ord(value) if isinstance(value, str) else int(value))
 
 
 class GoldenVectors(unittest.TestCase):
@@ -58,6 +81,38 @@ class GoldenVectors(unittest.TestCase):
             text = v4.replace(f"### hash: {self.schema.hash}", f"### hash: {declared}")
             self.assertEqual(dt.parse_schema(text, verify_hash=True).hash, declared)
             self.assertEqual(dt.SchemaRegistry(verify_hash=True).add(declared, text).hash, declared)
+
+
+class Recording104Schemas(unittest.TestCase):
+    """The schema texts of v4/recorded_1.0.4.mcap, written by data_tamer 1.0.4."""
+
+    def test_declared_hash_is_used_and_accepted_by_verify_hash(self):
+        for topic in ("features", "second", "opaque"):
+            text = read(f"v4/schema_{topic}.txt").decode()
+            declared = declared_hash(text)
+            self.assertNotEqual(declared, dt.schema_hash(text))  # not the version 5 recipe
+            foreign = text.replace(f"### hash: {declared}", f"### hash: {FOREIGN_HASH}")
+            for t, expected in ((text, declared), (foreign, FOREIGN_HASH)):
+                with self.subTest(topic=topic, hash=expected):
+                    schema = dt.parse_schema(t, verify_hash=True)
+                    self.assertEqual((schema.channel_name, schema.hash), (topic, expected))
+                    self.assertEqual(dt.SchemaRegistry(verify_hash=True).add(expected, t), schema)
+
+    def test_custom_types_out_of_order(self):
+        # 1.0.4 wrote its custom types in unordered_map order: Pose holds the two after it
+        schema = dt.parse_schema(read("v4/schema_features.txt").decode())
+        self.assertEqual(list(schema.custom_types), ["Pose", "Quaternion", "Point3D"])
+        self.assertEqual([f.type_name for f in schema.custom_types["Pose"]],
+                         ["Point3D", "Quaternion", "uint32"])
+        self.assertEqual(schema.field_names()[-8:], [
+            "poses[]/position/x", "poses[]/position/y", "poses[]/position/z",
+            "poses[]/orientation/w", "poses[]/orientation/x", "poses[]/orientation/y",
+            "poses[]/orientation/z", "poses[]/stamp"])
+
+    def test_opaque_type(self):
+        schema = dt.parse_schema(read("v4/schema_opaque.txt").decode())
+        self.assertEqual(schema.custom_schemas, {"Pos2D": ("ros1", "int32 x\nint32 y")})
+        self.assertEqual(schema.field_names(), ["ocount", "p2", "p2a[0]", "p2a[1]"])
 
 
 class FieldNames(unittest.TestCase):
@@ -318,6 +373,32 @@ class Mcap(unittest.TestCase):
             path.write_bytes(self.stream.getvalue())
             self.assertEqual(len(list(dt.iter_mcap(path))), 3)
             self.assertEqual([t for t, _, _ in dt.iter_mcap(str(path), topics=["as_yaml"])], [20])
+
+    def test_recording_104(self):
+        from mcap.reader import make_reader
+        path = VECTORS / "v4" / "recorded_1.0.4.mcap"
+        expected = read_expected_104()
+        decoded = {}
+        with open(path, "rb") as stream:
+            for mcap_schema, channel, message in make_reader(stream).iter_messages():
+                schema = dt.parse_schema(mcap_schema.data.decode(), verify_hash=True)
+                self.assertEqual(mcap_schema.name, f"{channel.topic}::{schema.hash}")
+                try:
+                    values = dt.parse_snapshot(schema, *dt.split_mcap_message(message.data))
+                    values = {name: as_text(v) for name, v in values.items()}
+                except ValueError as err:  # an opaque field is enabled
+                    values = {"!undecodable": "Pos2D" if "'Pos2D' has an opaque" in str(err)
+                              else str(err)}
+                decoded[(channel.topic, message.log_time)] = values
+        self.assertEqual(decoded, expected)
+        # iter_mcap() over the channels it can read to the end, and the one it cannot
+        readable = ["features", "second"]
+        self.assertEqual(
+            {(topic, t): {name: as_text(v) for name, v in values.items()}
+             for t, topic, values in dt.iter_mcap(path, topics=readable, verify_hash=True)},
+            {key: values for key, values in expected.items() if key[0] in readable})
+        with self.assertRaisesRegex(ValueError, "'Pos2D' has an opaque encoding"):
+            list(dt.iter_mcap(path, topics=["opaque"], verify_hash=True))
 
     def test_verify_hash_rejects_wrong_hash(self):
         text = read("schema.txt").decode()

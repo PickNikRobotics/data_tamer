@@ -3,7 +3,8 @@
 // or in the snapshot bytes fails here and must be a deliberate format revision.
 //
 // Regenerate the fixtures with DATA_TAMER_UPDATE_GOLDEN=1, then review the diff
-// and update expected.json by hand.
+// and update expected.json by hand. vectors/v4/ was recorded by data_tamer 1.0.4 and is
+// never regenerated.
 #include "data_tamer/channel.hpp"
 #include "data_tamer/data_tamer.hpp"
 #include "data_tamer/sinks/dummy_sink.hpp"
@@ -17,11 +18,19 @@
 #include <gtest/gtest.h>
 
 #include <array>
+#include <cstdint>
+#include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <map>
+#include <sstream>
 #include <string>
+#include <type_traits>
+#include <utility>
+#include <variant>
 #include <vector>
 
 #include <unistd.h>
@@ -66,6 +75,109 @@ void checkGolden(const std::string& name, const std::vector<uint8_t>& actual)
   ASSERT_FALSE(expected.empty()) << "missing fixture " << name;
   EXPECT_EQ(actual, expected) << "wire format changed: " << name
                               << " (see docs/wire_format.md)";
+}
+
+// Decoded messages of a recording: (topic, log time) -> flattened name -> value text.
+using Messages =
+    std::map<std::pair<std::string, uint64_t>, std::map<std::string, std::string>>;
+
+// vectors/v4/expected.tsv: "topic \t log time \t name \t value" lines.
+Messages readExpected104()
+{
+  std::ifstream file(kDir + "/vectors/v4/expected.tsv");
+  Messages out;
+  std::string line;
+  while(std::getline(file, line))
+  {
+    if(line.empty() || line[0] == '#')
+    {
+      continue;
+    }
+    std::istringstream fields(line);
+    std::string topic, time, name, value;
+    std::getline(fields, topic, '\t');
+    std::getline(fields, time, '\t');
+    std::getline(fields, name, '\t');
+    std::getline(fields, value);
+    out[{ topic, std::stoull(time) }][name] = value;
+  }
+  return out;
+}
+
+// A decoded value as expected.tsv writes it: floats by their binary64 bits.
+std::string asText(const DataTamerParser::VarNumber& number)
+{
+  return std::visit(
+      [](auto value) -> std::string {
+        using T = decltype(value);
+        if constexpr(std::is_floating_point_v<T>)
+        {
+          const double wide = value;
+          uint64_t bits = 0;
+          std::memcpy(&bits, &wide, sizeof(bits));
+          char text[24];
+          std::snprintf(text, sizeof(text), "f:%016llx",
+                        static_cast<unsigned long long>(bits));
+          return text;
+        }
+        else if constexpr(std::is_same_v<T, char>)
+        {
+          return std::to_string(static_cast<unsigned char>(value));
+        }
+        else
+        {
+          return std::to_string(value);
+        }
+      },
+      number);
+}
+
+// Decodes vectors/v4/recorded_1.0.4.mcap, each channel with the schema that
+// `parse(topic, schema record text)` returns.
+template <class Parse>
+Messages decodeRecording104(const Parse& parse)
+{
+  using namespace DataTamerParser;
+  mcap::McapReader reader;
+  EXPECT_TRUE(reader.open(kDir + "/vectors/v4/recorded_1.0.4.mcap").ok());
+  std::map<std::string, DataTamerParser::Schema> schemas;  // by topic
+  Messages out;
+  for(const auto& view : reader.readMessages())
+  {
+    const std::string& topic = view.channel->topic;
+    if(schemas.count(topic) == 0)
+    {
+      const auto* text = reinterpret_cast<const char*>(view.schema->data.data());
+      schemas[topic] = parse(topic, std::string(text, view.schema->data.size()));
+    }
+    const auto& schema = schemas[topic];
+    auto snapshot = SplitMcapMessage(
+        { reinterpret_cast<const uint8_t*>(view.message.data), view.message.dataSize });
+    snapshot.schema_hash = schema.hash;
+    auto& values = out[{ topic, view.message.logTime }];
+    try
+    {
+      EXPECT_TRUE(ParseSnapshot(
+          schema, snapshot, [&values](const std::string& name, const VarNumber& value) {
+            values[name] = asText(value);
+          }));
+    }
+    catch(const std::runtime_error& error)
+    {
+      const std::string what = error.what();
+      const bool opaque = what.find("Pos2D has an opaque encoding") != std::string::npos;
+      values = { { "!undecodable", opaque ? "Pos2D" : what } };
+    }
+  }
+  reader.close();
+  return out;
+}
+
+std::string replaceHash(std::string text, uint64_t hash)
+{
+  const auto begin = text.find("### hash: ") + 10;
+  text.replace(begin, text.find('\n', begin) - begin, std::to_string(hash));
+  return text;
 }
 
 }  // namespace
@@ -215,4 +327,47 @@ TEST(WireFormat, YamlSchemaMatchesGoldenVectors)
   EXPECT_EQ(from_yaml.custom_types, from_text.custom_types);
   EXPECT_EQ(DataTamerParser::ToText(from_yaml), text);
   EXPECT_LT(yaml.size(), text.size());
+}
+
+// A recording by data_tamer 1.0.4 (schema version 4): custom types in the writer's
+// unordered_map order (Pose before the Point3D and Quaternion it holds), disabled fields,
+// NaN, infinities, -0, denormals, empty vectors and an opaque type.
+TEST(WireFormat, ReadsRecording104)
+{
+  using DataTamerParser::BuildSchemaFromText;
+  const Messages expected = readExpected104();
+  ASSERT_EQ(expected.size(), 15u);
+
+  // The schema records are the checked-in texts, and the declared hash is the schema's.
+  const Messages decoded =
+      decodeRecording104([](const std::string& topic, const std::string& text) {
+        const auto file = readFile("v4/schema_" + topic + ".txt");
+        EXPECT_EQ(text, std::string(file.begin(), file.end()));
+        const auto schema = BuildSchemaFromText(text);
+        EXPECT_EQ(replaceHash(text, schema.hash), text);
+        EXPECT_NE(schema.hash, DataTamerParser::SchemaTextHash(text));
+        return schema;
+      });
+  EXPECT_EQ(decoded, expected);
+
+  // A writer with another std::hash declared another hash: decoding uses it all the
+  // same, and check_hash, which recomputes this platform's, throws.
+  const Messages foreign =
+      decodeRecording104([](const std::string&, const std::string& text) {
+        const std::string other = replaceHash(text, 1234567890123456789u);
+        EXPECT_THROW((void)BuildSchemaFromText(other, true), std::runtime_error);
+        return BuildSchemaFromText(other);
+      });
+  EXPECT_EQ(foreign, expected);
+
+#if defined(__GLIBCXX__) && SIZE_MAX == UINT64_MAX
+  // The recording was written with libstdc++ and a 64-bit size_t, whose std::hash
+  // (Murmur-based for strings, the identity for integers) check_hash reproduces. Other
+  // standard libraries (libc++, MSVC) hash strings differently.
+  const Messages checked =
+      decodeRecording104([](const std::string&, const std::string& text) {
+        return BuildSchemaFromText(text, true);
+      });
+  EXPECT_EQ(checked, expected);
+#endif
 }

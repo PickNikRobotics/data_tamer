@@ -50,7 +50,7 @@ under "Unreleased" in `data_tamer_cpp/CHANGELOG.rst`.
   packaged as `data-tamer-parser`; its tests; `ros2_subscriber.py`.
 - `docs/`: `USER_MANUAL.md` (for people), `llm_user_manual.md` (for coding agents),
   `MIGRATION.md` (1.x to 2.0), `wire_format.md` and its golden vectors in
-  `wire_format/vectors/`.
+  `wire_format/vectors/` (`v4/`: a 1.0.4 recording).
 - `tools/`: `check_versions.py` (every version number agrees), `abi_check.sh` (the
   libabigail comparison) and `abi_probe.cpp` (the consumer side of that comparison).
 - `.github/workflows/`: plain CMake through conan, one ROS 2 job per distribution
@@ -99,7 +99,8 @@ python3 -m unittest discover -s python -p 'test_*.py'
 ```
 
 Regenerate the golden vectors after a deliberate format change, then review the diff
-and update `docs/wire_format/vectors/expected.json` by hand:
+and update `docs/wire_format/vectors/expected.json` by hand (`vectors/v4/` is a file
+recorded by data_tamer 1.0.4: it is never regenerated):
 
 ```bash
 DATA_TAMER_UPDATE_GOLDEN=1 \

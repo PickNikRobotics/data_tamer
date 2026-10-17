@@ -1,0 +1,12 @@
+### version: 4
+### hash: 15840415709366656737
+### channel_name: second
+
+float64 x
+uint16 counter
+Point3D[] pts
+===========================================================
+MSG: Point3D
+float64 x
+float64 y
+float64 z

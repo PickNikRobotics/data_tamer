@@ -8,7 +8,13 @@ sources. Two artifacts keep it honest:
   snapshots (all fields enabled, two fields disabled), their MCAP message bodies
   and the decoded values (`expected.json`), plus the YAML rendering of that
   schema (`schema.yaml`) and a schema with path-like names in both renderings
-  (`schema_nested.txt`, `schema_nested.yaml`).
+  (`schema_nested.txt`, `schema_nested.yaml`). `v4/` holds a file recorded by
+  data_tamer 1.0.4 (schema version 4, section 5): `recorded_1.0.4.mcap`, its
+  three schema texts and the values the recorder set (`expected.tsv`, whose
+  header describes it). It covers the cases a reader of 1.x files meets: custom
+  types declared after the type that holds them, disabled fields, NaN,
+  infinities, -0, denormals, empty vectors and an opaque type. It is never
+  regenerated.
 - `data_tamer_cpp/tests/wire_format_tests.cpp` regenerates those bytes from the
   library and fails if they differ. `python/data_tamer_parser.py` is a
   standard-library-only reference decoder and `python/test_data_tamer_parser.py`
@@ -472,4 +478,6 @@ has an opaque type),
 decode both snapshots from mask and payload (disabled fields absent, not zero;
 floats compared bit-exactly), split both `.mcap_message` bodies into the same
 mask and payload bytes, and reject a payload with trailing bytes or a schema
-with another version.
+with another version. A decoder that reads version 4 also decodes
+`v4/recorded_1.0.4.mcap` to `v4/expected.tsv`, matching each schema by its
+declared hash and rejecting the messages marked `!undecodable`.
