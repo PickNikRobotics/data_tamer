@@ -1,4 +1,5 @@
 #include "data_tamer/details/locked_reference.hpp"
+#include "shared_state.hpp"
 
 #include <gtest/gtest.h>
 
@@ -65,7 +66,7 @@ TEST(LockedReference, OutOfOrderDestructionKeepsTheMutexUntilTheLastGuard)
   ChannelSharedState state;
   int value = 1;
   {
-    auto outer = std::make_unique<ChannelSharedState::Transaction>(state);
+    auto outer = std::make_unique<WriteTransaction>(state);
     MutablePtr<int> guard(&value, state);                       // younger, non-owning
     outer.reset();                                              // older owner dies first
     ASSERT_FALSE(canLockFromAnotherThread(state.write_mutex));  // guard inherited it
@@ -76,13 +77,13 @@ TEST(LockedReference, OutOfOrderDestructionKeepsTheMutexUntilTheLastGuard)
 
   // Two states, guards destroyed in creation order (not LIFO).
   ChannelSharedState other;
-  auto first = std::make_unique<ChannelSharedState::Transaction>(state);
-  auto second = std::make_unique<ChannelSharedState::Transaction>(other);
+  auto first = std::make_unique<WriteTransaction>(state);
+  auto second = std::make_unique<WriteTransaction>(other);
   first.reset();
   ASSERT_TRUE(canLockFromAnotherThread(state.write_mutex));
   ASSERT_FALSE(canLockFromAnotherThread(other.write_mutex));
   {
-    ChannelSharedState::Transaction nested(other);  // chain still intact
+    WriteTransaction nested(other);  // chain still intact
   }
   second.reset();
   ASSERT_TRUE(canLockFromAnotherThread(other.write_mutex));
@@ -95,7 +96,7 @@ TEST(LockedReference, GuardsNestInsideAnOuterTransaction)
   ChannelSharedState state;
   int value = 1;
   {
-    ChannelSharedState::Transaction outer(state);
+    WriteTransaction outer(state);
     {
       MutablePtr<int> p(&value, state);
       *p = 2;

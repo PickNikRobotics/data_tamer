@@ -3,9 +3,9 @@
 #include "data_tamer/fwd.hpp"
 #include "data_tamer/types.hpp"
 #include "data_tamer/details/locked_reference.hpp"
-#include "data_tamer/details/shared_state.hpp"
 
 #include <atomic>
+#include <cstdint>
 #include <memory>
 #include <type_traits>
 
@@ -27,6 +27,13 @@ template <typename T>
 struct is_atomic_scalar<T, true> : std::bool_constant<std::atomic<T>::is_always_lock_free>
 {
 };
+
+/// The enabled flag of the series in slot `index`, for LoggedValue::setEnabled() and
+/// isEnabled(). Defined in the library, which owns the flag encoding. Lock-free; no
+/// staleness check, a LoggedValue's own registration is always current.
+void setSeriesEnabled(ChannelSharedState& state, uint32_t index, bool enable) noexcept;
+[[nodiscard]] bool isSeriesEnabled(const ChannelSharedState& state,
+                                   uint32_t index) noexcept;
 }  // namespace details
 
 /// True for the scalars (numbers, bool, char, enums) of at most 8 bytes that have a
@@ -106,13 +113,13 @@ private:
 template <typename T>
 inline void LoggedValue<T>::setEnabled(bool enabled) noexcept
 {
-  state_->setEnabled(id_.index_, enabled);  // own registration: never stale
+  details::setSeriesEnabled(*state_, id_.index_, enabled);
 }
 
 template <typename T>
 inline bool LoggedValue<T>::isEnabled() const noexcept
 {
-  return state_->isEnabled(id_.index_);
+  return details::isSeriesEnabled(*state_, id_.index_);
 }
 
 template <typename T>
@@ -124,7 +131,7 @@ inline void LoggedValue<T>::set(const T& val)
   }
   else
   {
-    ChannelSharedState::Transaction transaction(*state_);
+    WriteTransaction transaction(*state_);
     value_ = val;
   }
 }
@@ -138,7 +145,7 @@ inline T LoggedValue<T>::get() const
   }
   else
   {
-    ChannelSharedState::Transaction transaction(*state_);
+    WriteTransaction transaction(*state_);
     return value_;
   }
 }

@@ -132,6 +132,8 @@ data_tamer_add_gtest(datatamer_test
     LIBRARIES data_tamer ${DATA_TAMER_MCAP_TARGET})
 # Tests are built as C++20 like the library.
 target_compile_features(datatamer_test PRIVATE cxx_std_20)
+# Some tests exercise the library-private headers in src/ (shared state, write mutex).
+target_include_directories(datatamer_test PRIVATE ${PROJECT_SOURCE_DIR}/src)
 
 # SerializeMe's byte-swapping path, built as for a big endian host. It is its own
 # executable: SerializeMe's inline functions differ from the ones in datatamer_test.
@@ -284,6 +286,7 @@ endforeach()
 
 data_tamer_compile_fail_test(atomic_word_table_const_is_read_only
     atomic_word_table_const.cpp DT_WRITE_THROUGH_CONST
+    OPTIONS -I${PROJECT_SOURCE_DIR}/src
     REGEX "discards qualifiers|no matching member function|cannot convert 'this' pointer")
 data_tamer_compile_fail_test(fixed_size_of_an_undescribed_type_is_rejected
     get_fixed_size.cpp DT_UNDESCRIBED_TYPE

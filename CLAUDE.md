@@ -32,11 +32,15 @@ under "Unreleased" in `data_tamer_cpp/CHANGELOG.rst`.
     `data_tamer.hpp` (ChannelsRegistry), `data_sink.hpp` (DataSink, SinkWorker, Snapshot,
     SnapshotRef), `logged_value.hpp`, `names.hpp`, `types.hpp` (Schema, BasicType),
     `custom_types.hpp`, `values.hpp`, `fwd.hpp`, `contrib/SerializeMe.hpp`
-    (TypeDefinitionTrait, serialization), `details/` (pool, write mutex, spin pause, shared state:
-    public because templates use them), `sinks/`.
+    (TypeDefinitionTrait, serialization), `details/` (pool, `WriteTransaction` and the
+    guards in `locked_reference.hpp`, `abi.hpp`: public because inline code uses them),
+    `sinks/`.
   - `include/data_tamer_parser/data_tamer_parser.hpp`: standalone C++ decoder, no
     dependency on the library.
   - `src/`: implementation; `src/sinks/` for MCAPSink, MCAPRingSink, ROS2PublisherSink.
+    Library-private headers: `shared_state.hpp` (ChannelSharedState, AtomicWordTable),
+    `write_mutex.hpp`, `spin_pause.hpp`, `waiter_count.hpp`. Not installed; tests and
+    benchmarks have `src/` on their include path.
   - `tests/`: the gtest binary `datatamer_test`; `serialize_me_big_endian_test`,
     SerializeMe built as for a big endian host; compile-only targets; compile-fail
     probes in `tests/compile_fail/`; in Linux shared builds, `dlopen_tls_test`, which
@@ -133,7 +137,7 @@ DATA_TAMER_UPDATE_GOLDEN=1 \
   `tryLockWithSpin()` are `noexcept`. The thread-local transaction chain, which a
   snapshot reads after a failed `try_lock()` (`inTransactionOnThisThread()`), is
   initial-exec TLS in `src/channel.cpp`, so no access allocates, also when the library
-  is loaded with `dlopen()` (`tests/dlopen_tls_tests.cpp`). The `Transaction`
+  is loaded with `dlopen()` (`tests/dlopen_tls_tests.cpp`). The `WriteTransaction`
   constructor and destructor and `inTransactionOnThisThread()` are defined there too:
   keep them out of line (inline code would put the variable in every consumer as
   dynamic TLS), and keep it the library's only thread-local: a `dlopen()`ed library
@@ -147,10 +151,16 @@ DATA_TAMER_UPDATE_GOLDEN=1 \
   `stop()` runs `onStop()` once per stop, after the last delivery, and `start()` after a
   stop runs `onStart()`: a sink that needs to finish (close, flush, dump) or reopen does
   it there.
-- `ChannelSharedState` has default visibility (`DATA_TAMER_SHARED_STATE_VISIBILITY`).
-  The thread-local transaction chain is one per process, also with consumers built with
-  `-fvisibility=hidden`, because the `Transaction` functions and the variable are
-  defined once, in the library; `tests/visibility_tests.cpp` checks it in shared builds.
+- `ChannelSharedState` (the write mutex and the series flags shared by a channel and its
+  LoggedValues) is library-private, defined in `src/shared_state.hpp`. Consumers see it
+  only as an incomplete type: `LoggedValue` holds a `shared_ptr` to it and reaches it
+  through exported functions defined in `src/channel.cpp`, the `WriteTransaction`
+  constructor and destructor and `details::setSeriesEnabled()`/`isSeriesEnabled()`
+  (`logged_value.hpp`). Keep it so: no public header includes `src/`, and its layout,
+  the flag word, `AtomicWordTable` and `WriteMutex` stay free to change in a 2.x minor
+  release. Because consumers compile no code of the transaction chain, the chain is one
+  per process, also with consumers built with `-fvisibility=hidden`;
+  `tests/visibility_tests.cpp` checks it in shared builds.
 - A registration changes the channel in one step, in `registerValueWithTypes()`:
   everything that can throw runs first and `addSeries()` is the last change; the
   templates only collect custom types (`discoverTypes()`, which also checks that a
@@ -225,29 +235,30 @@ that major. That is frozen inside 2.x:
   `registerValueWithTypes`, `typeRegistry`, `controlMutex`, `checkValueName`,
   `schemaFrozen`, `hasCustomType`, `addCustomType`, `sharedState`, `sinkDropped` (the
   inline `LogChannel::stats()` calls it), `TypesRegistry::findOrCreate` and `replace`,
-  and the `ChannelSharedState::Transaction` constructor and destructor and
-  `ChannelSharedState::inTransactionOnThisThread`, which `scopedWrite()`, the guards
-  and non-scalar `LoggedValue`s call) and the lock contract between them.
+  the `WriteTransaction` constructor and destructor, which `scopedWrite()`, the guards
+  and non-scalar `LoggedValue`s call, and `details::setSeriesEnabled` and
+  `isSeriesEnabled`, which `LoggedValue::setEnabled()` and `isEnabled()` call) and the
+  lock contract between them.
   Nothing in the tree calls `addCustomType` any more: it stays for binaries built
   against older headers, whose `registerValue` templates call it;
 - the size, alignment and member offsets of every type in `tests/abi_tests.cpp`:
   by-value structs (`ChannelDefaults`, `MCAPRingOptions`, `ROS2PublisherOptions`,
   `Snapshot`, `Schema`, ...), the classes whose inline code runs in consumers
-  (`LoggedValue<T>`, `ChannelSharedState`, `WriteMutex`, `ValuePtr`, `Transaction`) and
+  (`LoggedValue<T>`, `ValuePtr`, `WriteTransaction`, `ConstPtr`, `MutablePtr`) and
   the Pimpl classes (their pointer members). Pinning `Snapshot`, `MCAPRingDump` and
   `Schema` completely is deliberate, although a field appended to them would be safe
-  for readers. The exact byte values are for x86_64 only (aarch64 sizes a mutex at 48
-  bytes, not 40); what contains a mutex is pinned by relation on every libstdc++
-  platform. A new pin with a number needs the number measured on x86_64, and a
-  relation if it can differ elsewhere. The `Stats` structs are not on this list: they
+  for readers. The exact byte values are for x86_64 only (other platforms lay out the
+  standard library types differently). A new pin with a number needs the number
+  measured on x86_64, and a relation if it can differ elsewhere (a mutex: 40 bytes on
+  x86_64, 48 on aarch64). The `Stats` structs are not on this list: they
   are built inline from exported getters (see Invariants), so their getters are frozen
   instead;
 - the vtables of `DataSink` and `CustomSerializer` (see Invariants). abidiff cannot see
   `CustomSerializer`'s in the library, which is why the check also builds a probe;
-- the inline protocols: the flag word encoding of `ChannelSharedState`, the
-  `registerValue` templates, the payload encoding and schema text (any wire revision,
-  see Invariants). The `Transaction` chain is not one of them: its code is in the
-  library, and only the size of `Transaction` reaches consumers.
+- the inline protocols: the `registerValue` templates, the payload encoding and schema
+  text (any wire revision, see Invariants). The transaction chain and the series flag
+  word are not among them: their code is in the library, and only the size of
+  `WriteTransaction` reaches consumers.
 
 Adding a function, an overload, a class or an appended enumerator is compatible. Header
 defaults (member initializers, default arguments) take effect only in rebuilt

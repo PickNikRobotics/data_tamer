@@ -2,9 +2,10 @@
 #include "data_tamer/data_sink.hpp"
 #include "data_tamer/contrib/SerializeMe.hpp"
 #include "data_tamer/data_tamer.hpp"
-#include "data_tamer/details/shared_state.hpp"
 #include "data_tamer/details/snapshot_pool.hpp"
+#include "shared_state.hpp"
 #include "waiter_count.hpp"
+#include "write_mutex.hpp"
 
 #include <algorithm>
 #include <array>
@@ -741,17 +742,16 @@ Schema LogChannel::getSchema() const
 namespace
 {
 /// The newest transaction of the calling thread.
-ChannelSharedState::Transaction*& ActiveTransaction() noexcept
+WriteTransaction*& ActiveTransaction() noexcept
 {
-  static thread_local ChannelSharedState::Transaction* transaction
-      DATA_TAMER_TLS_INITIAL_EXEC = nullptr;
+  static thread_local WriteTransaction* transaction DATA_TAMER_TLS_INITIAL_EXEC = nullptr;
   return transaction;
 }
 }  // namespace
 
-ChannelSharedState::Transaction::Transaction(ChannelSharedState& state) : state_(&state)
+WriteTransaction::WriteTransaction(ChannelSharedState& state) : state_(&state)
 {
-  Transaction*& head = ActiveTransaction();
+  WriteTransaction*& head = ActiveTransaction();
   previous_ = head;
   owns_ = !state.inTransactionOnThisThread();
   if(owns_)
@@ -761,9 +761,9 @@ ChannelSharedState::Transaction::Transaction(ChannelSharedState& state) : state_
   head = this;
 }
 
-ChannelSharedState::Transaction::~Transaction()
+WriteTransaction::~WriteTransaction()
 {
-  Transaction*& head = ActiveTransaction();
+  WriteTransaction*& head = ActiveTransaction();
   if(head == this)
   {
     head = previous_;
@@ -772,7 +772,7 @@ ChannelSharedState::Transaction::~Transaction()
   {
     // Out of order: unlink this node. If we own the mutex, the oldest younger
     // transaction on the same state (`heir`; it cannot own, we do) inherits it.
-    Transaction* heir = nullptr;
+    WriteTransaction* heir = nullptr;
     for(auto* node = head; node; node = node->previous_)
     {
       if(node->state_ == state_)
@@ -809,6 +809,19 @@ bool ChannelSharedState::inTransactionOnThisThread() const noexcept
   }
   return false;
 }
+
+namespace details
+{
+void setSeriesEnabled(ChannelSharedState& state, uint32_t index, bool enable) noexcept
+{
+  state.setEnabled(index, enable);
+}
+
+bool isSeriesEnabled(const ChannelSharedState& state, uint32_t index) noexcept
+{
+  return state.isEnabled(index);
+}
+}  // namespace details
 
 WriteTransaction LogChannel::scopedWrite()
 {

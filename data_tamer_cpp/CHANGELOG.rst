@@ -4,6 +4,16 @@ Changelog for package data_tamer
 
 Unreleased
 ----------
+* **ABI**: ``ChannelSharedState``, its ``WriteMutex`` and the series flag words are
+  library-private (``src/``): the headers ``details/shared_state.hpp``,
+  ``details/write_mutex.hpp`` and ``details/spin_pause.hpp`` are no longer installed, and
+  consumers see ``ChannelSharedState`` only as an incomplete type. ``LoggedValue``
+  reaches its enabled flag through the exported ``details::setSeriesEnabled()`` and
+  ``isSeriesEnabled()``, so the flag encoding and these layouts can change in a 2.x
+  minor release. ``WriteTransaction`` is a class at namespace scope (it was the alias
+  ``ChannelSharedState::Transaction``), declared in ``details/locked_reference.hpp``
+  and still returned by ``scopedWrite()``. Rebuild consumers built against earlier
+  headers.
 * **Behaviour change, parser and Python decoder**: a schema text in the line format
   needs its ``### version:`` line before the fields; without one both throw, naming the
   supported versions (4 and 5, 6 in YAML). The C++ parser read such a text as an
@@ -23,11 +33,11 @@ Unreleased
   ros2_control), so a ``scopedWrite()`` on each real-time thread during setup is no
   longer needed. The library's one thread-local is initial-exec TLS (glibc):
   ``dlopen()`` takes one pointer of glibc's static TLS surplus.
-* **ABI**: the ``Transaction`` constructor and destructor (behind ``scopedWrite()``, the
-  guards and non-scalar ``LoggedValue``s) and
+* **ABI**: the ``WriteTransaction`` constructor and destructor (behind
+  ``scopedWrite()``, the guards and non-scalar ``LoggedValue``s) and
   ``ChannelSharedState::inTransactionOnThisThread()`` are defined in the library, with
   the thread-local chain. The chain is no longer an inline protocol, so later 2.x
-  releases can change it; only the size of ``Transaction`` is pinned. Rebuild consumers
+  releases can change it; only the size of ``WriteTransaction`` is pinned. Rebuild consumers
   built against earlier headers.
 * **API**: ``data_tamer/data_tamer.hpp`` includes ``channel.hpp`` again, as in 1.x, so
   one include gives ``ChannelsRegistry``, ``LogChannel``, ``LoggedValue`` and the sink
@@ -49,8 +59,8 @@ Unreleased
 * **New**: several threads may take snapshots of one channel; they take turns on the
   write mutex. ``blocked`` now takes precedence over ``pool_exhausted``.
 * **Fixed**: a consumer built with ``-fvisibility=hidden`` against a shared
-  libdata_tamer hung in ``LoggedValue::set()`` inside ``scopedWrite()``;
-  ``ChannelSharedState`` has default visibility.
+  libdata_tamer hung in ``LoggedValue::set()`` inside ``scopedWrite()``; the
+  transaction code is defined in the library only.
 * **Behaviour change**: ``SinkWorker::stop()``, ``start()`` and ``drain()`` throw
   ``std::logic_error`` from a callback of their own sink (they deadlocked, or ``stop()``
   closed the worker silently). Concurrent ``stop()`` and ``start()``, two ``stopAll()``

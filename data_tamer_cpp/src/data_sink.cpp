@@ -1,6 +1,6 @@
 #include "data_tamer/data_sink.hpp"
 #include "data_tamer/details/snapshot_pool.hpp"
-#include "data_tamer/details/spin_pause.hpp"
+#include "spin_pause.hpp"
 #include "waiter_count.hpp"
 
 #include <atomic>
