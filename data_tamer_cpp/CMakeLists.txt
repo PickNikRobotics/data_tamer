@@ -9,6 +9,8 @@ option(DATA_TAMER_BUILD_TESTS "Build tests" ${PROJECT_IS_TOP_LEVEL})
 option(DATA_TAMER_BUILD_EXAMPLES "Build examples" ${PROJECT_IS_TOP_LEVEL})
 option(DATA_TAMER_BUILD_BENCHMARKS "Build benchmarks" ${PROJECT_IS_TOP_LEVEL})
 option(DATA_TAMER_BUILD_ROS "Build for ROS 2" ON)
+option(DATA_TAMER_USE_SYSTEM_MCAP
+    "Use an installed MCAP package (find_package(mcap)) instead of the bundled headers" OFF)
 option(BUILD_SHARED_LIBS "Build using shared libraries" OFF)
 
 if(DATA_TAMER_BUILD_ROS)
@@ -21,22 +23,28 @@ endif()
 
 find_package(Threads REQUIRED)
 
-# MCAP comes from mcap_vendor under ROS 2, from an installed package (conan,
-# vcpkg, ...) when one is found, otherwise from the vendored copy.
-# DATA_TAMER_MCAP_TARGET is what tests and examples link to read files directly.
+# MCAP: under ROS 2 from mcap_vendor, whose libmcap contains the implementation.
+# Otherwise the headers come from 3rdparty/mcap (default) or from an installed package
+# (DATA_TAMER_USE_SYSTEM_MCAP, e.g. conan), and libdata_tamer compiles the
+# implementation (src/sinks/mcap_sink.cpp), with zstd and lz4.
+# DATA_TAMER_MCAP_TARGET gives tests and examples the MCAP headers.
 if(DATA_TAMER_BUILD_ROS)
     find_package(mcap_vendor REQUIRED)
     set(DATA_TAMER_MCAP_TARGET mcap_vendor::mcap)
+elseif(DATA_TAMER_USE_SYSTEM_MCAP)
+    find_package(mcap REQUIRED)
+    message(STATUS "MCAP from an installed package: ${mcap_DIR}")
+    set(DATA_TAMER_MCAP_TARGET mcap::mcap)
 else()
-    find_package(mcap QUIET)
-    if(mcap_FOUND)
-        message(STATUS "MCAP provided by an installed package")
-        set(DATA_TAMER_MCAP_TARGET mcap::mcap)
-    else()
-        message(STATUS "MCAP from 3rdparty")
-        add_subdirectory(3rdparty/mcap)
-        set(DATA_TAMER_MCAP_TARGET mcap_lib)
-    endif()
+    list(PREPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+    find_package(zstd REQUIRED)
+    find_package(lz4 REQUIRED)
+    set(DATA_TAMER_MCAP_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/mcap/include")
+    # Imported, so local to this directory and its subdirectories.
+    add_library(data_tamer_bundled_mcap INTERFACE IMPORTED)
+    set_target_properties(data_tamer_bundled_mcap PROPERTIES
+        INTERFACE_INCLUDE_DIRECTORIES "${DATA_TAMER_MCAP_INCLUDE_DIR}")
+    set(DATA_TAMER_MCAP_TARGET data_tamer_bundled_mcap)
 endif()
 
 if(DATA_TAMER_BUILD_ROS AND NOT BUILD_SHARED_LIBS)
@@ -78,22 +86,27 @@ target_include_directories(data_tamer
 )
 target_compile_definitions(data_tamer PUBLIC DATA_TAMER_VERSION="${PROJECT_VERSION}")
 target_link_libraries(data_tamer PUBLIC Threads::Threads)
-if(TARGET mcap_lib)
-    # Bundled MCAP. sinks/mcap_encoding.hpp includes its headers, so they are
-    # PUBLIC (mcap_headers: include path only, no link dependencies), while
-    # mcap_lib and zstd/lz4 stay PRIVATE: shared installs export no
-    # machine-specific library paths. libdata_tamer compiles the MCAP
-    # implementation itself (mcap_sink.cpp), so consumers get the headers of
-    # the exact MCAP version it was built with.
-    target_link_libraries(data_tamer
-        PUBLIC mcap_headers
-        PRIVATE ${DATA_TAMER_MCAP_TARGET})
-elseif(DATA_TAMER_BUILD_ROS)
+if(DATA_TAMER_BUILD_ROS)
     target_link_libraries(data_tamer PRIVATE ${DATA_TAMER_MCAP_TARGET})
-else()
-    # Installed MCAP package: found again by data_tamerConfig.cmake.
+elseif(DATA_TAMER_USE_SYSTEM_MCAP)
+    # PUBLIC: sinks/mcap_encoding.hpp includes the MCAP headers.
     target_link_libraries(data_tamer PUBLIC ${DATA_TAMER_MCAP_TARGET})
+else()
+    # sinks/mcap_encoding.hpp includes the MCAP headers: they are installed in a
+    # directory of their own, so that they cannot shadow another MCAP in the same
+    # prefix. SYSTEM: the library's warning flags do not apply to vendored code (the
+    # include directories of an installed, imported target are SYSTEM anyway).
+    # zstd and lz4 are PRIVATE: a shared install exports no dependency, a static one
+    # finds them again in data_tamerConfig.cmake.
+    target_include_directories(data_tamer SYSTEM PUBLIC
+        $<BUILD_INTERFACE:${DATA_TAMER_MCAP_INCLUDE_DIR}>)
+    target_include_directories(data_tamer PUBLIC
+        $<INSTALL_INTERFACE:include/data_tamer_mcap>)
+    target_link_libraries(data_tamer PRIVATE data_tamer::zstd data_tamer::lz4)
 endif()
+# A static library linked into libdata_tamer.so (zstd from conan, for one) must not add
+# its symbols to the exported ones, which the ABI policy freezes. Ignored when static.
+target_link_options(data_tamer PRIVATE $<$<PLATFORM_ID:Linux>:LINKER:--exclude-libs,ALL>)
 
 set(INSTALL_TARGETS data_tamer)
 
@@ -114,15 +127,13 @@ if(DATA_TAMER_BUILD_ROS)
     ament_export_targets(data_tamerTargets HAS_LIBRARY_TARGET)
     ament_export_dependencies(Threads mcap_vendor rclcpp rclcpp_lifecycle data_tamer_msgs)
     ament_package()
-elseif(TARGET mcap_lib)
-    list(APPEND INSTALL_TARGETS mcap_headers)
-    if(NOT BUILD_SHARED_LIBS)
-        # A static libdata_tamer needs mcap_lib (and zstd/lz4) at link time.
-        list(APPEND INSTALL_TARGETS mcap_lib)
-    endif()
 endif()
 
 install(DIRECTORY include/ DESTINATION include)
+if(NOT DATA_TAMER_BUILD_ROS AND NOT DATA_TAMER_USE_SYSTEM_MCAP)
+    install(DIRECTORY 3rdparty/mcap/include/mcap DESTINATION include/data_tamer_mcap)
+    install(FILES 3rdparty/mcap/LICENSE DESTINATION include/data_tamer_mcap/mcap)
+endif()
 
 install(
     TARGETS ${INSTALL_TARGETS}
@@ -137,13 +148,15 @@ if(NOT DATA_TAMER_BUILD_ROS)
     include(CMakePackageConfigHelpers)
 
     set(INCLUDE_INSTALL_DIR include)
-    # Consumers of a non-vendored MCAP must find it themselves (static link).
-    if(mcap_FOUND)
-        set(DATA_TAMER_FIND_MCAP "find_dependency(mcap)")
+    get_target_property(DATA_TAMER_LIBRARY_TYPE data_tamer TYPE)
+    if(DATA_TAMER_LIBRARY_TYPE STREQUAL "STATIC_LIBRARY")
+        set(DATA_TAMER_STATIC ON)
+    else()
+        set(DATA_TAMER_STATIC OFF)
     endif()
 
     configure_package_config_file(
-        ${CMAKE_CURRENT_SOURCE_DIR}/data_tamerConfig.cmake.in
+        ${CMAKE_CURRENT_SOURCE_DIR}/cmake/data_tamerConfig.cmake.in
         ${CMAKE_CURRENT_BINARY_DIR}/data_tamerConfig.cmake
         INSTALL_DESTINATION lib/cmake/data_tamer
         PATH_VARS INCLUDE_INSTALL_DIR)
@@ -162,6 +175,10 @@ if(NOT DATA_TAMER_BUILD_ROS)
         ${CMAKE_CURRENT_BINARY_DIR}/data_tamerConfig.cmake
         ${CMAKE_CURRENT_BINARY_DIR}/data_tamerConfigVersion.cmake
         DESTINATION lib/cmake/data_tamer)
+    if(DATA_TAMER_STATIC AND NOT DATA_TAMER_USE_SYSTEM_MCAP)
+        install(FILES cmake/Findzstd.cmake cmake/Findlz4.cmake
+            DESTINATION lib/cmake/data_tamer)
+    endif()
 endif()
 
 if(DATA_TAMER_BUILD_TESTS)
