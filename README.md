@@ -153,6 +153,7 @@ More examples, including publishing on ROS 2 and the flight recorder, are in
   troubleshooting and FAQ.
 - [Reference for coding agents](docs/llm_user_manual.md): every rule and corner case.
 - [Wire format](docs/wire_format.md): the serialization format.
+- [Migrating from 1.x](docs/MIGRATION.md): what to change when you upgrade to 2.0.
 - [CHANGELOG](data_tamer_cpp/CHANGELOG.rst): what changed in each version.
 
 # Compilation
