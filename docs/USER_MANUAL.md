@@ -175,10 +175,8 @@ Where `takeSnapshot()` would wait for a writer or grow a slot, `tryTakeSnapshot(
 and returns `blocked` or `oversize`. It reports every failure as a `SnapshotResult` and
 doesn't throw. Several threads may take snapshots of one channel: they take turns on its
 write mutex, and `tryTakeSnapshot()` returns `blocked` while another snapshot holds it.
-If data_tamer is loaded with `dlopen()`, in a plugin for example, open one
-`scopedWrite()` on each real-time thread before its loop: a snapshot that finds the
-write mutex held reads thread-local state, whose first access on a thread can then
-allocate.
+`tryTakeSnapshot()` doesn't allocate when data_tamer is loaded with `dlopen()` either, in
+a plugin for example.
 
 The pool has 64 slots by default, which is 64 ms at 1 kHz. If a sink stalls longer than
 that (a disk flush can take 200 ms), new snapshots are dropped with `pool_exhausted`.
@@ -422,6 +420,14 @@ history the ring holds now.
 
 The first `takeSnapshot()` called `startLogging()`: it allocated the pool and called the
 sinks, which for ROS 2 means a DDS write. Call `channel->startLogging()` before the loop.
+
+### `dlopen()` fails with "cannot allocate memory in static TLS block"
+
+data_tamer keeps its one thread-local (8 bytes) in static TLS, so that a real-time thread
+never allocates on its first access, also in a plugin. glibc reserves a small surplus of
+static TLS for libraries loaded with `dlopen()`, and libraries loaded before it used it
+up. Link data_tamer into the executable, or raise the surplus (glibc 2.32 or later):
+`GLIBC_TUNABLES=glibc.rtld.optional_static_tls=2048`.
 
 ### The ROS 2 publisher process grows in memory
 

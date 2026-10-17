@@ -463,10 +463,11 @@ exhausted.
 `tryTakeSnapshot()` exists to be lock-free: it never blocks on a lock and never allocates,
 and reports every failure as a `SnapshotResult` instead of throwing. Use it on real-time
 threads; `takeSnapshot()` waits and allocates where `tryTakeSnapshot()` gives up.
-When data_tamer is loaded with `dlopen()` (in a plugin, for example), open one
-`scopedWrite()` on each real-time thread during setup: a snapshot that finds the write
-mutex held reads a thread-local, and the first access to a thread-local of a library
-loaded that way can allocate (glibc's dynamic TLS).
+This holds when data_tamer is loaded with `dlopen()` (in a plugin, for example): its one
+thread-local is initial-exec TLS, reserved when the library is loaded, so no warm-up is
+needed. If such a `dlopen()` fails with "cannot allocate memory in static TLS block",
+other libraries used up glibc's static TLS surplus: link data_tamer into the executable
+or set `GLIBC_TUNABLES=glibc.rtld.optional_static_tls=2048` (glibc 2.32 or later).
 
 | | `takeSnapshot()` | `tryTakeSnapshot()` |
 |---|---|---|

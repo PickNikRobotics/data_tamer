@@ -161,6 +161,26 @@ if(UNIX AND DATA_TAMER_LIBRARY_TYPE STREQUAL "SHARED_LIBRARY")
         DATA_TAMER_HIDDEN_CONSUMER="$<TARGET_FILE:hidden_visibility_consumer>")
 endif()
 
+# libdata_tamer loaded with dlopen() as a plugin's dependency: the first access of the
+# transaction chain on a new thread must not allocate. dlopen_tls_test does not link
+# libdata_tamer and interposes glibc's malloc, so Linux shared builds only, and not
+# under a sanitizer, which interposes malloc itself.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND DATA_TAMER_LIBRARY_TYPE STREQUAL "SHARED_LIBRARY"
+   AND NOT CMAKE_CXX_FLAGS MATCHES "-fsanitize")
+    add_library(dlopen_tls_plugin MODULE dlopen_tls_plugin.cpp)
+    target_compile_features(dlopen_tls_plugin PRIVATE cxx_std_20)
+    target_link_libraries(dlopen_tls_plugin PRIVATE data_tamer)
+    data_tamer_add_gtest(dlopen_tls_test
+        SOURCES dlopen_tls_tests.cpp
+        LIBRARIES ${CMAKE_DL_LIBS})
+    # Exports malloc to the dynamic linker, which allocates TLS with it.
+    set_target_properties(dlopen_tls_test PROPERTIES ENABLE_EXPORTS ON)
+    add_dependencies(dlopen_tls_test dlopen_tls_plugin)
+    target_compile_definitions(dlopen_tls_test PRIVATE
+        DATA_TAMER_DLOPEN_TLS_PLUGIN="$<TARGET_FILE:dlopen_tls_plugin>"
+        DATA_TAMER_SONAME="$<TARGET_SONAME_FILE_NAME:data_tamer>")
+endif()
+
 # Resolve the package directory first: when it is a symlink (workspaces that
 # link each package into src/), "<link>/../python" names a directory next to
 # the link, not next to the real package, and Python normalizes ".." textually.
