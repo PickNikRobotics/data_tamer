@@ -8,7 +8,13 @@ sources. Two artifacts keep it honest:
   snapshots (all fields enabled, two fields disabled), their MCAP message bodies
   and the decoded values (`expected.json`), plus the YAML rendering of that
   schema (`schema.yaml`) and a schema with path-like names in both renderings
-  (`schema_nested.txt`, `schema_nested.yaml`).
+  (`schema_nested.txt`, `schema_nested.yaml`). `v4/` holds a file recorded by
+  data_tamer 1.0.4 (schema version 4, section 5): `recorded_1.0.4.mcap`, its
+  three schema texts and the values the recorder set (`expected.tsv`, whose
+  header describes it). It covers the cases a reader of 1.x files meets: custom
+  types declared after the type that holds them, disabled fields, NaN,
+  infinities, -0, denormals, empty vectors and an opaque type. It is never
+  regenerated.
 - `data_tamer_cpp/tests/wire_format_tests.cpp` regenerates those bytes from the
   library and fails if they differ. `python/data_tamer_parser.py` is a
   standard-library-only reference decoder and `python/test_data_tamer_parser.py`
@@ -25,9 +31,9 @@ Python decoder, and describe the change in this file.
 
 | Version | Change |
 |---:|---|
-| 6 | YAML rendering of the version 5 schema (section 2.1), opt-in. Same hash. |
-| 5 | Hash defined as FNV-1a 64 of the schema text; covers custom type bodies. |
-| 4 | Lower-case type names, `MSG:` sections. Hash was `std::hash` based. |
+| 6 | data_tamer 2.0. YAML rendering of the version 5 schema (section 2.1), opt-in. Same hash. |
+| 5 | data_tamer 2.0. Hash defined as FNV-1a 64 of the schema text; covers custom type bodies. |
+| 4 | data_tamer 0.7 to 1.x. Lower-case type names, `MSG:` sections. Hash was `std::hash` based (section 5). |
 
 ## 1. Data model
 
@@ -115,7 +121,8 @@ the colon of `### key:`, trimmed; the space after the colon is optional
 
 1. `### version: <uint>` (digits only) – 5 for texts written by this version.
    Decoders must also accept 4, which differs only in how the hash was computed
-   (see section 5), and reject anything else.
+   (see section 5), and reject anything else. The line is required and comes
+   before the first field line; decoders reject a text without it.
 2. `### hash: <uint64>` (digits only, at most 2^64-1) – the schema hash, see
    section 5.
 3. `### channel_name: <text>` – everything after the first space following the
@@ -243,11 +250,16 @@ section 2 (field lines in order, custom types then opaque types sorted by name
 in byte order, separators of 59 `=`) and apply section 5 to that text; both
 reference decoders do this (`ToText()`, `to_text()`).
 
-### Legacy
+### Before version 4
 
-Legacy files (version < 4, before 2023) used upper-case type names (`DOUBLE`,
-`INT32`, ...) with the name first; the C++ parser still accepts them in a text
-that has no `### version:` line, new decoders may ignore that.
+The releases before 0.7.0 (November 2023, each current for a few days or
+weeks) wrote other texts. In MCAP files, 0.2 and 0.3 wrote one `<name> <type>`
+line per flattened value without headers, 0.4 to 0.6 `__version__: 2` or `3`,
+`__hash__:` and `__channel_name__:` headers. The ROS 2 publisher of 0.3 to 0.5
+wrote `<type> <name>` lines without headers, in a `Schema` message that also
+had a `schema_encoding` field (removed in 0.6). None of them has a
+`### version:` line, so the reference decoders reject them, with an error that
+names the supported versions.
 
 ## 3. Snapshot
 
@@ -397,15 +409,29 @@ Decoders match a snapshot to a schema by comparing the snapshot's hash with the
 `### hash:` line of the schema shipped next to it (MCAP: the schema record
 attached to the channel; ROS: the `Schemas` entry). Verification against the
 recomputed value is optional (`check_hash` in the C++ parser, `verify_hash` in
-the Python decoder) and only meaningful for version 5 texts.
+the Python decoder). It is defined for version 5 texts and for YAML, whose line
+format rendering is hashed (section 2.1).
 
-**Version 4 texts** carried a hash computed with `std::hash`, which is
-implementation-defined and did not cover custom type bodies. Readers match them
-by the declared value; the C++ parser still recomputes the version 4 recipe for
-`check_hash`, which only agrees on the writer's platform.
-Parsers older than version 5 recompute the version-4 hash themselves and
-therefore reject version 5 files with "Wrong SCHEMA_VERSION" instead of
-decoding them wrongly.
+**Version 4 texts** (data_tamer 0.7 to 1.x) carried a hash computed with
+`std::hash`: `std::hash<std::string>` of the channel name, then each top-level
+field folded in with `AddFieldToHash()` of the C++ parser (field name, type id,
+custom type name, vector flag, array size; custom type bodies are not covered).
+`std::hash` is implementation-defined, so the value depends on the writer's
+standard library and word size. Decoders match version 4 texts by the declared
+value, which is all decoding needs. Verification differs:
+
+- The Python decoder cannot reproduce `std::hash`: with `verify_hash` it accepts
+  the declared hash of a version 4 text unchecked.
+- The C++ parser recomputes the recipe with its own `std::hash` under
+  `check_hash`. That agrees with the writer only when both use the same
+  implementation, such as libstdc++ with a 64-bit `size_t` (the usual Linux
+  build); otherwise `check_hash` throws for an intact version 4 text, so leave it
+  off for 1.x files from another platform.
+
+Readers older than version 5 (data_tamer 1.x) recompute the version 4 hash
+themselves, so they fail instead of decoding newer texts wrongly: a version 5
+text with "Wrong SCHEMA_VERSION", the YAML rendering (version 6) with
+"Unexpected line: fields:".
 
 ## 6. Worked example
 
@@ -458,4 +484,6 @@ has an opaque type),
 decode both snapshots from mask and payload (disabled fields absent, not zero;
 floats compared bit-exactly), split both `.mcap_message` bodies into the same
 mask and payload bytes, and reject a payload with trailing bytes or a schema
-with another version.
+with another version or without one. A decoder that reads version 4 also decodes
+`v4/recorded_1.0.4.mcap` to `v4/expected.tsv`, matching each schema by its
+declared hash and rejecting the messages marked `!undecodable`.

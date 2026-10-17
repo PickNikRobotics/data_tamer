@@ -1,0 +1,12 @@
+### version: 4
+### hash: 14528683275016451837
+### channel_name: opaque
+
+int32 ocount
+Pos2D p2
+Pos2D[2] p2a
+===========================================================
+MSG: Pos2D
+ENCODING: ros1
+int32 x
+int32 y

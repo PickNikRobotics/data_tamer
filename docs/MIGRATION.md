@@ -304,7 +304,9 @@ So:
 - in your own C++ readers, copy the 2.0
   [data_tamer_parser.hpp](../data_tamer_cpp/include/data_tamer_parser/data_tamer_parser.hpp);
 - 2.0 readers still read files recorded with 1.x (schema version 4), using the hash the
-  file declares.
+  file declares. They reject schema texts without a `### version:` line, written by
+  releases before 0.7.0 (late 2023), among them the header-less lines of the 0.3 to 0.5
+  ROS 2 publisher, which the 1.x parser read.
 
 The parser header changed too:
 

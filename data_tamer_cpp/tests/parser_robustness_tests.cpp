@@ -377,12 +377,29 @@ TEST(ParserRobustness, TextWhoseFirstLineStartsWithThreeHashesIsTheLineFormat)
   }
 }
 
-TEST(ParserRobustness, LegacyTextWithoutAnyHeaderIsStillRead)
+TEST(ParserRobustness, TextWithoutAVersionLineBeforeItsFieldsIsRejected)
 {
-  const auto schema = BuildSchemaFromText("float64 x\nint8[3] y\n");
-  ASSERT_EQ(schema.fields.size(), 2u);
-  EXPECT_EQ(schema.fields[1].field_name, "y");
-  EXPECT_EQ(schema.fields[1].array_size, 3u);
+  // what releases before 0.7.0 wrote (MCAP 0.3: "name type", 0.4 to 0.6:
+  // "__version__: 3"; ROS 2 0.3 to 0.5: "type name"), the upper-case format no release
+  // wrote, headers without a version, and a version line after a field
+  for(const char* text :
+      { "speed float64\nsamples[0] float32\n",
+        "__version__: 3\n__hash__: 1\n__channel_name__: my chan\nfloat64 speed\n",
+        "float64 speed\nfloat32 samples[0]\n", "speed DOUBLE\ncount INT32[3]\n",
+        "### hash: 1\n### channel_name: c\n", "float64 x\n### version: 5\n" })
+  {
+    try
+    {
+      (void)BuildSchemaFromText(text);
+      ADD_FAILURE() << "parsed [" << text << "]";
+    }
+    catch(const std::runtime_error& e)
+    {
+      EXPECT_NE(std::string(e.what()).find("supported schema versions are 4 and 5"),
+                std::string::npos)
+          << e.what();
+    }
+  }
 }
 
 TEST(ParserRobustness, VersionAndHashMustBeUnsignedDecimals)
@@ -589,51 +606,6 @@ TEST(ParserRobustness, EncodingLineThatDoesNotOpenASectionIsRejected)
   {
     EXPECT_THROW(BuildSchemaFromText(text), std::runtime_error) << text;
   }
-}
-
-// Schema text: the upper-case type names of files from before version 4
-
-namespace
-{
-// "type[extent] name", the way a field line reads
-std::vector<std::string> describe(const FieldsVector& fields)
-{
-  std::vector<std::string> out;
-  for(const auto& field : fields)
-  {
-    std::string type = field.type_name;
-    if(field.is_vector)
-    {
-      type += "[" + (field.array_size ? std::to_string(field.array_size) : "") + "]";
-    }
-    out.push_back(type + " " + field.field_name);
-  }
-  return out;
-}
-}  // namespace
-
-TEST(ParserRobustness, FieldNamedLikeALegacyTypeKeepsItsType)
-{
-  // with a version line a field line is "<type> <name>", whatever the name looks like
-  const auto schema = BuildSchemaFromText(kHeader +
-                                          "float64 BOOL\nuint32 INT8\nPose OTHER\n"
-                                          "int8[2] DOUBLE\n" +
-                                          kSeparator + "\nMSG: Pose\nfloat64 x\n");
-  EXPECT_EQ(describe(schema.fields),
-            (std::vector<std::string>{ "float64 BOOL", "uint32 INT8", "Pose OTHER",
-                                       "int8[2] DOUBLE" }));
-  EXPECT_EQ(schema.fields[2].type, BasicType::OTHER);
-}
-
-TEST(ParserRobustness, LegacyTextWithoutAVersionLineIsRead)
-{
-  // before version 4 the name came first and the type was upper case
-  const auto schema = BuildSchemaFromText("speed DOUBLE\ncount INT32[3]\nflag "
-                                          "BOOL\nstamp UINT64[]\n");
-  EXPECT_EQ(describe(schema.fields),
-            (std::vector<std::string>{ "float64 speed", "int32[3] count", "bool flag",
-                                       "uint64[] stamp" }));
-  EXPECT_EQ(schema.fields[1].type, BasicType::INT32);
 }
 
 // Schema text: cost

@@ -8,7 +8,7 @@ line by line. Usage:
     values = parse_snapshot(schema, active_mask, payload)   # {"pose/position/x": 1.0, ...}
 
 For an MCAP message body written by MCAPSink use split_mcap_message() first.
-parse_schema() reads both schema renderings: the line format (version 5) and
+parse_schema() reads both schema renderings: the line format (versions 4 and 5) and
 YAML (version 6); to_text() renders a schema back to the line format.
 For the ROS 2 messages of ROS2PublisherSink (data_tamer_msgs Schemas, Snapshot,
 SnapshotBatch) use SchemaRegistry, parse_snapshot_msg() and
@@ -165,13 +165,16 @@ def parse_schema(text: str, verify_hash: bool = False) -> Schema:
 
     Both renderings are accepted: the line format (versions 4 and 5) and YAML
     (version 6), told apart by their first line. With verify_hash the declared
-    hash must equal the computed one (section 5); version 4 cannot be verified.
+    hash must equal the computed one (section 5). A version 4 hash (data_tamer
+    1.x) came from the writer's std::hash and cannot be recomputed here: the
+    declared value is accepted, verify_hash or not.
     """
     if _first_line(text).startswith("version:"):
         return _parse_schema_yaml(text, verify_hash)
     schema = Schema()
     lines = text.split("\n")
     target = schema.fields
+    version = 0  # until the version line
     last_type = ""
     seen_line = False
     previous = ""  # the last non-blank line: "separator", "MSG" or "" for any other
@@ -191,7 +194,8 @@ def parse_schema(text: str, verify_hash: bool = False) -> Schema:
         key, colon, value = line.partition(":")  # a header is "### key: value"
         value = value.strip(_TRIM)
         if colon and key == "### version":
-            if _parse_uint(value, "version") not in _READABLE_VERSIONS:
+            version = _parse_uint(value, "version")
+            if version not in _READABLE_VERSIONS:
                 raise ValueError(f"unsupported schema version in {line!r}")
         elif colon and key == "### hash":
             schema.hash = _parse_uint(value, "hash")
@@ -213,14 +217,26 @@ def parse_schema(text: str, verify_hash: bool = False) -> Schema:
             del schema.custom_types[last_type]
             break
         else:
+            if not version:
+                raise _missing_version_error()
             target.append(_parse_field_line(line))
     if not seen_line:
         raise ValueError("empty schema text")
+    if not version:
+        raise _missing_version_error()
     if previous == "separator":
         raise ValueError('expected "MSG: <type name>" after the last separator')
-    if verify_hash and schema.hash != schema_hash(text):
+    if verify_hash and version != 4 and schema.hash != schema_hash(text):
         raise ValueError("schema hash does not match its text")
     return schema
+
+
+def _missing_version_error() -> ValueError:
+    """A line format text without a version line before its fields, such as the texts of
+    data_tamer releases before 0.7.0 (spec section 2)."""
+    return ValueError('no "### version:" line before the fields; the supported schema '
+                      "versions are 4 and 5 (6 in YAML), so texts written before "
+                      "data_tamer 0.7.0 are not readable")
 
 
 def _first_line(text: str) -> str:
@@ -607,7 +623,10 @@ def split_mcap_message(data: bytes) -> tuple[bytes, bytes]:
 
 
 class SchemaRegistry:
-    """Schemas by hash, filled from the `schemas` topic and/or embedded schemas."""
+    """Schemas by hash, filled from the `schemas` topic and/or embedded schemas.
+
+    verify_hash is passed to parse_schema(): a version 4 hash is accepted unchecked.
+    """
 
     def __init__(self, verify_hash: bool = False):
         self.verify_hash = verify_hash
@@ -667,7 +686,8 @@ def iter_mcap(source, topics=None, verify_hash: bool = False):
 
     One call reads one file. MCAPSink can split a recording into numbered
     files (run.mcap, run_1.mcap, ...); each is self-contained, so read them
-    one after the other.
+    one after the other. verify_hash is passed to parse_schema(): a version 4
+    hash (data_tamer 1.x) is accepted unchecked.
     """
     try:
         from mcap.reader import make_reader

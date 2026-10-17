@@ -117,7 +117,7 @@ struct Schema
   std::string channel_name;
 
   std::map<std::string, FieldsVector> custom_types;
-  /// Opaque custom types; filled only from YAML schemas (version 6).
+  /// Opaque custom types (an "ENCODING:" section, or `opaque_types` in YAML).
   std::map<std::string, CustomSchema> custom_schemas;
 };
 
@@ -304,8 +304,9 @@ inline VarNumber DeserializeToVarNumber(BasicType type, BufferSpan& buffer)
   return 0 != (byte & uint8_t(1 << (index % 8)));
 }
 
-/// Folds `field` into a running schema hash with the version 4 recipe. It is std::hash
-/// based, so it only reproduces the hash on the writer's platform.
+/// Folds `field` into a running schema hash with the version 4 recipe (data_tamer 1.x).
+/// It is std::hash based, so it reproduces the writer's hash only with the same standard
+/// library and word size (docs/wire_format.md, section 5).
 [[nodiscard]] inline uint64_t AddFieldToHash(const TypeField& field, uint64_t hash)
 {
   // https://stackoverflow.com/questions/2590677/how-do-i-combine-hash-values-in-c0x
@@ -782,16 +783,6 @@ inline const YamlNode* FindYamlKey(const std::vector<YamlNode>& nodes,
   return nullptr;
 }
 
-/// Type names of schema texts from before version 4: upper case, indexed by BasicType.
-inline const std::array<std::string, TypesCount>& LegacyTypeNames()
-{
-  static const std::array<std::string, TypesCount> kNames = {
-    "BOOL",   "CHAR",  "INT8",   "UINT8", "INT16",  "UINT16", "INT32",
-    "UINT32", "INT64", "UINT64", "FLOAT", "DOUBLE", "OTHER"
-  };
-  return kNames;
-}
-
 /// Removes the spaces and carriage returns at both ends of `str`.
 inline void Trim(std::string& str)
 {
@@ -898,10 +889,8 @@ inline uint32_t ParseArraySize(const std::string& spec, size_t open,
   return *extent;
 }
 
-/// Parses a field line, "<type> <name>", the type being "T", "T[]" or "T[N]". A text
-/// without a version line comes from before version 4 (`legacy`): its type names are
-/// upper case and the type follows the name.
-inline TypeField ParseFieldLine(const std::string& line, bool legacy)
+/// Parses a field line, "<type> <name>", the type being "T", "T[]" or "T[N]".
+inline TypeField ParseFieldLine(const std::string& line)
 {
   // Split at the first space.
   const auto space_pos = line.find(' ');
@@ -909,57 +898,42 @@ inline TypeField ParseFieldLine(const std::string& line, bool legacy)
   {
     throw std::runtime_error("Unexpected line: " + line);
   }
-  std::string left = line.substr(0, space_pos);
-  std::string right = line.substr(space_pos + 1);
-  Trim(left);
-  Trim(right);
+  std::string type_spec = line.substr(0, space_pos);
+  std::string name = line.substr(space_pos + 1);
+  Trim(type_spec);
+  Trim(name);
 
-  // A type name is the whole token before any "[...]": "float64Pose" is a custom type.
-  auto typeToken = [](const std::string& spec) {
-    return std::string_view(spec).substr(0, spec.find('['));
-  };
-  const std::string_view left_token = typeToken(left);
-  const std::string_view right_token = legacy ? typeToken(right) : std::string_view();
-
-  std::string* type_spec = &left;
-  std::string* name = &right;
-  const auto& names = BasicTypeNames();
-  const auto& legacy_names = LegacyTypeNames();
-  TypeField field;
-  for(size_t i = 0; i < TypesCount; i++)
-  {
-    if(left_token == names[i])
-    {
-      field.type = static_cast<BasicType>(i);
-      break;
-    }
-    if(legacy && right_token == legacy_names[i])
-    {
-      field.type = static_cast<BasicType>(i);
-      std::swap(type_spec, name);
-      break;
-    }
-  }
-
-  const auto open = type_spec->find_first_of(" [");
-  if(type_spec->empty() || open == 0)
+  const auto open = type_spec.find('[');
+  if(type_spec.empty() || open == 0)
   {
     throw std::runtime_error("Empty type name in: " + line);
   }
-  field.type_name = field.type != BasicType::OTHER ?
-                        names[static_cast<size_t>(field.type)] :
-                        type_spec->substr(0, open);
-  if(open != std::string::npos && (*type_spec)[open] == '[')
+  TypeField field;
+  // A type name is the whole token before any "[...]": "float64Pose" is a custom type.
+  field.type_name = type_spec.substr(0, open);
+  field.type = BasicTypeFromName(field.type_name);
+  if(open != std::string::npos)
   {
     field.is_vector = true;
-    field.array_size = ParseArraySize(*type_spec, open, line);
+    field.array_size = ParseArraySize(type_spec, open, line);
   }
-  if(!IsValidFieldName(*name))
+  if(!IsValidFieldName(name))
   {
     throw std::runtime_error("Invalid field name in: " + line);
   }
-  field.field_name = std::move(*name);
+  field.field_name = std::move(name);
   return field;
+}
+
+/// The error for a line format text without a version line before its fields, such as
+/// the texts of data_tamer releases before 0.7.0 (docs/wire_format.md, section 2).
+inline std::runtime_error MissingVersionError()
+{
+  return std::runtime_error("DataTamerParser: no \"### version:\" line before the "
+                            "fields; the supported schema "
+                            "versions are 4 and 5 (6 in YAML), so texts written before "
+                            "data_tamer 0.7.0 are "
+                            "not readable");
 }
 }  // namespace detail
 
@@ -1044,7 +1018,11 @@ inline TypeField ParseFieldLine(const std::string& line, bool legacy)
 
 /// Parses a schema text in the line format (versions 4 and 5) or YAML (version 6), see
 /// docs/wire_format.md section 2. Throws std::runtime_error on a malformed text or
-/// another version; `check_hash` also throws if the declared hash is wrong.
+/// another version; `check_hash` also throws if the declared hash is wrong. The declared
+/// hash is the schema's hash. For version 4 (data_tamer 1.x) `check_hash` recomputes it
+/// with this program's std::hash, which agrees with the writer's only for the same
+/// standard library and word size: an intact 1.x text from another platform throws. The
+/// Python decoder accepts a version 4 hash unchecked instead (wire_format.md, section 5).
 [[nodiscard]] inline Schema BuildSchemaFromText(const std::string& txt,
                                                 bool check_hash = false)
 {
@@ -1055,8 +1033,7 @@ inline TypeField ParseFieldLine(const std::string& line, bool legacy)
 
   Schema schema;
   uint64_t declared_schema = 0;
-  int version = 0;           // 0 until a version line: a text from before version 4
-  uint64_t legacy_hash = 0;  // version 4 recomputation, field by field
+  int version = 0;  // 0 until the version line
 
   std::vector<TypeField>* field_vector = &schema.fields;
   bool any_line = false;
@@ -1142,25 +1119,36 @@ inline TypeField ParseFieldLine(const std::string& line, bool legacy)
       if(detail::ReadHeaderValue(line, "### channel_name:", value))
       {
         schema.channel_name = value;
-        legacy_hash = std::hash<std::string>()(schema.channel_name);
         continue;
       }
     }
 
-    TypeField field = detail::ParseFieldLine(line, version == 0);
-    if(version == 4 && field_vector == &schema.fields)
+    if(version == 0)
     {
-      legacy_hash = AddFieldToHash(field, legacy_hash);
+      throw detail::MissingVersionError();
     }
-    field_vector->push_back(std::move(field));
+    field_vector->push_back(detail::ParseFieldLine(line));
   }
   if(!any_line)
   {
     throw std::runtime_error("DataTamerParser: empty schema text");
   }
+  if(version == 0)
+  {
+    throw detail::MissingVersionError();
+  }
   // The declared hash is the one snapshots carry. check_hash recomputes it with the
-  // recipe of the text's version.
-  const uint64_t computed = version == 4 ? legacy_hash : SchemaTextHash(txt);
+  // recipe of the text's version: for version 4, the channel name and the top-level
+  // fields folded into a std::hash.
+  uint64_t computed = SchemaTextHash(txt);
+  if(version == 4)
+  {
+    computed = std::hash<std::string>()(schema.channel_name);
+    for(const auto& field : schema.fields)
+    {
+      computed = AddFieldToHash(field, computed);
+    }
+  }
   if(check_hash && declared_schema != 0 && declared_schema != computed)
   {
     throw std::runtime_error("Error in hash calculation");

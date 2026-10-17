@@ -80,6 +80,7 @@ build*
 .cache/*
 */.cache/*
 *.mcap
+!docs/wire_format/vectors/**/*.mcap
 .superpowers/
 .worktrees/
 
