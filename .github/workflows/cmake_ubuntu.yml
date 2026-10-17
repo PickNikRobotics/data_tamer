@@ -48,7 +48,7 @@ jobs:
     - name: Configure CMake
       shell: bash
       working-directory: ${{github.workspace}}/build
-      run: cmake ${{github.workspace}}/data_tamer_cpp -DCMAKE_BUILD_TYPE=Debug -DCMAKE_TOOLCHAIN_FILE="./build/Debug/generators/conan_toolchain.cmake" -DCMAKE_CXX_FLAGS_DEBUG="-g -fprofile-arcs -ftest-coverage"
+      run: cmake ${{github.workspace}}/data_tamer_cpp -DCMAKE_BUILD_TYPE=Debug -DDATA_TAMER_WERROR=ON -DCMAKE_TOOLCHAIN_FILE="./build/Debug/generators/conan_toolchain.cmake" -DCMAKE_CXX_FLAGS_DEBUG="-g -fprofile-arcs -ftest-coverage"
 
     - name: Build
       shell: bash

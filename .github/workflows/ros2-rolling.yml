@@ -13,4 +13,4 @@ jobs:
       - uses: ros-industrial/industrial_ci@125164b9f1883cdf1858897a7146d1bebf2be5c6
         # industrial_ci defaults rolling to Ubuntu 26.04 (resolute), for which
         # packages.ros.org publishes no ros-rolling-* binaries yet; pin to noble.
-        env: {ROS_DISTRO: rolling, ROS_REPO: main, OS_CODE_NAME: noble}
+        env: {ROS_DISTRO: rolling, ROS_REPO: main, TARGET_CMAKE_ARGS: "-DDATA_TAMER_WERROR=ON", OS_CODE_NAME: noble}

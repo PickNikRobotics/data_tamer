@@ -109,8 +109,10 @@ fi
 
 # ---- build both sides ------------------------------------------------------------
 build() {  # $1: source tree, $2: build dir, $3: extra compiler flags
-  # -w for the baseline: its sources build with -Werror, and a newer compiler on
-  # the runner must not fail the check on a warning in code that already merged.
+  # -w for the baseline: a baseline older than DATA_TAMER_WERROR builds with -Werror,
+  # and a newer compiler on the runner must not fail the check on a warning in code
+  # that already merged. The current side builds with the default (no -Werror): the
+  # presets and the other CI jobs check warnings.
   cmake -S "$1/data_tamer_cpp" -B "$2" -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="${3:-}" \
     -DBUILD_SHARED_LIBS=ON -DDATA_TAMER_BUILD_ROS=OFF -DDATA_TAMER_BUILD_TESTS=OFF \
     -DDATA_TAMER_BUILD_EXAMPLES=OFF -DDATA_TAMER_BUILD_BENCHMARKS=OFF >"$2.log" 2>&1 ||

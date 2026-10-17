@@ -11,6 +11,9 @@ option(DATA_TAMER_BUILD_BENCHMARKS "Build benchmarks" ${PROJECT_IS_TOP_LEVEL})
 option(DATA_TAMER_BUILD_ROS "Build for ROS 2" ON)
 option(DATA_TAMER_USE_SYSTEM_MCAP
     "Use an installed MCAP package (find_package(mcap)) instead of the bundled headers" OFF)
+# OFF by default, so that a release builds with the next compiler (ROS buildfarm, conda,
+# distributions); the presets and CI turn it ON.
+option(DATA_TAMER_WERROR "Treat warnings in the library sources as errors" OFF)
 option(BUILD_SHARED_LIBS "Build using shared libraries" OFF)
 
 if(DATA_TAMER_BUILD_ROS)
@@ -71,9 +74,12 @@ set_target_properties(data_tamer PROPERTIES
     SOVERSION ${PROJECT_VERSION_MAJOR})
 
 target_compile_options(data_tamer PRIVATE
-    $<$<CXX_COMPILER_ID:MSVC>:/W4 /WX>
-    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic -Wconversion -Wno-sign-conversion -Werror>
+    $<$<CXX_COMPILER_ID:MSVC>:/W4>
+    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic -Wconversion -Wno-sign-conversion>
 )
+if(DATA_TAMER_WERROR)
+    target_compile_options(data_tamer PRIVATE $<IF:$<CXX_COMPILER_ID:MSVC>,/WX,-Werror>)
+endif()
 
 # The library compiles as C++20; the installed headers stay valid C++17
 # (consumers only need cxx_std_17), which tests/public_headers_cxx17.cpp
