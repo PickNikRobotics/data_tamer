@@ -115,15 +115,16 @@ if(DATA_TAMER_BUILD_ROS OR DATA_TAMER_USE_SYSTEM_MCAP)
     target_link_libraries(data_tamer PUBLIC ${DATA_TAMER_MCAP_TARGET})
 else()
     # sinks/mcap_encoding.hpp includes the MCAP headers: they are installed in a
-    # directory of their own, so that they cannot shadow another MCAP in the same
-    # prefix. SYSTEM: the library's warning flags do not apply to vendored code (the
+    # directory of their own (include/data_tamer_v2_mcap/mcap), exported as an include
+    # directory that holds nothing else, so that they cannot shadow another MCAP in the
+    # same prefix nor expose anything else. SYSTEM: the library's warning flags do not apply to vendored code (the
     # include directories of an installed, imported target are SYSTEM anyway).
     # zstd and lz4 are PRIVATE: a shared install exports no dependency, a static one
     # finds them again in data_tamerConfig.cmake.
     target_include_directories(data_tamer SYSTEM PUBLIC
         $<BUILD_INTERFACE:${DATA_TAMER_MCAP_INCLUDE_DIR}>)
     target_include_directories(data_tamer PUBLIC
-        $<INSTALL_INTERFACE:include/data_tamer_mcap>)
+        $<INSTALL_INTERFACE:include/data_tamer_v2_mcap>)
     target_link_libraries(data_tamer PRIVATE data_tamer::zstd data_tamer::lz4)
 endif()
 # A static library linked into libdata_tamer.so (zstd from conan, for one) must not add
@@ -168,8 +169,8 @@ if(DATA_TAMER_INSTALL)
     include(CMakePackageConfigHelpers)
     install(DIRECTORY include/ DESTINATION include)
     if(NOT DATA_TAMER_BUILD_ROS AND NOT DATA_TAMER_USE_SYSTEM_MCAP)
-        install(DIRECTORY 3rdparty/mcap/include/mcap DESTINATION include/data_tamer_mcap)
-        install(FILES 3rdparty/mcap/LICENSE DESTINATION include/data_tamer_mcap/mcap)
+        install(DIRECTORY 3rdparty/mcap/include/mcap DESTINATION include/data_tamer_v2_mcap)
+        install(FILES 3rdparty/mcap/LICENSE DESTINATION include/data_tamer_v2_mcap/mcap)
     endif()
 
     install(
