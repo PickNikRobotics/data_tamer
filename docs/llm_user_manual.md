@@ -1028,6 +1028,12 @@ match its two lengths. Malformed input throws `std::runtime_error` (`ValueError`
 Python). `data_tamer_cpp/examples/mcap_reader.cpp` reads an
 MCAP file with it.
 
+Both decoders read 1.x files (schema version 4) and 2.x files; a text of a release before
+0.7.0, which has no `### version:` line, throws. The hash of a 1.x file came from the
+writer's `std::hash`: Python's `verify_hash` accepts it unchecked, and C++'s `check_hash`
+recomputes it with the program's own `std::hash`, so it throws for a 1.x file written
+with another standard library (`docs/wire_format.md`, section 5).
+
 `docs/wire_format.md` specifies the format, with golden byte vectors in
 `docs/wire_format/vectors/`.
 

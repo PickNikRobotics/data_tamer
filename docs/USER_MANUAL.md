@@ -336,7 +336,8 @@ for timestamp_nsec, channel, values in dt.iter_mcap("run.mcap"):
 ```
 
 Disabled values are absent from `values`. `iter_mcap()` reads one file, so read numbered
-files one after the other.
+files one after the other. Both decoders also read the files of data_tamer 1.x; files of
+releases before 0.7.0 (2023) are not readable.
 
 In C++, copy the single header
 [data_tamer_parser.hpp](../data_tamer_cpp/include/data_tamer_parser/data_tamer_parser.hpp)

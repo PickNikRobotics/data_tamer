@@ -25,6 +25,10 @@ Disabled fields are absent from `values`. Channels with another encoding are ski
 `iter_mcap()` reads one file: `MCAPSink` can split a recording into numbered files
 (`run.mcap`, `run_1.mcap`, ...), each self-contained, so read them in turn.
 
+Files of data_tamer 1.x (schema version 4) and 2.x are read; texts of releases before
+0.7.0 raise `ValueError`. `verify_hash=True` checks the schema hash of a 2.x file, but
+accepts the hash of a 1.x file unchecked: it came from the writer's `std::hash`.
+
 ## Field names from a schema
 
 `Schema.field_names()` lists the flattened names a schema can produce, without

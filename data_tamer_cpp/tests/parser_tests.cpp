@@ -18,6 +18,7 @@ using namespace TestTypes;
 TEST(DataTamerParser, ReadSchema)
 {
   const char* text = R"(
+### version: 5
 int8 v1
 float64 v2
 float32[5] array
@@ -94,12 +95,13 @@ TEST(DataTamerParser, SchemaHash)
 
 TEST(DataTamerParser, DeclaredSchemaHashUsesFullUint64Range)
 {
-  const auto schema = BuildSchemaFromText("### hash: 18446744073709551615\nfloat64 "
-                                          "value\n");
+  const auto schema = BuildSchemaFromText("### version: 5\n### hash: "
+                                          "18446744073709551615\nfloat64 value\n");
   EXPECT_EQ(schema.hash, std::numeric_limits<uint64_t>::max());
   ASSERT_EQ(schema.fields.size(), 1U);
   EXPECT_EQ(schema.fields.front().field_name, "value");
-  EXPECT_THROW(BuildSchemaFromText("### hash: 18446744073709551616\nfloat64 value\n"),
+  EXPECT_THROW(BuildSchemaFromText("### version: 5\n### hash: "
+                                   "18446744073709551616\nfloat64 value\n"),
                std::runtime_error);
 }
 

@@ -120,6 +120,18 @@ class SchemaHeaders(unittest.TestCase):
         schema = dt.parse_schema("### version: 5\n### hash: 9\n### channel_name: c\n")
         self.assertEqual((schema.hash, schema.channel_name, schema.fields), (9, "c", []))
 
+    def test_text_without_a_version_line_before_its_fields_is_rejected(self):
+        # what releases before 0.7.0 wrote (MCAP 0.3: "name type", 0.4 to 0.6:
+        # "__version__: 3"; ROS 2 0.3 to 0.5: "type name"), the upper-case format no
+        # release wrote, headers without a version, and a version line after a field
+        for text in ("speed float64\nsamples[0] float32\n",
+                     "__version__: 3\n__hash__: 1\n__channel_name__: my chan\nfloat64 speed\n",
+                     "float64 speed\nfloat32 samples[0]\n", "speed DOUBLE\ncount INT32[3]\n",
+                     "### hash: 1\n### channel_name: c\n", "float64 x\n### version: 5\n"):
+            with self.subTest(text=text), self.assertRaisesRegex(
+                    ValueError, "supported schema versions are 4 and 5"):
+                dt.parse_schema(text)
+
     def test_header_value_may_follow_the_colon_directly(self):
         schema = dt.parse_schema(
             "### version:5\n### hash:7\n### channel_name:my chan\nfloat64 x\n")
@@ -314,17 +326,6 @@ class OpaqueSections(unittest.TestCase):
                      + "\nMSG: Pose\nfloat64 x\nENCODING: proto\nbody\n"):
             with self.subTest(text=text), self.assertRaises(ValueError):
                 dt.parse_schema(text)
-
-
-class LegacyTypeNames(unittest.TestCase):
-    def test_field_named_like_a_legacy_type_keeps_its_type(self):
-        # the Python decoder has no legacy mode: this is how the C++ parser reads a text
-        # that has a version line
-        text = (HEADER + "float64 BOOL\nuint32 INT8\nPose OTHER\nint8[2] DOUBLE\n"
-                + f"{SEPARATOR}\nMSG: Pose\nfloat64 x\n")
-        fields = dt.parse_schema(text).fields
-        self.assertEqual([(f.type_name, f.field_name) for f in fields], [
-            ("float64", "BOOL"), ("uint32", "INT8"), ("Pose", "OTHER"), ("int8", "DOUBLE")])
 
 
 class McapMessageBody(unittest.TestCase):

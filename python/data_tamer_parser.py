@@ -8,7 +8,7 @@ line by line. Usage:
     values = parse_snapshot(schema, active_mask, payload)   # {"pose/position/x": 1.0, ...}
 
 For an MCAP message body written by MCAPSink use split_mcap_message() first.
-parse_schema() reads both schema renderings: the line format (version 5) and
+parse_schema() reads both schema renderings: the line format (versions 4 and 5) and
 YAML (version 6); to_text() renders a schema back to the line format.
 For the ROS 2 messages of ROS2PublisherSink (data_tamer_msgs Schemas, Snapshot,
 SnapshotBatch) use SchemaRegistry, parse_snapshot_msg() and
@@ -174,7 +174,7 @@ def parse_schema(text: str, verify_hash: bool = False) -> Schema:
     schema = Schema()
     lines = text.split("\n")
     target = schema.fields
-    version = 0
+    version = 0  # until the version line
     last_type = ""
     seen_line = False
     previous = ""  # the last non-blank line: "separator", "MSG" or "" for any other
@@ -217,14 +217,26 @@ def parse_schema(text: str, verify_hash: bool = False) -> Schema:
             del schema.custom_types[last_type]
             break
         else:
+            if not version:
+                raise _missing_version_error()
             target.append(_parse_field_line(line))
     if not seen_line:
         raise ValueError("empty schema text")
+    if not version:
+        raise _missing_version_error()
     if previous == "separator":
         raise ValueError('expected "MSG: <type name>" after the last separator')
     if verify_hash and version != 4 and schema.hash != schema_hash(text):
         raise ValueError("schema hash does not match its text")
     return schema
+
+
+def _missing_version_error() -> ValueError:
+    """A line format text without a version line before its fields, such as the texts of
+    data_tamer releases before 0.7.0 (spec section 2)."""
+    return ValueError('no "### version:" line before the fields; the supported schema '
+                      "versions are 4 and 5 (6 in YAML), so texts written before "
+                      "data_tamer 0.7.0 are not readable")
 
 
 def _first_line(text: str) -> str:

@@ -121,7 +121,8 @@ the colon of `### key:`, trimmed; the space after the colon is optional
 
 1. `### version: <uint>` (digits only) – 5 for texts written by this version.
    Decoders must also accept 4, which differs only in how the hash was computed
-   (see section 5), and reject anything else.
+   (see section 5), and reject anything else. The line is required and comes
+   before the first field line; decoders reject a text without it.
 2. `### hash: <uint64>` (digits only, at most 2^64-1) – the schema hash, see
    section 5.
 3. `### channel_name: <text>` – everything after the first space following the
@@ -249,11 +250,16 @@ section 2 (field lines in order, custom types then opaque types sorted by name
 in byte order, separators of 59 `=`) and apply section 5 to that text; both
 reference decoders do this (`ToText()`, `to_text()`).
 
-### Legacy
+### Before version 4
 
-Legacy files (version < 4, before 2023) used upper-case type names (`DOUBLE`,
-`INT32`, ...) with the name first; the C++ parser still accepts them in a text
-that has no `### version:` line, new decoders may ignore that.
+The releases before 0.7.0 (November 2023, each current for a few days or
+weeks) wrote other texts. In MCAP files, 0.2 and 0.3 wrote one `<name> <type>`
+line per flattened value without headers, 0.4 to 0.6 `__version__: 2` or `3`,
+`__hash__:` and `__channel_name__:` headers. The ROS 2 publisher of 0.3 to 0.5
+wrote `<type> <name>` lines without headers, in a `Schema` message that also
+had a `schema_encoding` field (removed in 0.6). None of them has a
+`### version:` line, so the reference decoders reject them, with an error that
+names the supported versions.
 
 ## 3. Snapshot
 
@@ -478,6 +484,6 @@ has an opaque type),
 decode both snapshots from mask and payload (disabled fields absent, not zero;
 floats compared bit-exactly), split both `.mcap_message` bodies into the same
 mask and payload bytes, and reject a payload with trailing bytes or a schema
-with another version. A decoder that reads version 4 also decodes
+with another version or without one. A decoder that reads version 4 also decodes
 `v4/recorded_1.0.4.mcap` to `v4/expected.tsv`, matching each schema by its
 declared hash and rejecting the messages marked `!undecodable`.

@@ -4,6 +4,13 @@ Changelog for package data_tamer
 
 Unreleased
 ----------
+* **Behaviour change, parser and Python decoder**: a schema text in the line format
+  needs its ``### version:`` line before the fields; without one both throw, naming the
+  supported versions (4 and 5, 6 in YAML). The C++ parser read such a text as an
+  upper-case "name TYPE" format that no release wrote, or as version 5, and the Python
+  decoder as version 5. Texts of the releases before 0.7.0 (late 2023) fail with that
+  message, among them the header-less ``<type> <name>`` lines of the 0.3 to 0.5 ROS 2
+  publisher, which both used to read (``docs/wire_format.md``, section 2).
 * **Fixed, Python decoder**: ``verify_hash=True`` (``parse_schema()``,
   ``SchemaRegistry``, ``iter_mcap()``) rejected every data_tamer 1.x file (schema
   version 4). Its hash came from the writer's ``std::hash`` and cannot be recomputed, so
@@ -96,9 +103,8 @@ Unreleased
   zero-size element type looped for minutes); a bool is true for any non-zero byte;
   empty schema text is rejected; ``### key:value`` headers are read; version and hash are
   strict unsigned decimals; a separator is a whole line of at least 30 ``=``;
-  ``ENCODING:`` sections are opaque types and must follow ``MSG:``; upper-case legacy
-  names are read only without a ``### version:`` line. New ``SplitMcapMessage()`` and
-  ``split_mcap_message()``, used by ``mcap_reader``.
+  ``ENCODING:`` sections are opaque types and must follow ``MSG:``. New
+  ``SplitMcapMessage()`` and ``split_mcap_message()``, used by ``mcap_reader``.
 * **Breaking, parser**: ``ParseSnapshot()`` loses its unused ``callback_custom``
   parameter; ``SizeOf``, ``kMaxSchemaDepth`` and ``ParseSnapshotRecursive`` move to
   ``DataTamerParser::detail`` and ``NullCustomCallback`` is removed; the header needs a
