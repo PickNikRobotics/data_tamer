@@ -229,10 +229,10 @@ public:
    * Several threads may take snapshots of one channel: they take turns on its write
    * mutex. The first call with a sink attached calls startLogging(). It can block on a
    * writer and allocate: on a real-time thread use tryTakeSnapshot().
+   * The result may be ignored: every outcome is also counted in stats().
    * @param timestamp time of the snapshot; by default the system clock.
    */
-  [[nodiscard]] SnapshotResult
-  takeSnapshot(std::chrono::nanoseconds timestamp = NsecSinceEpoch());
+  SnapshotResult takeSnapshot(std::chrono::nanoseconds timestamp = NsecSinceEpoch());
 
   /**
    * @brief Lock-free takeSnapshot() for real-time threads: it never blocks or
@@ -313,21 +313,9 @@ public:
   /// The most sinks a channel holds.
   static constexpr size_t kMaxSinks = 8;
 
-  /// Building block of Stats::dropped_by_sink: prefer stats(). Writes up to `capacity`
-  /// attached sinks to `sinks` and, to `dropped`, the publications each refused because
-  /// its SinkWorker is stopped. Returns the number of attached sinks, which may exceed
-  /// `capacity`. The order is unspecified, and the pointers only tell sinks apart (a
-  /// removed worker's address can be reused): do not dereference them. Takes the
-  /// control mutex: not real-time safe.
-  [[nodiscard]] size_t sinkDropped(const SinkWorker** sinks, uint64_t* dropped,
-                                   size_t capacity) const;
-
-  /// Deprecated: read Stats::dropped_by_sink. Publications this sink refused; zero if
-  /// it is not attached.
-  [[deprecated("read stats().dropped_by_sink")]] [[nodiscard]] uint64_t
-  droppedSnapshots(const std::shared_ptr<SinkWorker>& sink) const;
-
-  /// Publications one attached sink refused. See sinkDropped().
+  /// Publications one attached sink refused because its SinkWorker is stopped. `sink`
+  /// only tells sinks apart (a removed worker's address can be reused): do not
+  /// dereference it.
   struct SinkDrops
   {
     const SinkWorker* sink = nullptr;
@@ -348,7 +336,7 @@ public:
     /// Snapshots at least one sink took (ok + partial); see snapshotsAccepted().
     uint64_t accepted = 0;
     /// One entry per sink attached at the moment of the read, in no promised
-    /// order; see sinkDropped().
+    /// order.
     std::vector<SinkDrops> dropped_by_sink;
   };
 
@@ -380,6 +368,11 @@ private:
   template <typename T>
   friend class LoggedValue;
   friend class ChannelsRegistry;
+  /// Building block of stats(): writes up to `capacity` attached sinks to `sinks` and,
+  /// to `dropped`, the publications each refused. Returns the number of attached sinks,
+  /// which may exceed `capacity`. Takes the control mutex: not real-time safe.
+  [[nodiscard]] size_t sinkDropped(const SinkWorker** sinks, uint64_t* dropped,
+                                   size_t capacity) const;
   /// The attached sinks, for ChannelsRegistry::stopAll().
   [[nodiscard]] std::vector<std::shared_ptr<SinkWorker>> dataSinks() const;
   /// State shared with this channel's LoggedValues (enable flags, write mutex).

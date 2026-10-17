@@ -5,10 +5,10 @@
 #include <memory>
 #include <string>
 
-#include "data_tamer/fwd.hpp"
-
-// ChannelsRegistry only names LogChannel and SinkWorker through std::shared_ptr.
-// Include data_tamer/channel.hpp to use a channel, data_tamer/data_sink.hpp for a sink.
+// The umbrella header: ChannelsRegistry plus LogChannel, LoggedValue and the sink
+// interface (channel.hpp includes data_sink.hpp). A header that only names these types
+// can include data_tamer/fwd.hpp instead.
+#include "data_tamer/channel.hpp"
 
 namespace DataTamer
 {
@@ -30,6 +30,10 @@ struct ChannelDefaults
   std::chrono::nanoseconds pool_snapshot_period{ 0 };
   /// LogChannel::setPayloadCapacity(bytes): minimum payload bytes per slot.
   size_t payload_capacity = 0;
+
+private:
+  friend class ChannelsRegistry;
+  friend class LogChannel;
 
   /// The settings as LogChannel sizes; zero leaves the library default.
   struct Sizes
@@ -68,8 +72,9 @@ public:
   void addDefaultSink(std::shared_ptr<SinkWorker> sink);
 
   /// Sets the defaults for the channels getChannel() creates after this call; existing
-  /// channels are not changed. Throws what ChannelDefaults::resolve() throws, and then
-  /// keeps the previous defaults.
+  /// channels are not changed. Throws std::invalid_argument if the pool is set both as
+  /// a count and in time, or a duration is not positive, and std::length_error if a
+  /// size is too large; the previous defaults are then kept.
   void setChannelDefaults(const ChannelDefaults& defaults);
 
   /// Returns the channel with this name, creating it on first use with the channel

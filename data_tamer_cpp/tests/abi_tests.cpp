@@ -161,7 +161,6 @@ DT_PIN_OFFSET(ChannelDefaults, pool_capacity, 0);
 DT_PIN_OFFSET(ChannelDefaults, pool_stall_tolerance, 8);
 DT_PIN_OFFSET(ChannelDefaults, pool_snapshot_period, 16);
 DT_PIN_OFFSET(ChannelDefaults, payload_capacity, 24);
-DT_PIN(ChannelDefaults::Sizes, 16, 8);  // returned by ChannelDefaults::resolve()
 DT_PIN(MCAPRingOptions, 56, 8);
 DT_PIN_OFFSET(MCAPRingOptions, filepath, 0);
 DT_PIN_OFFSET(MCAPRingOptions, window, 32);

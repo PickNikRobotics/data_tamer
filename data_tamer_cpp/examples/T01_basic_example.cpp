@@ -50,5 +50,5 @@ int main()
 
   // The serialized data of the next snapshot will contain
   // only [value_int], i.e. [id2], since the other two are disabled
-  (void)channel->takeSnapshot();
+  channel->takeSnapshot();
 }

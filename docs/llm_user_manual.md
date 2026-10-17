@@ -78,7 +78,7 @@ flowchart LR
 |---|---|
 | `LogChannel`, `LoggedValue`, `JoinNames`, `SnapshotResult` | `data_tamer/channel.hpp` |
 | The accessors of a `LoggedValue` you already hold | `data_tamer/logged_value.hpp` (creating one needs `channel.hpp`) |
-| `ChannelsRegistry` | `data_tamer/data_tamer.hpp` (plus `channel.hpp` to use a channel) |
+| `ChannelsRegistry`, and everything `channel.hpp` provides | `data_tamer/data_tamer.hpp` |
 | `DataSink`, `SinkWorker`, `Snapshot`, `SnapshotRef` | `data_tamer/data_sink.hpp` |
 | `Schema`, `ToStr(schema)`, `SchemaFormat` | `data_tamer/types.hpp` |
 | `TypeDefinitionTrait` | `data_tamer/custom_types.hpp` (also pulled in by `channel.hpp`) |
@@ -88,8 +88,9 @@ flowchart LR
 | `DummySink` (tests) | `data_tamer/sinks/dummy_sink.hpp` |
 | forward declarations only | `data_tamer/fwd.hpp` |
 
-`data_tamer/data_tamer.hpp` includes only `fwd.hpp`. Code that calls `LogChannel` members
-must include `data_tamer/channel.hpp`, even if it got the channel from the registry.
+`data_tamer/data_tamer.hpp` includes `channel.hpp`, which includes `data_sink.hpp`. A
+header that only names the types (a `std::shared_ptr<LogChannel>` member, a `LogChannel&`
+parameter) can include `fwd.hpp` instead.
 
 ## Minimal end-to-end example
 
@@ -475,7 +476,9 @@ loaded that way can allocate (glibc's dynamic TLS).
 | Payload larger than the slot | grows the slot (allocates) | returns `oversize` |
 | Use from a real-time thread | no | yes |
 
-Both return a `[[nodiscard]] SnapshotResult`. Cast to `(void)` to ignore it on purpose.
+Both return a `SnapshotResult`. The result of `takeSnapshot()` may be ignored: `stats()`
+counts every outcome. The result of `tryTakeSnapshot()` is `[[nodiscard]]`: before
+`startLogging()` it fails on every call with `not_started`.
 
 | Result | Meaning | What to do |
 |---|---|---|
@@ -587,9 +590,8 @@ channels it creates, their default sinks and their default settings.
   channels it creates from then on (table below). Existing channels are not changed:
   their owner may have configured them, and their sizes freeze at `startLogging()`. A field
   left at zero keeps the library default. The values are checked when the call is made
-  (`ChannelDefaults::resolve()`, which throws `std::invalid_argument` or
-  `std::length_error` like the `LogChannel` setters), and a refused call keeps the
-  previous defaults.
+  (it throws `std::invalid_argument` or `std::length_error` like the `LogChannel`
+  setters), and a refused call keeps the previous defaults.
 - `stopAll()` calls `SinkWorker::stop()` once on every default sink and every sink
   attached to a channel the registry created, however it was attached, in no particular
   order, on the calling thread. Sinks of channels made with `LogChannel::create()` are
@@ -942,8 +944,6 @@ subtract. A snapshot in flight at the time of a read is counted in `attempts` be
 is in `accepted`, so a window's difference is approximate by the calls in flight: clamp
 it at zero before you divide. Without calls that threw, `attempts` is the sum over all
 eight results.
-`droppedSnapshots(worker)` still works for one more release, but it is `[[deprecated]]`:
-use `dropped_by_sink`.
 
 `worker->stats()` returns a `SinkWorker::Stats`, cumulative over the worker's life
 (`stop()` and `start()` do not reset it):
@@ -981,7 +981,7 @@ The two extra counters cost the snapshot path two atomic increments (`attempts` 
 | `writeLockContended()`, `payloadReallocations()`, `droppedOversize()`, `snapshotAttempts()`, `snapshotsAccepted()`, `poolExhausted()` | yes | Atomic loads. |
 | `registerValue()`, `createLoggedValue()`, `unregister()`, `LoggedValue` destructor | no | Control mutex; can wait for a snapshot. |
 | `addDataSink()`, `removeDataSink()`, `startLogging()` | no | Control mutex; run sink callbacks. |
-| `LogChannel::stats()`, `droppedSnapshots()`, `sinkDropped()`, `getSchema()` | no | Control mutex. |
+| `LogChannel::stats()`, `getSchema()` | no | Control mutex. |
 | `SinkWorker::delivered()`, `errors()`, `queueHighWater()` | yes | Relaxed atomic loads; `noexcept`. |
 | `SinkWorker::stats()`, `lastError()` | no | Take a mutex and copy a string (allocates). |
 | `SinkWorker::stop()`, `drain()`, `flushPendingDump()`, `ChannelsRegistry::stopAll()` | no | Block until delivery or writing ends; `stop()` runs `onStop()`. |
@@ -1031,8 +1031,6 @@ MCAP file with it.
 
 ## Common mistakes
 
-- [ ] Included only `data_tamer/data_tamer.hpp` and used `LogChannel`: include
-      `data_tamer/channel.hpp`.
 - [ ] Registered a value after `startLogging()` or after the first snapshot with a sink: it
       throws. Register everything first.
 - [ ] Registered a pointer that dangles: a local that goes out of scope, a vector element

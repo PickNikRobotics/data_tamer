@@ -39,16 +39,6 @@ public:
   int snapshots = 0;
   int throw_every = 0;  // 0: never
 };
-
-// The deprecated per-sink getter, called without the deprecation warning.
-uint64_t deprecatedDroppedSnapshots(const LogChannel& channel,
-                                    const Attached<CountingSink>& sink)
-{
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-  return channel.droppedSnapshots(sink);
-#pragma GCC diagnostic pop
-}
 }  // namespace
 
 TEST(ChannelStats, CountersMatchEveryResultOfAScriptedSequence)
@@ -185,25 +175,12 @@ TEST(ChannelStats, DroppedIsCountedPerSink)
   EXPECT_EQ(stats.accepted, 4u);
   EXPECT_EQ(stats.attempts, 4u);
 
-  // The deprecated per-sink getter agrees.
-  EXPECT_EQ(deprecatedDroppedSnapshots(*channel, a), 0u);
-  EXPECT_EQ(deprecatedDroppedSnapshots(*channel, b), 4u);
-  EXPECT_EQ(deprecatedDroppedSnapshots(*channel, c), 1u);
-
-  // sinkDropped() is the building block: one call returns the whole table, and
-  // the count of attached sinks even when the arrays are too small for it.
-  const SinkWorker* workers[LogChannel::kMaxSinks];
-  uint64_t drops[LogChannel::kMaxSinks];
-  EXPECT_EQ(channel->sinkDropped(workers, drops, LogChannel::kMaxSinks), 3u);
-  EXPECT_EQ(channel->sinkDropped(workers, drops, 2), 3u);
-  EXPECT_EQ(channel->sinkDropped(workers, drops, 0), 3u);
-
   // A removed sink leaves the array and its count goes with it; the others stay.
   channel->removeDataSink(b);
   stats = channel->stats();
   ASSERT_EQ(stats.dropped_by_sink.size(), 2u);
   EXPECT_EQ(droppedBy(stats, c), 1u);
-  EXPECT_EQ(deprecatedDroppedSnapshots(*channel, b), 0u);
+  EXPECT_EQ(droppedBy(stats, b), 0u);
 }
 
 TEST(ChannelStats, ChannelWithoutSinksHasAnEmptyDroppedArray)

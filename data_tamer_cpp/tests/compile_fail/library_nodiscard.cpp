@@ -62,5 +62,13 @@ void useResults(const std::shared_ptr<DataTamer::SnapshotPool>& pool,
 #else
   (void)channel.getNumberOfSinks();
 #endif
+  // takeSnapshot() may be ignored (stats() counts every outcome); tryTakeSnapshot()
+  // may not: before startLogging() it fails on every call with `not_started`.
+  channel.takeSnapshot();
+#ifdef DT_IGNORE_TRY_TAKE_SNAPSHOT
+  channel.tryTakeSnapshot();
+#else
+  (void)channel.tryTakeSnapshot();
+#endif
 }
 }  // namespace probe

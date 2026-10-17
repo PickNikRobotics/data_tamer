@@ -248,7 +248,7 @@ set(DATA_TAMER_NODISCARD_REGEX "ignoring return value|discarding return value")
 
 # Each case of library_nodiscard.cpp and parser_nodiscard.cpp ignores one result.
 foreach(case POOL_TRY_ACQUIRE POOL_ADOPT TO_STR TO_YAML RENDER_SCHEMA REQUEST_DUMP
-             TRY_SET_ENABLED CREATE NUMBER_OF_SINKS)
+             TRY_SET_ENABLED CREATE NUMBER_OF_SINKS TRY_TAKE_SNAPSHOT)
     string(TOLOWER ${case} case_name)
     data_tamer_compile_fail_test(${case_name}_result_is_nodiscard
         library_nodiscard.cpp DT_IGNORE_${case}
@@ -276,10 +276,6 @@ foreach(case VALUE VECTOR MEMBER LOGGED)
     data_tamer_compile_fail_test(long_double_${case_name}_is_rejected
         long_double_registration.cpp DT_LONG_DOUBLE_${case} REGEX "has no wire type")
 endforeach()
-
-data_tamer_compile_fail_test(dropped_snapshots_is_deprecated
-    dropped_snapshots_deprecated.cpp DT_CALL_DEPRECATED
-    REGEX "deprecated-declarations|declared deprecated")
 
 data_tamer_compile_fail_test(endian_swap_of_long_double_is_rejected
     endian_swap_size.cpp DT_SWAP_LONG_DOUBLE OPTIONS -DSERIALIZE_LITTLEENDIAN=0
