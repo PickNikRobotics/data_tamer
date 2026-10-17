@@ -4,7 +4,8 @@ data_tamer records the values of many C++ variables at once, as one "snapshot" p
 usually from a periodic control loop, and delivers the snapshots to sinks: MCAP files, a
 RAM flight recorder, ROS 2 topics or your own sink. This manual is for an agent adding
 data_tamer logging to another code base. Header paths are relative to
-`data_tamer_cpp/include/`. To change the library itself, read `CLAUDE.md` instead.
+`data_tamer_cpp/include/`. To change the library itself, read `CLAUDE.md` instead. To
+port code written for 1.x, start with `docs/MIGRATION.md`.
 
 ## Linking
 

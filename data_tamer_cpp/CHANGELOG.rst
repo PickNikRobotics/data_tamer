@@ -4,6 +4,8 @@ Changelog for package data_tamer
 
 Unreleased
 ----------
+* Docs: ``docs/MIGRATION.md`` lists what code written for 1.x must change for 2.0,
+  with the behaviour changes that compile silently.
 * **Real-time**: the first access of the transaction state on a thread no longer
   allocates when libdata_tamer is loaded with ``dlopen()`` (a plugin, pluginlib,
   ros2_control), so a ``scopedWrite()`` on each real-time thread during setup is no
