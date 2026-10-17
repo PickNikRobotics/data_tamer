@@ -1,8 +1,8 @@
 #pragma once
 
-#include "data_tamer/contrib/SerializeMe.hpp"
-#include "data_tamer/data_sink.hpp"
-#include "data_tamer/types.hpp"
+#include "data_tamer_v2/contrib/SerializeMe.hpp"
+#include "data_tamer_v2/data_sink.hpp"
+#include "data_tamer_v2/types.hpp"
 
 // Do not define MCAP_IMPLEMENTATION (see "Building against it" below).
 // Only mcap_sink.cpp does, before including this header.

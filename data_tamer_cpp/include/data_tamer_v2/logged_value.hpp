@@ -1,8 +1,8 @@
 #pragma once
 
-#include "data_tamer/fwd.hpp"
-#include "data_tamer/types.hpp"
-#include "data_tamer/details/locked_reference.hpp"
+#include "data_tamer_v2/fwd.hpp"
+#include "data_tamer_v2/types.hpp"
+#include "data_tamer_v2/details/locked_reference.hpp"
 
 #include <atomic>
 #include <cstdint>

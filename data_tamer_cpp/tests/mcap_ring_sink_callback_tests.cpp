@@ -1,5 +1,5 @@
 // The dump callback of MCAPRingSink and the counters it can read.
-#include "data_tamer/sinks/mcap_ring_sink.hpp"
+#include "data_tamer_v2/sinks/mcap_ring_sink.hpp"
 #include "mcap_test_utils.hpp"
 #include "test_sinks.hpp"
 

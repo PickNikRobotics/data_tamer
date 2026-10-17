@@ -1,8 +1,8 @@
 // SinkWorker lifecycle calls (stop(), start(), drain(), destruction) made from sink
 // callbacks and from several threads at once.
-#include "data_tamer/channel.hpp"
-#include "data_tamer/data_sink.hpp"
-#include "data_tamer/data_tamer.hpp"
+#include "data_tamer_v2/channel.hpp"
+#include "data_tamer_v2/data_sink.hpp"
+#include "data_tamer_v2/data_tamer.hpp"
 #include "gate.hpp"
 #include "hang_watchdog.hpp"
 #include "test_sinks.hpp"

@@ -54,11 +54,11 @@ flowchart LR
   Q2 --> S2["DataSink::onSnapshot<br/>e.g. ROS2PublisherSink"]
 ```
 
-- `ChannelsRegistry` (`data_tamer/data_tamer.hpp`) creates channels by name, applies
+- `ChannelsRegistry` (`data_tamer_v2/data_tamer.hpp`) creates channels by name, applies
   default settings and attaches default sinks to them, and stops every sink at shutdown
   (`stopAll()`). `ChannelsRegistry::Global()` is a process-wide instance. You can also
   create channels directly with `LogChannel::create(name)`.
-- `LogChannel` (`data_tamer/channel.hpp`) holds pointers to registered variables. It
+- `LogChannel` (`data_tamer_v2/channel.hpp`) holds pointers to registered variables. It
   reads them only when you take a snapshot. One channel is one schema and one rate: use
   several channels for several loops or rates.
 - `startLogging()` freezes the schema, allocates a pool of snapshot slots plus one queue per
@@ -69,7 +69,7 @@ flowchart LR
   sink. The slot returns to the pool when the last sink releases its reference. A queued
   reference holds a slot, so a queue can't fill while the pool has a free slot: the pool
   is the only bound.
-- `SinkWorker` (`data_tamer/data_sink.hpp`) owns one `DataSink`, the queues of the
+- `SinkWorker` (`data_tamer_v2/data_sink.hpp`) owns one `DataSink`, the queues of the
   channels attached to it and the thread that calls `onSnapshot()`. Channels take sinks
   as `std::shared_ptr<SinkWorker>`.
 
@@ -77,19 +77,19 @@ flowchart LR
 
 | You need | Include |
 |---|---|
-| `LogChannel`, `LoggedValue`, `JoinNames`, `SnapshotResult` | `data_tamer/channel.hpp` |
-| The accessors of a `LoggedValue` you already hold | `data_tamer/logged_value.hpp` (creating one needs `channel.hpp`) |
-| `ChannelsRegistry`, and everything `channel.hpp` provides | `data_tamer/data_tamer.hpp` |
-| `DataSink`, `SinkWorker`, `Snapshot`, `SnapshotRef` | `data_tamer/data_sink.hpp` |
-| `Schema`, `ToStr(schema)`, `SchemaFormat` | `data_tamer/types.hpp` |
-| `TypeDefinitionTrait` | `data_tamer/custom_types.hpp` (also pulled in by `channel.hpp`) |
-| `MCAPSink` | `data_tamer/sinks/mcap_sink.hpp` |
-| `MCAPRingSink`, `MCAPRingOptions` | `data_tamer/sinks/mcap_ring_sink.hpp` |
-| `ROS2PublisherSink`, `ROS2PublisherOptions` | `data_tamer/sinks/ros2_publisher_sink.hpp` |
-| `DummySink` (tests) | `data_tamer/sinks/dummy_sink.hpp` |
-| forward declarations only | `data_tamer/fwd.hpp` |
+| `LogChannel`, `LoggedValue`, `JoinNames`, `SnapshotResult` | `data_tamer_v2/channel.hpp` |
+| The accessors of a `LoggedValue` you already hold | `data_tamer_v2/logged_value.hpp` (creating one needs `channel.hpp`) |
+| `ChannelsRegistry`, and everything `channel.hpp` provides | `data_tamer_v2/data_tamer.hpp` |
+| `DataSink`, `SinkWorker`, `Snapshot`, `SnapshotRef` | `data_tamer_v2/data_sink.hpp` |
+| `Schema`, `ToStr(schema)`, `SchemaFormat` | `data_tamer_v2/types.hpp` |
+| `TypeDefinitionTrait` | `data_tamer_v2/custom_types.hpp` (also pulled in by `channel.hpp`) |
+| `MCAPSink` | `data_tamer_v2/sinks/mcap_sink.hpp` |
+| `MCAPRingSink`, `MCAPRingOptions` | `data_tamer_v2/sinks/mcap_ring_sink.hpp` |
+| `ROS2PublisherSink`, `ROS2PublisherOptions` | `data_tamer_v2/sinks/ros2_publisher_sink.hpp` |
+| `DummySink` (tests) | `data_tamer_v2/sinks/dummy_sink.hpp` |
+| forward declarations only | `data_tamer_v2/fwd.hpp` |
 
-`data_tamer/data_tamer.hpp` includes `channel.hpp`, which includes `data_sink.hpp`. A
+`data_tamer_v2/data_tamer.hpp` includes `channel.hpp`, which includes `data_sink.hpp`. A
 header that only names the types (a `std::shared_ptr<LogChannel>` member, a `LogChannel&`
 parameter) can include `fwd.hpp` instead.
 
@@ -99,8 +99,8 @@ A 1 kHz loop that logs four joints, a cycle time and a mode to an MCAP file. It 
 as C++17 against the current headers and decodes with the Python reader.
 
 ```cpp
-#include "data_tamer/channel.hpp"
-#include "data_tamer/sinks/mcap_sink.hpp"
+#include "data_tamer_v2/channel.hpp"
+#include "data_tamer_v2/sinks/mcap_sink.hpp"
 
 #include <array>
 #include <chrono>
@@ -208,7 +208,7 @@ The recorded names are `joints/LF/position`, `joints/LF/velocity`, ...,
 
 ## Registering values
 
-`LogChannel` (`data_tamer/channel.hpp`) offers:
+`LogChannel` (`data_tamer_v2/channel.hpp`) offers:
 
 - `registerValue(name, const T* ptr)` for integers, `float`, `double`, `bool`, `char`,
   enums (recorded as their underlying type), `std::atomic<T>` of those (read with a relaxed
@@ -216,7 +216,7 @@ The recorded names are `joints/LF/position`, `joints/LF/velocity`, ...,
   [Custom types](#custom-types)). Returns a `RegistrationID`.
 - `createLoggedValue<T>(name, initial_value = T{})` returns a
   `std::shared_ptr<LoggedValue<T>>` that owns the variable and unregisters it in its
-  destructor (`data_tamer/logged_value.hpp`). `T` defaults to `double`.
+  destructor (`data_tamer_v2/logged_value.hpp`). `T` defaults to `double`.
 - `registerCustomValue(name, ptr, CustomSerializer::Ptr)` bypasses the built-in
   serialization. Generic decoders may not be able to read the result: prefer a custom
   type.
@@ -248,7 +248,7 @@ per character. Do not log text.
   registrations), an allocation failure and `createLoggedValue()` included.
 - Registration accepts empty `/`-separated components (`"/loco//x/"`), but PlotJuggler
   shows them as empty path elements. Build hierarchical names with
-  `DataTamer::JoinNames(parts...)` (`data_tamer/names.hpp`), which drops empty components:
+  `DataTamer::JoinNames(parts...)` (`data_tamer_v2/names.hpp`), which drops empty components:
   `JoinNames("/loco/", "LF/", "x") == "loco/LF/x"`. Enforce the rule with
   `assert(DataTamer::IsCanonicalName(name))` if you want to.
 - Custom type fields, vector elements and array elements extend the name with `/field`
@@ -344,8 +344,8 @@ progress: never release the last `shared_ptr` on a real-time thread. Inside
 ## Custom types
 
 A struct is recorded field by field once data_tamer knows its fields. Specialize
-`DataTamer::TypeDefinitionTrait<T>` (`data_tamer/contrib/SerializeMe.hpp`, reached
-through `data_tamer/custom_types.hpp`): it works for types you cannot modify and needs
+`DataTamer::TypeDefinitionTrait<T>` (`data_tamer_v2/contrib/SerializeMe.hpp`, reached
+through `data_tamer_v2/custom_types.hpp`): it works for types you cannot modify and needs
 no change to their namespace. See the `JointState` trait in the
 [end-to-end example](#minimal-end-to-end-example).
 
@@ -572,7 +572,7 @@ DataTamer::ChannelsRegistry::Global().stopAll();
 
 ### Registry
 
-`ChannelsRegistry` (`data_tamer/data_tamer.hpp`) is the session object: it owns the
+`ChannelsRegistry` (`data_tamer_v2/data_tamer.hpp`) is the session object: it owns the
 channels it creates, their default sinks and their default settings.
 
 - `getChannel(name)` creates the channel on first use. It applies the channel defaults,
@@ -621,7 +621,7 @@ registry.stopAll();  // run.mcap is complete
 
 ### MCAPSink
 
-`MCAPSink::create(filepath, do_compression = false)` (`data_tamer/sinks/mcap_sink.hpp`)
+`MCAPSink::create(filepath, do_compression = false)` (`data_tamer_v2/sinks/mcap_sink.hpp`)
 opens the file in its constructor and throws `std::runtime_error` if it cannot. An
 existing file at that path is overwritten.
 
@@ -651,12 +651,12 @@ existing file at that path is overwritten.
   (as a reset does), unless `restartRecording()` opened a file meanwhile.
 - A failed write throws from `onSnapshot()` and shows in `worker->errors()`.
 
-`data_tamer/sinks/mcap_encoding.hpp` exposes the same encoding (`AddChannel()`,
+`data_tamer_v2/sinks/mcap_encoding.hpp` exposes the same encoding (`AddChannel()`,
 `WriteSnapshot()`) for a custom sink that writes MCAP files itself.
 
 ### MCAPRingSink (flight recorder)
 
-`MCAPRingSink` (`data_tamer/sinks/mcap_ring_sink.hpp`) keeps the recent past of every
+`MCAPRingSink` (`data_tamer_v2/sinks/mcap_ring_sink.hpp`) keeps the recent past of every
 attached channel in RAM and writes an MCAP file only when asked.
 
 | `MCAPRingOptions` field | Default | Meaning |
@@ -736,7 +736,7 @@ ring->stop();
 ### ROS2PublisherSink
 
 `ROS2PublisherSink::create(node, topic_prefix, options = {})`
-(`data_tamer/sinks/ros2_publisher_sink.hpp`) takes an `rclcpp::Node`, an
+(`data_tamer_v2/sinks/ros2_publisher_sink.hpp`) takes an `rclcpp::Node`, an
 `rclcpp_lifecycle::LifecycleNode`, a `shared_ptr` to either, or a
 `PublisherNodeInterfaces`.
 
@@ -781,7 +781,7 @@ is measured on the steady clock when snapshots arrive, not with snapshot timesta
 
 ### DummySink
 
-`DummySink::create()` (`data_tamer/sinks/dummy_sink.hpp`) counts and keeps the latest
+`DummySink::create()` (`data_tamer_v2/sinks/dummy_sink.hpp`) counts and keeps the latest
 snapshot, for tests. Its accessors (`latestSnapshot()`, `latestPayloadSize()`,
 `latestActiveMask()`, `snapshotsCount(hash)`, `schemasCount()`, `firstSchemaHash()`,
 `schema(hash)`) lock internally. Call `worker->drain()` before asserting, instead of
@@ -1019,7 +1019,7 @@ reads one file, so read numbered rollover files one after the other. For ROS 2 m
 use `dt.SchemaRegistry`, `dt.parse_snapshot_msg()` and `dt.iter_snapshot_batch()` (see
 `python/README.md`).
 
-In C++, `data_tamer_parser/data_tamer_parser.hpp` is a single header with no dependency
+In C++, `data_tamer_v2/data_tamer_parser.hpp` is a single header with no dependency
 on the library. `DataTamerParser::BuildSchemaFromText()` reads both schema renderings.
 `ParseSnapshot()` visits each value and returns false for a snapshot of another schema or
 with bytes left over; its result is `[[nodiscard]]`. `SplitMcapMessage()` splits an MCAP

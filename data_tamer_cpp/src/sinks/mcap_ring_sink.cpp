@@ -1,8 +1,8 @@
-#include "data_tamer/sinks/mcap_ring_sink.hpp"
+#include "data_tamer_v2/sinks/mcap_ring_sink.hpp"
 
 // The MCAP implementation is compiled in mcap_sink.cpp.
-#include "data_tamer/sinks/mcap_encoding.hpp"
-#include "data_tamer/sinks/mcap_sink.hpp"  // details::NumberedPath
+#include "data_tamer_v2/sinks/mcap_encoding.hpp"
+#include "data_tamer_v2/sinks/mcap_sink.hpp"  // details::NumberedPath
 
 #include <algorithm>
 #include <atomic>

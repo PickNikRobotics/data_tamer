@@ -1,9 +1,9 @@
 // MCAP times are unsigned: a negative snapshot timestamp is an error, not a time near
 // the end of the 64-bit range.
-#include "data_tamer/channel.hpp"
-#include "data_tamer/sinks/mcap_encoding.hpp"
-#include "data_tamer/sinks/mcap_ring_sink.hpp"
-#include "data_tamer/sinks/mcap_sink.hpp"
+#include "data_tamer_v2/channel.hpp"
+#include "data_tamer_v2/sinks/mcap_encoding.hpp"
+#include "data_tamer_v2/sinks/mcap_ring_sink.hpp"
+#include "data_tamer_v2/sinks/mcap_sink.hpp"
 #include "mcap_test_utils.hpp"
 #include "test_sinks.hpp"
 

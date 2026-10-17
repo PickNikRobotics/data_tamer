@@ -1,9 +1,9 @@
 // DataTamer::TypeDefinitionTrait: describing types without reopening their
 // namespace (PickNikRobotics/data_tamer#94).
 
-#include "data_tamer/channel.hpp"
-#include "data_tamer/custom_types.hpp"
-#include "data_tamer/sinks/dummy_sink.hpp"
+#include "data_tamer_v2/channel.hpp"
+#include "data_tamer_v2/custom_types.hpp"
+#include "data_tamer_v2/sinks/dummy_sink.hpp"
 
 #include "test_sinks.hpp"
 

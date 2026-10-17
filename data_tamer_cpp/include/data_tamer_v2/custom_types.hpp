@@ -11,8 +11,8 @@
 #include <typeinfo>
 #include <utility>
 
-#include "data_tamer/types.hpp"
-#include "data_tamer/contrib/SerializeMe.hpp"
+#include "data_tamer_v2/types.hpp"
+#include "data_tamer_v2/contrib/SerializeMe.hpp"
 
 namespace DataTamer
 {

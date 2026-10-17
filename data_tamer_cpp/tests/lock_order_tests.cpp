@@ -1,7 +1,7 @@
 // Writers (scopedWrite(), LoggedValue guards), the snapshot path and control
 // operations used together: no combination of them may deadlock.
-#include "data_tamer/channel.hpp"
-#include "data_tamer/sinks/dummy_sink.hpp"
+#include "data_tamer_v2/channel.hpp"
+#include "data_tamer_v2/sinks/dummy_sink.hpp"
 #include "hang_watchdog.hpp"
 #include "observed_thread.hpp"
 #include "test_sinks.hpp"

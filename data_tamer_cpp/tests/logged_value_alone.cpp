@@ -1,6 +1,6 @@
 // Includes no data_tamer header but logged_value.hpp: the members called below must be
 // defined there, or this program does not link. It is built by a test, never run.
-#include "data_tamer/logged_value.hpp"
+#include "data_tamer_v2/logged_value.hpp"
 
 #include <cstddef>
 #include <vector>

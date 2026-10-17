@@ -1,4 +1,4 @@
-#include "data_tamer/channel.hpp"
+#include "data_tamer_v2/channel.hpp"
 #include "nested_types.hpp"
 
 #include <gtest/gtest.h>

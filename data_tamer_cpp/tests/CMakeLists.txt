@@ -213,7 +213,7 @@ target_include_directories(public_headers_cxx17 PRIVATE ${PROJECT_SOURCE_DIR}/in
 target_link_libraries(public_headers_cxx17 PRIVATE ${DATA_TAMER_MCAP_TARGET})
 data_tamer_strict_cxx17(public_headers_cxx17)
 
-# include/data_tamer/fwd.hpp must declare the types exactly as the full headers
+# include/data_tamer_v2/fwd.hpp must declare the types exactly as the full headers
 # define them, and work alone and in either include order. Object libraries only:
 # nothing is linked. -Wmismatched-tags (a wrong class/struct key) is added where
 # the compiler has it.

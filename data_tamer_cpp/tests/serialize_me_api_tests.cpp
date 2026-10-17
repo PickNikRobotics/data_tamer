@@ -1,6 +1,6 @@
-#include "data_tamer/channel.hpp"
-#include "data_tamer/contrib/SerializeMe.hpp"
-#include "data_tamer/custom_types.hpp"
+#include "data_tamer_v2/channel.hpp"
+#include "data_tamer_v2/contrib/SerializeMe.hpp"
+#include "data_tamer_v2/custom_types.hpp"
 
 #include <gtest/gtest.h>
 

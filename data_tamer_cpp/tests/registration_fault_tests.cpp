@@ -1,8 +1,8 @@
 // Registration under allocation failure. AllocCounter::FailNth makes the Nth allocation
 // of the calling thread throw std::bad_alloc. For every N, a registration must complete
 // or leave the channel as it was, and the channel must go on working.
-#include "data_tamer/channel.hpp"
-#include "data_tamer/sinks/dummy_sink.hpp"
+#include "data_tamer_v2/channel.hpp"
+#include "data_tamer_v2/sinks/dummy_sink.hpp"
 
 #include "alloc_counter.hpp"
 #include "decode_utils.hpp"

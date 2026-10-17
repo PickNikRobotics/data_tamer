@@ -1,8 +1,8 @@
 // Flight recorder: keep the last second of data in RAM and write it to an MCAP
 // file only when something goes wrong, plus half a second after the event.
-#include "data_tamer/channel.hpp"
-#include "data_tamer/data_tamer.hpp"
-#include "data_tamer/sinks/mcap_ring_sink.hpp"
+#include "data_tamer_v2/channel.hpp"
+#include "data_tamer_v2/data_tamer.hpp"
+#include "data_tamer_v2/sinks/mcap_ring_sink.hpp"
 
 #include <chrono>
 #include <cmath>

@@ -2,7 +2,7 @@
 // every number is byte-swapped on its way in and out of the buffer. On a little endian
 // machine that makes the "wire" bytes the reverse of the memory bytes, which is what a
 // big endian host produces for the little endian wire format.
-#include "data_tamer/contrib/SerializeMe.hpp"
+#include "data_tamer_v2/contrib/SerializeMe.hpp"
 
 #include <gtest/gtest.h>
 

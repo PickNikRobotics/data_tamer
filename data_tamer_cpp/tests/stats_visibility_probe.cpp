@@ -1,8 +1,8 @@
 // Built as a shared object by tests/CMakeLists.txt; check_no_stats_symbol.cmake
 // then asserts that its dynamic symbol table does not export any stats().
-#include "data_tamer/channel.hpp"
-#include "data_tamer/data_sink.hpp"
-#include "data_tamer/sinks/mcap_ring_sink.hpp"
+#include "data_tamer_v2/channel.hpp"
+#include "data_tamer_v2/data_sink.hpp"
+#include "data_tamer_v2/sinks/mcap_ring_sink.hpp"
 
 extern "C" void data_tamer_stats_probe(DataTamer::LogChannel* channel,
                                        DataTamer::SinkWorker* worker,

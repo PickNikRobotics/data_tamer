@@ -1,8 +1,8 @@
 // MCAPRingSink after the snapshot clock jumped back, as in a simulation reset, or
 // stepped back a little, as with snapshots of several threads.
-#include "data_tamer/channel.hpp"
-#include "data_tamer/sinks/mcap_ring_sink.hpp"
-#include "data_tamer/sinks/mcap_sink.hpp"
+#include "data_tamer_v2/channel.hpp"
+#include "data_tamer_v2/sinks/mcap_ring_sink.hpp"
+#include "data_tamer_v2/sinks/mcap_sink.hpp"
 #include "mcap_test_utils.hpp"
 #include "test_sinks.hpp"
 

@@ -78,7 +78,7 @@ PlotJuggler shows as a tree. `DataTamer::JoinNames()` drops empty components, so
 end up with `loco//LF/x`:
 
 ```cpp
-#include "data_tamer/names.hpp"
+#include "data_tamer_v2/names.hpp"
 
 const auto name = DataTamer::JoinNames("loco/", leg_name, "x");
 assert(DataTamer::IsCanonicalName(name));  // optional check
@@ -103,7 +103,7 @@ function in the namespace of the type. For types whose namespace you don't own, 
 Eigen or a vendor SDK, specialize `DataTamer::TypeDefinitionTrait` instead:
 
 ```cpp
-#include "data_tamer/custom_types.hpp"
+#include "data_tamer_v2/custom_types.hpp"
 
 template <>
 struct DataTamer::TypeDefinitionTrait<Eigen::Vector3d>
@@ -194,7 +194,7 @@ reach the sink's own functions with `worker->as<SinkType>()`.
 ### Recording to MCAP files
 
 ```cpp
-#include "data_tamer/sinks/mcap_sink.hpp"
+#include "data_tamer_v2/sinks/mcap_sink.hpp"
 
 auto worker = DataTamer::MCAPSink::create("run.mcap");
 channel->addDataSink(worker);
@@ -220,7 +220,7 @@ counted once in `worker->errors()` and the current file keeps recording.
 file only when you call `requestDump()`, for instance after a fault:
 
 ```cpp
-#include "data_tamer/sinks/mcap_ring_sink.hpp"
+#include "data_tamer_v2/sinks/mcap_ring_sink.hpp"
 
 DataTamer::MCAPRingOptions options;
 options.filepath = "fault.mcap";            // fault_1.mcap, fault_2.mcap, ...
@@ -246,7 +246,7 @@ is a complete example.
 aggregate the samples into batches on `<prefix>/data_batch`:
 
 ```cpp
-#include "data_tamer/sinks/ros2_publisher_sink.hpp"
+#include "data_tamer_v2/sinks/ros2_publisher_sink.hpp"
 
 DataTamer::ROS2PublisherOptions options;
 options.aggregate = true;
@@ -340,7 +340,7 @@ files one after the other. Both decoders also read the files of data_tamer 1.x; 
 releases before 0.7.0 (2023) are not readable.
 
 In C++, copy the single header
-[data_tamer_parser.hpp](../data_tamer_cpp/include/data_tamer_parser/data_tamer_parser.hpp)
+[data_tamer_parser.hpp](../data_tamer_cpp/include/data_tamer_v2/data_tamer_parser.hpp)
 into your project: it has no dependencies.
 [mcap_reader.cpp](../data_tamer_cpp/examples/mcap_reader.cpp) shows how to use it,
 including `SplitMcapMessage()` and the checks on a corrupt message. The
@@ -355,7 +355,7 @@ release runs with any later 2.x library, and `find_package(data_tamer 2 REQUIRED
 any 2.x. Defaults that live in headers change only when you rebuild.
 
 A header that only names DataTamer types, such as a `LogChannel&` parameter or a
-`std::shared_ptr<SinkWorker>` member, can include `data_tamer/fwd.hpp` instead of the full
+`std::shared_ptr<SinkWorker>` member, can include `data_tamer_v2/fwd.hpp` instead of the full
 headers. It forward-declares the types and includes nothing.
 
 ## Troubleshooting

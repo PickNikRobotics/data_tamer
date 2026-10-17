@@ -1,7 +1,7 @@
 // MCAPSink opening the file it is writing again: a reset without rollover and
 // restartRecording() on the current path.
-#include "data_tamer/channel.hpp"
-#include "data_tamer/sinks/mcap_sink.hpp"
+#include "data_tamer_v2/channel.hpp"
+#include "data_tamer_v2/sinks/mcap_sink.hpp"
 #include "mcap_test_utils.hpp"
 #include "test_sinks.hpp"
 

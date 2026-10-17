@@ -20,19 +20,23 @@ included.
 ## Steps
 
 1. Rebuild every binary that links libdata_tamer. Don't mix 1.x and 2.0 binaries.
-2. Create sinks with their `create()` function, and port custom sinks to `DataSink`.
-3. Replace `if(!channel->takeSnapshot())` with a check of the `SnapshotResult`.
-4. In other threads, replace `writeMutex()` with `scopedWrite()`.
-5. Stop the sinks before the program exits: `ChannelsRegistry::Global().stopAll()` or
+2. Change every `#include "data_tamer/..."` to `#include "data_tamer_v2/..."`, and
+   `data_tamer_parser/data_tamer_parser.hpp` to `data_tamer_v2/data_tamer_parser.hpp`.
+3. Create sinks with their `create()` function, and port custom sinks to `DataSink`.
+4. Replace `if(!channel->takeSnapshot())` with a check of the `SnapshotResult`.
+5. In other threads, replace `writeMutex()` with `scopedWrite()`.
+6. Stop the sinks before the program exits: `ChannelsRegistry::Global().stopAll()` or
    `worker->stop()`.
-6. Check the [behaviour changes](#behaviour-changes): MCAP files now roll over, the
+7. Check the [behaviour changes](#behaviour-changes): MCAP files now roll over, the
    pool now drops snapshots, and the ROS 2 QoS changed.
-7. Update every reader of the recorded data: 1.x parsers can't read 2.0 files.
+8. Update every reader of the recorded data: 1.x parsers can't read 2.0 files.
 
 ## Quick reference
 
 | 1.x | 2.0 |
 |---|---|
+| `#include "data_tamer/channel.hpp"` (every header) | `#include "data_tamer_v2/channel.hpp"` |
+| `#include "data_tamer_parser/data_tamer_parser.hpp"` | `#include "data_tamer_v2/data_tamer_parser.hpp"` |
 | `std::make_shared<MCAPSink>(path)` | `MCAPSink::create(path)`, a `std::shared_ptr<SinkWorker>` |
 | `std::make_shared<ROS2PublisherSink>(node, prefix)` | `ROS2PublisherSink::create(node, prefix)` |
 | `std::make_shared<DummySink>()` | `DummySink::create()` |
@@ -57,7 +61,8 @@ included.
 | `DataTamerParser::BuilSchemaFromText()` | `BuildSchemaFromText()` (the old name is deprecated) |
 | `ParseSnapshot(schema, view, on_number, on_custom)` | `ParseSnapshot(schema, view, on_number)` |
 
-`data_tamer/data_tamer.hpp` still includes the whole channel API, as in 1.x.
+`data_tamer_v2/data_tamer.hpp` includes the whole channel API, as `data_tamer/data_tamer.hpp`
+did in 1.x. The new folder name lets 1.x and 2.x headers be installed side by side.
 
 ## Sinks
 
@@ -118,8 +123,8 @@ private:
 auto sink = std::make_shared<CsvSink>();
 
 // 2.0
-#include "data_tamer/data_sink.hpp"
-#include "data_tamer/types.hpp"  // Schema: data_sink.hpp only declares it
+#include "data_tamer_v2/data_sink.hpp"
+#include "data_tamer_v2/types.hpp"  // Schema: data_sink.hpp only declares it
 #include <stdexcept>
 #include <unordered_map>
 
@@ -241,7 +246,7 @@ several threads, do it inside `scopedWrite()`.
 - Names are checked more strictly. 1.x rejected only spaces. 2.0 also rejects empty names,
   tabs, line breaks and control characters, in value names and in the names of custom
   types and their fields. A channel name may contain spaces, but it can't be empty or
-  contain control characters. `DataTamer::JoinNames()` (`data_tamer/names.hpp`) builds
+  contain control characters. `DataTamer::JoinNames()` (`data_tamer_v2/names.hpp`) builds
   `a/b/c` names without empty components.
 - `long long`, `unsigned long long`, `wchar_t`, `char16_t` and `char32_t` are recorded as
   integers of their size. 1.x recorded them as `other`, which no reader decodes.
@@ -302,7 +307,7 @@ So:
 
 - update PlotJuggler to a release that bundles the 2.0 parser;
 - in your own C++ readers, copy the 2.0
-  [data_tamer_parser.hpp](../data_tamer_cpp/include/data_tamer_parser/data_tamer_parser.hpp);
+  [data_tamer_v2/data_tamer_parser.hpp](../data_tamer_cpp/include/data_tamer_v2/data_tamer_parser.hpp);
 - 2.0 readers still read files recorded with 1.x (schema version 4), using the hash the
   file declares. They reject schema texts without a `### version:` line, written by
   releases before 0.7.0 (late 2023), among them the header-less lines of the 0.3 to 0.5

@@ -1,15 +1,15 @@
 #pragma once
 
-#include "data_tamer/fwd.hpp"
-#include "data_tamer/contrib/SerializeMe.hpp"
-#include "data_tamer/custom_types.hpp"
-#include "data_tamer/data_sink.hpp"
-#include "data_tamer/logged_value.hpp"
-#include "data_tamer/names.hpp"
-#include "data_tamer/types.hpp"
-#include "data_tamer/values.hpp"
-#include "data_tamer/details/abi.hpp"
-#include "data_tamer/details/locked_reference.hpp"
+#include "data_tamer_v2/fwd.hpp"
+#include "data_tamer_v2/contrib/SerializeMe.hpp"
+#include "data_tamer_v2/custom_types.hpp"
+#include "data_tamer_v2/data_sink.hpp"
+#include "data_tamer_v2/logged_value.hpp"
+#include "data_tamer_v2/names.hpp"
+#include "data_tamer_v2/types.hpp"
+#include "data_tamer_v2/values.hpp"
+#include "data_tamer_v2/details/abi.hpp"
+#include "data_tamer_v2/details/locked_reference.hpp"
 
 #include <array>
 #include <atomic>

@@ -1,8 +1,8 @@
 // A plugin linked to libdata_tamer, loaded with dlopen() by dlopen_tls_tests.cpp, so
 // that libdata_tamer arrives with it, as with pluginlib or ros2_control. On fresh
 // threads it makes the first accesses of the thread-local transaction chain.
-#include "data_tamer/channel.hpp"
-#include "data_tamer/sinks/dummy_sink.hpp"
+#include "data_tamer_v2/channel.hpp"
+#include "data_tamer_v2/sinks/dummy_sink.hpp"
 
 #include <atomic>
 #include <memory>

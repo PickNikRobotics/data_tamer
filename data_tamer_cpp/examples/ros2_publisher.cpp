@@ -1,6 +1,6 @@
-#include "data_tamer/channel.hpp"
-#include "data_tamer/data_tamer.hpp"
-#include "data_tamer/sinks/ros2_publisher_sink.hpp"
+#include "data_tamer_v2/channel.hpp"
+#include "data_tamer_v2/data_tamer.hpp"
+#include "data_tamer_v2/sinks/ros2_publisher_sink.hpp"
 
 #include <cmath>
 #include <string>

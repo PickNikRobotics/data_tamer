@@ -1,5 +1,5 @@
 // Compiled as strict C++17 with warnings as errors (see tests/CMakeLists.txt).
-// Checks include/data_tamer/fwd.hpp:
+// Checks include/data_tamer_v2/fwd.hpp:
 //  - FWD_ONLY: nothing but fwd.hpp is included, as a header that only names the
 //    types would do.
 //  - FWD_FIRST: fwd.hpp, then every full header.
@@ -11,19 +11,19 @@
 #endif
 
 #if defined(FWD_FIRST) || defined(FWD_ONLY)
-#include "data_tamer/fwd.hpp"
+#include "data_tamer_v2/fwd.hpp"
 #endif
 
 #ifndef FWD_ONLY
-#include "data_tamer/data_tamer.hpp"
-#include "data_tamer/channel.hpp"
-#include "data_tamer/data_sink.hpp"
-#include "data_tamer/logged_value.hpp"
-#include "data_tamer/types.hpp"
+#include "data_tamer_v2/data_tamer.hpp"
+#include "data_tamer_v2/channel.hpp"
+#include "data_tamer_v2/data_sink.hpp"
+#include "data_tamer_v2/logged_value.hpp"
+#include "data_tamer_v2/types.hpp"
 #endif
 
 #ifdef FWD_LAST
-#include "data_tamer/fwd.hpp"
+#include "data_tamer_v2/fwd.hpp"
 #endif
 
 #include <memory>
