@@ -16,6 +16,8 @@ behaviour, API, defaults, options, build steps or the wire format updates, in th
 - README.md;
 - docs/USER_MANUAL.md;
 - docs/llm_user_manual.md;
+- docs/MIGRATION.md, while 2.0 is unreleased: every source break and silent behaviour
+  change since 1.0.4;
 - docs/wire_format.md, together with the golden vectors and both decoders;
 - code comments and doc comments in the public headers;
 - this CLAUDE.md.
@@ -47,7 +49,8 @@ under "Unreleased" in `data_tamer_cpp/CHANGELOG.rst`.
 - `python/`: `data_tamer_parser.py`, the reference decoder (standard library only),
   packaged as `data-tamer-parser`; its tests; `ros2_subscriber.py`.
 - `docs/`: `USER_MANUAL.md` (for people), `llm_user_manual.md` (for coding agents),
-  `wire_format.md` and its golden vectors in `wire_format/vectors/`.
+  `MIGRATION.md` (1.x to 2.0), `wire_format.md` and its golden vectors in
+  `wire_format/vectors/`.
 - `tools/`: `check_versions.py` (every version number agrees), `abi_check.sh` (the
   libabigail comparison) and `abi_probe.cpp` (the consumer side of that comparison).
 - `.github/workflows/`: plain CMake through conan, one ROS 2 job per distribution

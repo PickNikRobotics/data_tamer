@@ -2,7 +2,8 @@
 
 This manual starts where the [README](../README.md) stops. The chapters explain how to use
 each part of the library. [Troubleshooting](#troubleshooting) starts from a symptom, and
-the [FAQ](#faq) collects short answers that fit nowhere else.
+the [FAQ](#faq) collects short answers that fit nowhere else. Code written for 1.x needs
+the changes listed in [MIGRATION.md](MIGRATION.md).
 
 - [Concepts](#concepts)
 - [Registering values](#registering-values)
