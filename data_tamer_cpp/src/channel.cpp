@@ -738,10 +738,76 @@ Schema LogChannel::getSchema() const
 #else
 #define DATA_TAMER_TLS_INITIAL_EXEC
 #endif
-ChannelSharedState::Transaction*& ChannelSharedState::Transaction::active() noexcept
+namespace
 {
-  static thread_local Transaction* transaction DATA_TAMER_TLS_INITIAL_EXEC = nullptr;
+/// The newest transaction of the calling thread.
+ChannelSharedState::Transaction*& ActiveTransaction() noexcept
+{
+  static thread_local ChannelSharedState::Transaction* transaction
+      DATA_TAMER_TLS_INITIAL_EXEC = nullptr;
   return transaction;
+}
+}  // namespace
+
+ChannelSharedState::Transaction::Transaction(ChannelSharedState& state) : state_(&state)
+{
+  Transaction*& head = ActiveTransaction();
+  previous_ = head;
+  owns_ = !state.inTransactionOnThisThread();
+  if(owns_)
+  {
+    state.write_mutex.lock();
+  }
+  head = this;
+}
+
+ChannelSharedState::Transaction::~Transaction()
+{
+  Transaction*& head = ActiveTransaction();
+  if(head == this)
+  {
+    head = previous_;
+  }
+  else
+  {
+    // Out of order: unlink this node. If we own the mutex, the oldest younger
+    // transaction on the same state (`heir`; it cannot own, we do) inherits it.
+    Transaction* heir = nullptr;
+    for(auto* node = head; node; node = node->previous_)
+    {
+      if(node->state_ == state_)
+      {
+        heir = node;
+      }
+      if(node->previous_ == this)
+      {
+        node->previous_ = previous_;
+        break;
+      }
+    }
+    if(owns_ && heir)
+    {
+      heir->owns_ = true;
+      return;
+    }
+  }
+  if(owns_)
+  {
+    state_->write_mutex.unlock();
+  }
+}
+
+bool ChannelSharedState::inTransactionOnThisThread() const noexcept
+{
+  for(auto* transaction = ActiveTransaction(); transaction;
+      transaction = transaction->previous_)
+  {
+    if(transaction->state_ == this)
+    {
+      return true;
+    }
+  }
+  return false;
 }
 
 WriteTransaction LogChannel::scopedWrite()

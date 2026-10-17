@@ -15,8 +15,8 @@ using namespace DataTamer;
 
 // A transaction opened by the library nests the module's LoggedValue::set(): one
 // thread-local transaction chain per process, whatever the consumer's visibility. The
-// chain is defined in the library (Transaction::active()); an inline copy in a hidden
-// module would split it.
+// chain and the Transaction functions are defined in the library; an inline copy in a
+// hidden module would split it.
 TEST(Visibility, TransactionsNestAcrossAHiddenVisibilityModule)
 {
 #if defined(DATA_TAMER_HIDDEN_CONSUMER)

@@ -9,9 +9,9 @@
 #include <memory>
 #include <stdexcept>
 
-// Default visibility, also in a consumer built with -fvisibility=hidden. The
-// thread-local chain behind Transaction::active() is defined once, in the library, so
-// it is one per process whatever a consumer's visibility: a transaction opened by one
+// Default visibility, also in a consumer built with -fvisibility=hidden: the
+// Transaction functions are defined once, in the library, with the thread-local chain
+// they maintain, so the chain is one per process and a transaction opened by one
 // module nests another's.
 #if defined(__GNUC__) || defined(__clang__)
 #define DATA_TAMER_SHARED_STATE_VISIBILITY __attribute__((visibility("default")))
@@ -104,9 +104,9 @@ class DATA_TAMER_SHARED_STATE_VISIBILITY ChannelSharedState
 public:
   /**
    * @brief Scoped ownership of the state's write mutex. A nested transaction on the
-   * same state and thread is a no-op. The thread-local chain lives in the library as
-   * initial-exec TLS: no access allocates, also when the library is loaded with
-   * dlopen().
+   * same state and thread is a no-op. The constructor and destructor are defined in the
+   * library, with the thread-local chain they maintain: it is initial-exec TLS, so no
+   * access allocates, also when the library is loaded with dlopen().
    * Destroy it on the creating thread (never across a coroutine suspension) and before
    * the channel or LoggedValue it came from: it does not keep the state alive.
    * Out-of-order destruction is supported: the mutex passes to the next younger
@@ -115,53 +115,9 @@ public:
   class Transaction
   {
   public:
-    explicit Transaction(ChannelSharedState& state) : state_(&state)
-    {
-      Transaction*& head = active();
-      previous_ = head;
-      owns_ = !state.inTransactionOnThisThread();
-      if(owns_)
-      {
-        state.write_mutex.lock();
-      }
-      head = this;
-    }
-
-    ~Transaction()
-    {
-      Transaction*& head = active();
-      if(head == this)
-      {
-        head = previous_;
-      }
-      else
-      {
-        // Out of order: unlink this node. If we own the mutex, the oldest younger
-        // transaction on the same state (`heir`; it cannot own, we do) inherits it.
-        Transaction* heir = nullptr;
-        for(auto* node = head; node; node = node->previous_)
-        {
-          if(node->state_ == state_)
-          {
-            heir = node;
-          }
-          if(node->previous_ == this)
-          {
-            node->previous_ = previous_;
-            break;
-          }
-        }
-        if(owns_ && heir)
-        {
-          heir->owns_ = true;
-          return;
-        }
-      }
-      if(owns_)
-      {
-        state_->write_mutex.unlock();
-      }
-    }
+    /// Locks the state's write mutex unless this thread holds a transaction on it.
+    explicit Transaction(ChannelSharedState& state);
+    ~Transaction();
 
     Transaction(const Transaction&) = delete;
     Transaction& operator=(const Transaction&) = delete;
@@ -170,10 +126,6 @@ public:
 
   private:
     friend class ChannelSharedState;
-
-    /// The newest transaction of the calling thread. Defined in the library, which
-    /// keeps the variable in initial-exec TLS (src/channel.cpp).
-    static Transaction*& active() noexcept;
 
     ChannelSharedState* state_;
     Transaction* previous_;
@@ -302,18 +254,8 @@ public:
     }
   }
 
-  [[nodiscard]] bool inTransactionOnThisThread() const noexcept
-  {
-    for(auto* transaction = Transaction::active(); transaction;
-        transaction = transaction->previous_)
-    {
-      if(transaction->state_ == this)
-      {
-        return true;
-      }
-    }
-    return false;
-  }
+  /// Whether the calling thread holds a transaction on this state.
+  [[nodiscard]] bool inTransactionOnThisThread() const noexcept;
 
 private:
   // One word per series: low byte holds the flags, the rest the generation. Accesses

@@ -9,9 +9,12 @@ Unreleased
   ros2_control), so a ``scopedWrite()`` on each real-time thread during setup is no
   longer needed. The library's one thread-local is initial-exec TLS (glibc):
   ``dlopen()`` takes one pointer of glibc's static TLS surplus.
-* **ABI**: ``ChannelSharedState::Transaction::active()`` is defined out of line in the
-  library and the inline ``Transaction`` protocol changed: rebuild consumers built
-  against earlier headers.
+* **ABI**: the ``Transaction`` constructor and destructor (behind ``scopedWrite()``, the
+  guards and non-scalar ``LoggedValue``s) and
+  ``ChannelSharedState::inTransactionOnThisThread()`` are defined in the library, with
+  the thread-local chain. The chain is no longer an inline protocol, so later 2.x
+  releases can change it; only the size of ``Transaction`` is pinned. Rebuild consumers
+  built against earlier headers.
 * **API**: ``data_tamer/data_tamer.hpp`` includes ``channel.hpp`` again, as in 1.x, so
   one include gives ``ChannelsRegistry``, ``LogChannel``, ``LoggedValue`` and the sink
   interface. ``data_tamer/fwd.hpp`` stays for headers that only name the types.

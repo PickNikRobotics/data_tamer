@@ -128,12 +128,12 @@ DATA_TAMER_UPDATE_GOLDEN=1 \
   (`SinkWorker::Push::wake_owed`). `WriteMutex::try_lock()`, `unlock()` and
   `tryLockWithSpin()` are `noexcept`. The thread-local transaction chain, which a
   snapshot reads after a failed `try_lock()` (`inTransactionOnThisThread()`), is
-  initial-exec TLS defined out of line in `src/channel.cpp`
-  (`Transaction::active()`), so no access allocates, also when the library is loaded
-  with `dlopen()` (`tests/dlopen_tls_tests.cpp`). Keep `active()` out of line (an
-  inline accessor puts the variable in every consumer as dynamic TLS) and keep it the
-  library's only thread-local: a `dlopen()`ed library takes its initial-exec TLS from
-  glibc's small static TLS surplus.
+  initial-exec TLS in `src/channel.cpp`, so no access allocates, also when the library
+  is loaded with `dlopen()` (`tests/dlopen_tls_tests.cpp`). The `Transaction`
+  constructor and destructor and `inTransactionOnThisThread()` are defined there too:
+  keep them out of line (inline code would put the variable in every consumer as
+  dynamic TLS), and keep it the library's only thread-local: a `dlopen()`ed library
+  takes its initial-exec TLS from glibc's small static TLS surplus.
 - `onSchema()`/`onSnapshot()`/`onStop()`/`onStart()` are serialized by the SinkWorker,
   and control operations (registration, sinks, `startLogging()`) wait for them. Never call a
   control operation from a sink callback or a serializer; inside `scopedWrite()` they are
@@ -145,8 +145,8 @@ DATA_TAMER_UPDATE_GOLDEN=1 \
   it there.
 - `ChannelSharedState` has default visibility (`DATA_TAMER_SHARED_STATE_VISIBILITY`).
   The thread-local transaction chain is one per process, also with consumers built with
-  `-fvisibility=hidden`, because `Transaction::active()` and its variable are defined
-  once, in the library; `tests/visibility_tests.cpp` checks it in shared builds.
+  `-fvisibility=hidden`, because the `Transaction` functions and the variable are
+  defined once, in the library; `tests/visibility_tests.cpp` checks it in shared builds.
 - A registration changes the channel in one step, in `registerValueWithTypes()`:
   everything that can throw runs first and `addSeries()` is the last change; the
   templates only collect custom types (`discoverTypes()`, which also checks that a
@@ -221,8 +221,9 @@ that major. That is frozen inside 2.x:
   `registerValueWithTypes`, `typeRegistry`, `controlMutex`, `checkValueName`,
   `schemaFrozen`, `hasCustomType`, `addCustomType`, `sharedState`, `sinkDropped` (the
   inline `LogChannel::stats()` calls it), `TypesRegistry::findOrCreate` and `replace`,
-  and `ChannelSharedState::Transaction::active`, which the inline `Transaction` calls)
-  and the lock contract between them.
+  and the `ChannelSharedState::Transaction` constructor and destructor and
+  `ChannelSharedState::inTransactionOnThisThread`, which `scopedWrite()`, the guards
+  and non-scalar `LoggedValue`s call) and the lock contract between them.
   Nothing in the tree calls `addCustomType` any more: it stays for binaries built
   against older headers, whose `registerValue` templates call it;
 - the size, alignment and member offsets of every type in `tests/abi_tests.cpp`:
@@ -240,8 +241,9 @@ that major. That is frozen inside 2.x:
 - the vtables of `DataSink` and `CustomSerializer` (see Invariants). abidiff cannot see
   `CustomSerializer`'s in the library, which is why the check also builds a probe;
 - the inline protocols: the flag word encoding of `ChannelSharedState`, the
-  `Transaction` chain, the `registerValue` templates, the payload encoding and schema
-  text (any wire revision, see Invariants).
+  `registerValue` templates, the payload encoding and schema text (any wire revision,
+  see Invariants). The `Transaction` chain is not one of them: its code is in the
+  library, and only the size of `Transaction` reaches consumers.
 
 Adding a function, an overload, a class or an appended enumerator is compatible. Header
 defaults (member initializers, default arguments) take effect only in rebuilt
