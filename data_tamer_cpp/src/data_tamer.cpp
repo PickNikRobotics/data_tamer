@@ -15,16 +15,17 @@ namespace DataTamer
 
 namespace
 {
-// On a new channel: sizes resolved and validated by setChannelDefaults().
-void ApplyDefaults(LogChannel& channel, const ChannelDefaults::Sizes& sizes)
+// On a new channel: sizes resolved and validated by setChannelDefaults(); zero keeps
+// the library default.
+void ApplyDefaults(LogChannel& channel, size_t pool_slots, size_t payload_bytes)
 {
-  if(sizes.pool_slots != 0)
+  if(pool_slots != 0)
   {
-    channel.setPoolCapacity(sizes.pool_slots);
+    channel.setPoolCapacity(pool_slots);
   }
-  if(sizes.payload_bytes != 0)
+  if(payload_bytes != 0)
   {
-    channel.setPayloadCapacity(sizes.payload_bytes);
+    channel.setPayloadCapacity(payload_bytes);
   }
 }
 }  // namespace
@@ -33,7 +34,8 @@ struct ChannelsRegistry::Pimpl
 {
   std::unordered_map<std::string, std::shared_ptr<LogChannel>> channels;
   std::unordered_set<std::shared_ptr<SinkWorker>> default_sinks;
-  ChannelDefaults::Sizes channel_sizes;
+  size_t pool_slots = 0;     // from setChannelDefaults()
+  size_t payload_bytes = 0;  // from setChannelDefaults()
   std::mutex mutex;
 };
 
@@ -104,7 +106,8 @@ void ChannelsRegistry::setChannelDefaults(const ChannelDefaults& defaults)
 {
   const auto sizes = defaults.resolve();
   std::scoped_lock lk(_p->mutex);
-  _p->channel_sizes = sizes;
+  _p->pool_slots = sizes.pool_slots;
+  _p->payload_bytes = sizes.payload_bytes;
 }
 
 std::shared_ptr<LogChannel> ChannelsRegistry::getChannel(std::string const& channel_name)
@@ -114,7 +117,7 @@ std::shared_ptr<LogChannel> ChannelsRegistry::getChannel(std::string const& chan
   if(it == _p->channels.end())
   {
     auto new_channel = LogChannel::create(channel_name);
-    ApplyDefaults(*new_channel, _p->channel_sizes);
+    ApplyDefaults(*new_channel, _p->pool_slots, _p->payload_bytes);
     for(auto const& sink : _p->default_sinks)
     {
       new_channel->addDataSink(sink);
@@ -158,7 +161,8 @@ void ChannelsRegistry::clear()
     std::scoped_lock lk(_p->mutex);
     channels.swap(_p->channels);
     sinks.swap(_p->default_sinks);
-    _p->channel_sizes = {};
+    _p->pool_slots = 0;
+    _p->payload_bytes = 0;
   }
 }
 

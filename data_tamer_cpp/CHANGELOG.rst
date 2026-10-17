@@ -4,6 +4,16 @@ Changelog for package data_tamer
 
 Unreleased
 ----------
+* **API**: ``data_tamer/data_tamer.hpp`` includes ``channel.hpp`` again, as in 1.x, so
+  one include gives ``ChannelsRegistry``, ``LogChannel``, ``LoggedValue`` and the sink
+  interface. ``data_tamer/fwd.hpp`` stays for headers that only name the types.
+* **API**: ``takeSnapshot()`` is no longer ``[[nodiscard]]``: ``stats()`` counts every
+  outcome, and most loops don't act on each call. ``tryTakeSnapshot()`` still is.
+* **API**: no ``LogChannel::droppedSnapshots()``, which no release had: read
+  ``stats().dropped_by_sink``. ``LogChannel::sinkDropped()`` and
+  ``ChannelDefaults::resolve()`` (with ``ChannelDefaults::Sizes``) are private: they are
+  the building blocks of ``stats()`` and ``setChannelDefaults()``. Their symbols stay
+  exported (the inline ``stats()`` calls ``sinkDropped()``).
 * **Fixed, deadlocks**: ``unregister()``, ``removeDataSink()`` or a ``LoggedValue``
   destructor inside ``scopedWrite()`` while a snapshot waited; a const query inside
   ``scopedWrite()`` while another thread ran one of those, or ``startLogging()``;
@@ -87,7 +97,7 @@ Unreleased
   ``ToText()`` and ``GetBit()``; ``noexcept`` on ``isEnabled(id)``,
   ``LoggedValue::setEnabled()`` and ``isEnabled()``, ``requestDump()``,
   ``dumpRequested()``, ``SinkWorker::delivered()``, ``errors()``, ``queueHighWater()`` and
-  the ``WriteMutex`` try paths. ``droppedSnapshots()`` is ``[[deprecated]]``.
+  the ``WriteMutex`` try paths.
   ``getConstPtr()`` is ``const``, ``SinkWorker::as<T>()`` has a ``const`` overload,
   ``logged_value.hpp`` is self-sufficient and ``poolExhausted()`` is lock-free.
   ``CustomSerializerT(std::string)`` is ``explicit``. Removed: ``getPointerType`` and
@@ -140,7 +150,7 @@ Unreleased
   ``queue_high_water`` (per worker, across all its channels: a lower bound of
   the most snapshots found waiting in one queue, kept on the delivery thread,
   off the real-time path). New getters behind them:
-  ``LogChannel::snapshotAttempts()``, ``snapshotsAccepted()``, ``sinkDropped()``,
+  ``LogChannel::snapshotAttempts()``, ``snapshotsAccepted()``,
   ``LogChannel::kMaxSinks`` and ``SinkWorker::delivered()``,
   ``queueHighWater()``. Real-time cost: two atomic increments per snapshot call
   (``attempts`` on entry, relaxed; ``accepted`` when a sink took the snapshot,
@@ -157,8 +167,6 @@ Unreleased
   against its own header: an exported weak copy would let the first loaded
   shared object's older ``stats()`` build the struct in a newer caller's buffer.
   ``Stats`` itself is not exported.
-* **Deprecated**: ``LogChannel::droppedSnapshots(sink)`` stays for one release;
-  read ``stats().dropped_by_sink``.
 * **Sinks finish themselves**: new ``virtual void DataSink::onStop()`` and
   ``onStart()``, empty by default. ``SinkWorker::stop()`` calls ``onStop()`` on
   the stopping thread after the last delivery, serialized with the other
@@ -190,7 +198,7 @@ Unreleased
   a count or in time) and payload capacity applied by ``getChannel()`` to the
   channels it creates afterwards, before the default sinks are attached.
   Existing channels are not changed. ``clear()`` resets them. The values are
-  validated when set, by the new ``ChannelDefaults::resolve()``.
+  validated when set.
 * **Breaking, sinks**: the shared sink queue is gone, and with it
   ``SinkWorker::kDefaultQueueCapacity`` and the ``queue_capacity`` constructor
   argument: the constructor is ``SinkWorker(std::unique_ptr<DataSink>,
@@ -405,7 +413,7 @@ Unreleased
     ``Mutex`` alias. ``scopedWrite()`` returns ``DataTamer::WriteTransaction``.
   - Parser: ``BuildSchemaFromText`` is the entry point; the misspelled
     ``BuilSchemaFromText`` remains as a deprecated alias for one release.
-* **Breaking, snapshots**: ``takeSnapshot()`` returns a ``[[nodiscard]]``
+* **Breaking, snapshots**: ``takeSnapshot()`` returns a
   ``SnapshotResult`` instead of ``bool`` (``ok``, ``partial``, ``rejected``,
   ``no_sinks``, ``not_started``, ``pool_exhausted``, ``oversize``, ``blocked``). New
   ``tryTakeSnapshot()`` for real-time producers: never blocks on the write mutex
@@ -517,11 +525,10 @@ Unreleased
   treats capacity as a block-rounded minimum shared by all channel producers;
   ``DummySink`` and ``MCAPSink`` forward the same final defaulted argument.
   ``DataSinkBase::pushSnapshot`` was removed.
-* Added ``LogChannel::poolExhausted()``, per-attachment
-  ``droppedSnapshots(sink)``, ``Stats::pool_exhausted``, and
+* Added ``LogChannel::poolExhausted()``, ``Stats::pool_exhausted``, and
   ``DataSinkBase::storeErrors()``, plus payload reallocation and oversize-drop
   counters. ``Stats`` fields are plain ``uint64_t`` point-in-time snapshots of
-  relaxed atomic counters; ``droppedSnapshots(sink)`` takes the control mutex.
+  relaxed atomic counters.
   ``DataSinkBase::storeErrors()`` records thrown queued callbacks; a callback
   returning ``false`` is not an exception.
 * A channel supports eight attached sinks. Same-name compatible

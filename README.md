@@ -56,11 +56,15 @@ visualize your logs offline or in real-time.
 
 ```cpp
 #include "data_tamer/data_tamer.hpp"
-#include "data_tamer/channel.hpp"
 #include "data_tamer/sinks/mcap_sink.hpp"
 
 int main()
 {
+  // You can register any arithmetic value. You are responsible for their lifetime:
+  // declare them before the channel, so that they outlive it.
+  double value_real = 3.14;
+  int value_int = 42;
+
   // Multiple channels can use this sink. Data will be saved in mylog.mcap
   auto mcap_sink = DataTamer::MCAPSink::create("mylog.mcap");
 
@@ -68,28 +72,25 @@ int main()
   auto channel = DataTamer::LogChannel::create("my_channel");
   channel->addDataSink(mcap_sink);
 
-  // You can register any arithmetic value. You are responsible for their lifetime!
-  double value_real = 3.14;
-  int value_int = 42;
   auto id1 = channel->registerValue("value_real", &value_real);
-  auto id2 = channel->registerValue("value_int", &value_int);
+  channel->registerValue("value_int", &value_int);
 
   // If you prefer to use RAII, use this method instead
   // logged_real will unregister itself when it goes out of scope.
   auto logged_real = channel->createLoggedValue<float>("my_real");
 
-  // Store the current value of all the registered values.
-  // SnapshotResult::ok means that every sink accepted it.
-  auto result = channel->takeSnapshot();
+  // Store the current value of all the registered values. It returns
+  // SnapshotResult::ok when every sink accepted it; stats() counts the rest.
+  channel->takeSnapshot();
 
   // You can disable (i.e., stop recording) a value like this
   channel->setEnabled(id1, false);
   // or, in the case of a LoggedValue
   logged_real->setEnabled(false);
 
-  // The next snapshot will contain only [value_int], i.e. [id2],
+  // The next snapshot will contain only value_int,
   // since the other two were disabled
-  result = channel->takeSnapshot();
+  channel->takeSnapshot();
 }
 ```
 
@@ -100,9 +101,7 @@ You can also register a custom type, as shown in the example below.
 
 ```cpp
 #include "data_tamer/data_tamer.hpp"
-#include "data_tamer/channel.hpp"
 #include "data_tamer/sinks/mcap_sink.hpp"
-#include "data_tamer/custom_types.hpp"
 
 namespace MyNamespace
 {
@@ -128,18 +127,17 @@ std::string_view TypeDefinition(Point3D& point, AddField& add)
 
 int main()
 {
-  auto channel = DataTamer::LogChannel::create("my_channel");
-  channel->addDataSink(DataTamer::MCAPSink::create("mylog.mcap"));
-
   // Array/vectors are supported natively
   std::vector<double> values = {1, 2, 3, 4};
-  channel->registerValue("values", &values);
-
   MyNamespace::Point3D position = {0.1, -0.2, 0.3};
+
+  auto channel = DataTamer::LogChannel::create("my_channel");
+  channel->addDataSink(DataTamer::MCAPSink::create("mylog.mcap"));
+  channel->registerValue("values", &values);
   channel->registerValue("position", &position);
 
   // save the data as usual ...
-  auto result = channel->takeSnapshot();
+  channel->takeSnapshot();
 }
 ```
 

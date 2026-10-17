@@ -184,8 +184,9 @@ DATA_TAMER_UPDATE_GOLDEN=1 \
   existing getters stay.
 - Include what you use. Headers that only name data_tamer types include `fwd.hpp`, which
   must declare each type with the same class or struct key as its definition (the
-  `fwd_header_*` targets check it). `data_tamer.hpp` includes only `fwd.hpp`, so code
-  using LogChannel includes `channel.hpp`. Keep heavy includes out of public headers.
+  `fwd_header_*` targets check it). `data_tamer.hpp` is the umbrella header: it
+  includes `channel.hpp` (and through it `data_sink.hpp`), as 1.x did. Keep heavy
+  includes out of the other public headers.
 - `3rdparty/` is vendored: do not edit it. pre-commit excludes it.
 
 ## Versioning and ABI policy
@@ -214,7 +215,8 @@ that major. That is frozen inside 2.x:
 - the exported symbols (name, signature, mangling), including the private back-end
   functions that inline templates call (`LogChannel::registerValueImpl`,
   `registerValueWithTypes`, `typeRegistry`, `controlMutex`, `checkValueName`,
-  `schemaFrozen`, `hasCustomType`, `addCustomType`, `sharedState`,
+  `schemaFrozen`, `hasCustomType`, `addCustomType`, `sharedState`, `sinkDropped` (the
+  inline `LogChannel::stats()` calls it),
   `TypesRegistry::findOrCreate` and `replace`) and the lock contract between them.
   Nothing in the tree calls `addCustomType` any more: it stays for binaries built
   against older headers, whose `registerValue` templates call it;

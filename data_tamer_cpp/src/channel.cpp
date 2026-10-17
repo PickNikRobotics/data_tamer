@@ -870,14 +870,6 @@ size_t LogChannel::sinkDropped(const SinkWorker** sinks, uint64_t* dropped,
   return count;
 }
 
-uint64_t LogChannel::droppedSnapshots(const std::shared_ptr<SinkWorker>& sink) const
-{
-  std::lock_guard const lock(_p->control_mutex);
-  const size_t i = _p->findLink(sink);
-  return i == Pimpl::kMaxSinks ? 0 :
-                                 _p->sinks[i]->dropped.load(std::memory_order_relaxed);
-}
-
 std::shared_ptr<ChannelSharedState> LogChannel::sharedState() const
 {
   return _p->shared;

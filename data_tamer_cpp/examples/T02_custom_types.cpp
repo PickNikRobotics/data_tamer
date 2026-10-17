@@ -41,7 +41,7 @@ int main()
                          5 * (sizeof(double) * 3) +  // points_vect and its size
                          sizeof(int32_t) * 3;        // value_array
 
-  (void)channel->takeSnapshot();
+  channel->takeSnapshot();
   dummy_sink->drain();  // deliver the snapshot before reading it
 
   std::cout << "\nMessage size: " << dummy_sink->as<DummySink>().latestPayloadSize()

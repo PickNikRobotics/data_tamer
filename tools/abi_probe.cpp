@@ -164,10 +164,6 @@ std::shared_ptr<SinkWorker> probeWorker()
 {
   return SinkWorker::create<ProbeSink>();
 }
-ChannelDefaults::Sizes probeChannelDefaults(const ChannelDefaults& defaults)
-{
-  return defaults.resolve();
-}
 size_t probeRegistry(ChannelsRegistry& registry, TypesRegistry& types)
 {
   registry.setChannelDefaults(ChannelDefaults{});
