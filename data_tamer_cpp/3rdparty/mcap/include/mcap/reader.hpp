@@ -80,6 +80,18 @@ public:
   uint64_t read(std::byte** output, uint64_t offset, uint64_t size) override;
 
 private:
+  // Numeric type returned by the tell/seek operations. Necessary because long on Windows is 32
+  // bits so the standard C library interfaces don't work for files larger than 2GiB.
+#if defined _WIN32 || defined __CYGWIN__
+  typedef __int64 offset_type;
+#else
+  typedef long offset_type;
+#endif
+
+  static_assert((offset_type)(uint64_t)std::numeric_limits<offset_type>::max() ==
+                  std::numeric_limits<offset_type>::max(),
+                "offset_type should fit in uint64_t");
+
   std::FILE* file_;
   std::vector<std::byte> buffer_;
   uint64_t size_;
@@ -439,6 +451,13 @@ public:
    */
   const std::multimap<std::string, MetadataIndex>& metadataIndexes() const;
 
+  /**
+   * @brief Returns all of the parsed AttachmentIndex records. Call `readSummary()`
+   * first to fully populate this data structure.
+   * The multimap's keys are the `name` field from each indexed Attachment.
+   */
+  const std::multimap<std::string, AttachmentIndex>& attachmentIndexes() const;
+
   // The following static methods are used internally for parsing MCAP records
   // and do not need to be called directly unless you are implementing your own
   // reader functionality or tests.
@@ -486,8 +505,6 @@ private:
   std::unordered_map<ChannelId, ChannelPtr> channels_;
   ByteOffset dataStart_ = 0;
   ByteOffset dataEnd_ = EndOffset;
-  Timestamp startTime_ = 0;
-  Timestamp endTime_ = 0;
   bool parsedSummary_ = false;
 
   void reset_();

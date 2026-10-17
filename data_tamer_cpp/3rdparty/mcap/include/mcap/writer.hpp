@@ -41,9 +41,9 @@ struct MCAP_PUBLIC McapWriterOptions {
    */
   bool noChunking = false;
   /**
-   * @brief Do not write Message Index records to the file. If `noSummary=true`
-   * and `noChunkIndex=false`, Chunk Index records will still be written to the
-   * Summary section, providing a coarse message index.
+   * @brief Do not write Message Index records to the file. If
+   * `noMessageIndex=true` and `noChunkIndex=false`, Chunk Index records will
+   * still be written to the Summary section, providing a coarse message index.
    */
   bool noMessageIndex = false;
   /**
@@ -56,10 +56,12 @@ struct MCAP_PUBLIC McapWriterOptions {
   bool noSummary = false;
   /**
    * @brief Target uncompressed Chunk payload size in bytes. Once a Chunk's
-   * uncompressed data meets or exceeds this size, the Chunk will be compressed
-   * (if compression is enabled) and written to disk. Note that smaller Chunks
-   * may be written, such as the last Chunk in the Data section. This option is
-   * ignored if `noChunking=true`.
+   * uncompressed data is about to exceed this size, the Chunk will be
+   * compressed (if enabled) and written to disk. Note that this is a 'soft'
+   * ceiling as some Chunks could exceed this size due to either indexing
+   * data or when a single message is larger than `chunkSize`, in which case,
+   * the Chunk will contain only this one large message.
+   * This option is ignored if `noChunking=true`.
    */
   uint64_t chunkSize = DefaultChunkSize;
   /**
@@ -102,8 +104,8 @@ struct MCAP_PUBLIC McapWriterOptions {
   bool noStatistics = false;
   bool noSummaryOffsets = false;
 
-  McapWriterOptions(const std::string_view profile)
-      : profile(profile) {}
+  McapWriterOptions(const std::string_view _profile)
+      : profile(_profile) {}
 };
 
 /**
@@ -143,6 +145,13 @@ public:
    */
   void resetCrc();
 
+  /**
+   * @brief flushes any buffered data to the output. This is called by McapWriter after every
+   * completed chunk. Callers may also retain a reference to the writer and call flush() at their
+   * own cadence. Defaults to a no-op.
+   */
+  virtual void flush() {}
+
 protected:
   virtual void handleWrite(const std::byte* data, uint64_t size) = 0;
 
@@ -162,6 +171,7 @@ public:
 
   void handleWrite(const std::byte* data, uint64_t size) override;
   void end() override;
+  void flush() override;
   uint64_t size() const override;
 
 private:
@@ -179,6 +189,7 @@ public:
 
   void handleWrite(const std::byte* data, uint64_t size) override;
   void end() override;
+  void flush() override;
   uint64_t size() const override;
 
 private:
@@ -205,6 +216,7 @@ public:
    * @brief Returns the size in bytes of the uncompressed data.
    */
   virtual uint64_t size() const override = 0;
+
   /**
    * @brief Returns the size in bytes of the compressed data. This will only be
    * called after `end()`.
@@ -314,6 +326,9 @@ public:
   /**
    * @brief Open a new MCAP file for writing and write the header.
    *
+   * If the writer was already opened, this calls `close`() first to reset the state.
+   * A writer may be re-used after being reset via `close`() or `terminate`().
+   *
    * @param filename Filename of the MCAP file to write.
    * @param options Options for MCAP writing. `profile` is required.
    * @return A non-success status if the file could not be opened for writing.
@@ -322,6 +337,9 @@ public:
 
   /**
    * @brief Open a new MCAP file for writing and write the header.
+   *
+   * If the writer was already opened, this calls `close`() first to reset the state.
+   * A writer may be re-used after being reset via `close`() or `terminate`().
    *
    * @param writer An implementation of the IWritable interface. Output bytes
    *   will be written to this object.
@@ -339,20 +357,26 @@ public:
 
   /**
    * @brief Write the MCAP footer, flush pending writes to the output stream,
-   * and reset internal state.
+   * and reset internal state. The writer may be re-used with another call to open afterwards.
    */
   void close();
 
   /**
    * @brief Reset internal state without writing the MCAP footer or flushing
    * pending writes. This should only be used in error cases as the output MCAP
-   * file will be truncated.
+   * file will be truncated. The writer may be re-used with another call to open afterwards.
    */
   void terminate();
 
   /**
    * @brief Add a new schema to the MCAP file and set `schema.id` to a generated
    * schema id. The schema id is used when adding channels to the file.
+   *
+   * Schemas are not cleared when the state is reset via `close`() or `terminate`().
+   * If you're re-using a writer for multiple files in a row, the schemas only need
+   * to be added once, before first use.
+   *
+   * This method does not de-duplicate schemas.
    *
    * @param schema Description of the schema to register. The `id` field is
    *   ignored and will be set to a generated schema id.
@@ -363,6 +387,12 @@ public:
    * @brief Add a new channel to the MCAP file and set `channel.id` to a
    * generated channel id. The channel id is used when adding messages to the
    * file.
+   *
+   * Channels are not cleared when the state is reset via `close`() or `terminate`().
+   * If you're re-using a writer for multiple files in a row, the channels only need
+   * to be added once, before first use.
+   *
+   * This method does not de-duplicate channels.
    *
    * @param channel Description of the channel to register. The `id` value is
    *   ignored and will be set to a generated channel id.
@@ -422,6 +452,7 @@ public:
   static uint64_t write(IWritable& output, const Footer& footer, bool crcEnabled);
   static uint64_t write(IWritable& output, const Schema& schema);
   static uint64_t write(IWritable& output, const Channel& channel);
+  static uint64_t getRecordSize(const Message& message);
   static uint64_t write(IWritable& output, const Message& message);
   static uint64_t write(IWritable& output, const Attachment& attachment);
   static uint64_t write(IWritable& output, const Metadata& metadata);
