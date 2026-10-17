@@ -25,9 +25,9 @@ Python decoder, and describe the change in this file.
 
 | Version | Change |
 |---:|---|
-| 6 | YAML rendering of the version 5 schema (section 2.1), opt-in. Same hash. |
-| 5 | Hash defined as FNV-1a 64 of the schema text; covers custom type bodies. |
-| 4 | Lower-case type names, `MSG:` sections. Hash was `std::hash` based. |
+| 6 | data_tamer 2.0. YAML rendering of the version 5 schema (section 2.1), opt-in. Same hash. |
+| 5 | data_tamer 2.0. Hash defined as FNV-1a 64 of the schema text; covers custom type bodies. |
+| 4 | data_tamer 0.7 to 1.x. Lower-case type names, `MSG:` sections. Hash was `std::hash` based (section 5). |
 
 ## 1. Data model
 
@@ -397,15 +397,29 @@ Decoders match a snapshot to a schema by comparing the snapshot's hash with the
 `### hash:` line of the schema shipped next to it (MCAP: the schema record
 attached to the channel; ROS: the `Schemas` entry). Verification against the
 recomputed value is optional (`check_hash` in the C++ parser, `verify_hash` in
-the Python decoder) and only meaningful for version 5 texts.
+the Python decoder). It is defined for version 5 texts and for YAML, whose line
+format rendering is hashed (section 2.1).
 
-**Version 4 texts** carried a hash computed with `std::hash`, which is
-implementation-defined and did not cover custom type bodies. Readers match them
-by the declared value; the C++ parser still recomputes the version 4 recipe for
-`check_hash`, which only agrees on the writer's platform.
-Parsers older than version 5 recompute the version-4 hash themselves and
-therefore reject version 5 files with "Wrong SCHEMA_VERSION" instead of
-decoding them wrongly.
+**Version 4 texts** (data_tamer 0.7 to 1.x) carried a hash computed with
+`std::hash`: `std::hash<std::string>` of the channel name, then each top-level
+field folded in with `AddFieldToHash()` of the C++ parser (field name, type id,
+custom type name, vector flag, array size; custom type bodies are not covered).
+`std::hash` is implementation-defined, so the value depends on the writer's
+standard library and word size. Decoders match version 4 texts by the declared
+value, which is all decoding needs. Verification differs:
+
+- The Python decoder cannot reproduce `std::hash`: with `verify_hash` it accepts
+  the declared hash of a version 4 text unchecked.
+- The C++ parser recomputes the recipe with its own `std::hash` under
+  `check_hash`. That agrees with the writer only when both use the same
+  implementation, such as libstdc++ with a 64-bit `size_t` (the usual Linux
+  build); otherwise `check_hash` throws for an intact version 4 text, so leave it
+  off for 1.x files from another platform.
+
+Readers older than version 5 (data_tamer 1.x) recompute the version 4 hash
+themselves, so they fail instead of decoding newer texts wrongly: a version 5
+text with "Wrong SCHEMA_VERSION", the YAML rendering (version 6) with
+"Unexpected line: fields:".
 
 ## 6. Worked example
 

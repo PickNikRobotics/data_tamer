@@ -4,6 +4,11 @@ Changelog for package data_tamer
 
 Unreleased
 ----------
+* **Fixed, Python decoder**: ``verify_hash=True`` (``parse_schema()``,
+  ``SchemaRegistry``, ``iter_mcap()``) rejected every data_tamer 1.x file (schema
+  version 4). Its hash came from the writer's ``std::hash`` and cannot be recomputed, so
+  it is accepted as declared. The C++ ``check_hash`` still recomputes it, which agrees
+  only with the writer's standard library (``docs/wire_format.md``, section 5).
 * Docs: ``docs/MIGRATION.md`` lists what code written for 1.x must change for 2.0,
   with the behaviour changes that compile silently.
 * **Real-time**: the first access of the transaction state on a thread no longer

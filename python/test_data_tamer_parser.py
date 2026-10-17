@@ -51,6 +51,14 @@ class GoldenVectors(unittest.TestCase):
         with self.assertRaises(ValueError):
             dt.parse_schema("### version: 5\n### hash: 1\n### channel_name: x\n", verify_hash=True)
 
+    def test_verify_hash_accepts_a_version_4_hash_unchecked(self):
+        # a 1.x hash came from the writer's std::hash, which Python cannot recompute
+        v4 = read("schema.txt").decode().replace("### version: 5", "### version: 4")
+        for declared in (self.schema.hash, 1):
+            text = v4.replace(f"### hash: {self.schema.hash}", f"### hash: {declared}")
+            self.assertEqual(dt.parse_schema(text, verify_hash=True).hash, declared)
+            self.assertEqual(dt.SchemaRegistry(verify_hash=True).add(declared, text).hash, declared)
+
 
 class FieldNames(unittest.TestCase):
     """Schema.field_names() lists the decoder's names without decoding a message."""

@@ -304,8 +304,9 @@ inline VarNumber DeserializeToVarNumber(BasicType type, BufferSpan& buffer)
   return 0 != (byte & uint8_t(1 << (index % 8)));
 }
 
-/// Folds `field` into a running schema hash with the version 4 recipe. It is std::hash
-/// based, so it only reproduces the hash on the writer's platform.
+/// Folds `field` into a running schema hash with the version 4 recipe (data_tamer 1.x).
+/// It is std::hash based, so it reproduces the writer's hash only with the same standard
+/// library and word size (docs/wire_format.md, section 5).
 [[nodiscard]] inline uint64_t AddFieldToHash(const TypeField& field, uint64_t hash)
 {
   // https://stackoverflow.com/questions/2590677/how-do-i-combine-hash-values-in-c0x
@@ -1044,7 +1045,11 @@ inline TypeField ParseFieldLine(const std::string& line, bool legacy)
 
 /// Parses a schema text in the line format (versions 4 and 5) or YAML (version 6), see
 /// docs/wire_format.md section 2. Throws std::runtime_error on a malformed text or
-/// another version; `check_hash` also throws if the declared hash is wrong.
+/// another version; `check_hash` also throws if the declared hash is wrong. The declared
+/// hash is the schema's hash. For version 4 (data_tamer 1.x) `check_hash` recomputes it
+/// with this program's std::hash, which agrees with the writer's only for the same
+/// standard library and word size: an intact 1.x text from another platform throws. The
+/// Python decoder accepts a version 4 hash unchecked instead (wire_format.md, section 5).
 [[nodiscard]] inline Schema BuildSchemaFromText(const std::string& txt,
                                                 bool check_hash = false)
 {
