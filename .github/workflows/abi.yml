@@ -6,7 +6,8 @@ name: abi
 # first 2.0.0 tag, the label `abi-break` accepts a layout change owned by the pull
 # request (never the frozen DataSink and CustomSerializer vtables). A push to main
 # compares with the previous commit, which catches two pull requests that only break
-# together.
+# together; it accepts a break when the pull request that made the commit carries the
+# label, since a push event has no labels of its own.
 
 on:
   push:
@@ -21,6 +22,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
   abidiff:
@@ -36,10 +38,20 @@ jobs:
     - name: Check versions
       run: python3 tools/check_versions.py
 
+    - name: Labels of the pull request that made this commit
+      id: merged
+      if: github.event_name == 'push'
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        count=$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/pulls" \
+          --jq '[.[].labels[].name | select(. == "abi-break")] | length')
+        echo "abi_break=$([ "$count" -gt 0 ] && echo 1 || echo 0)" >> "$GITHUB_OUTPUT"
+
     - name: Compare the ABI
       env:
         ABI_BASE_BRANCH: origin/${{ github.base_ref || 'main' }}
-        ABI_ALLOW_BREAK: ${{ contains(github.event.pull_request.labels.*.name, 'abi-break') && '1' || '0' }}
+        ABI_ALLOW_BREAK: ${{ (contains(github.event.pull_request.labels.*.name, 'abi-break') || steps.merged.outputs.abi_break == '1') && '1' || '0' }}
         BASELINE_REF: ${{ github.event.inputs.baseline_ref }}
       run: |
         if [ -n "$BASELINE_REF" ]; then

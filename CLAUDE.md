@@ -310,7 +310,8 @@ sink is not covered: its ABI also follows the rclcpp release, and its pins are i
 `--allow-break` locally and the `abi-break` label on the pull request (never for the
 frozen vtables); once a 2.x tag exists the label no longer works and only a major
 version bump passes. The check also runs on pushes to `main`, against the previous
-commit.
+commit; there it reads the label from the pull request that made the commit, since a push
+event carries no labels.
 
 ## Conventions
 
