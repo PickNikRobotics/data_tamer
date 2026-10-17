@@ -37,8 +37,9 @@ under "Unreleased" in `data_tamer_cpp/CHANGELOG.rst`.
   - `src/`: implementation; `src/sinks/` for MCAPSink, MCAPRingSink, ROS2PublisherSink.
   - `tests/`: the gtest binary `datatamer_test`; `serialize_me_big_endian_test`,
     SerializeMe built as for a big endian host; compile-only targets; compile-fail
-    probes in `tests/compile_fail/`. Both gtest programs come from
-    `data_tamer_add_gtest()`.
+    probes in `tests/compile_fail/`; in Linux shared builds, `dlopen_tls_test`, which
+    loads libdata_tamer with a plugin through `dlopen()` and counts `malloc()` calls.
+    The gtest programs come from `data_tamer_add_gtest()`.
   - `examples/`: T01 to T04, `mcap_1m_per_sec`, `mcap_reader`, `ros2_publisher` (ROS only).
   - `benchmarks/`: built only when Google Benchmark is found.
   - `3rdparty/`: vendored MCAP.
@@ -125,11 +126,14 @@ DATA_TAMER_UPDATE_GOLDEN=1 \
   priority-inheriting mutex is then a `FUTEX_UNLOCK_PI` call), or a sink's worker
   sleeps: that wake comes after the write mutex is released
   (`SinkWorker::Push::wake_owed`). `WriteMutex::try_lock()`, `unlock()` and
-  `tryLockWithSpin()` are `noexcept`. When the library is loaded with `dlopen()`, the
-  thread-local that a snapshot reads after a failed `try_lock()`
-  (`inTransactionOnThisThread()`) is dynamic TLS, whose first access on a thread can
-  allocate: the manuals tell users to open one `scopedWrite()` on each real-time
-  thread during setup.
+  `tryLockWithSpin()` are `noexcept`. The thread-local transaction chain, which a
+  snapshot reads after a failed `try_lock()` (`inTransactionOnThisThread()`), is
+  initial-exec TLS defined out of line in `src/channel.cpp`
+  (`Transaction::active()`), so no access allocates, also when the library is loaded
+  with `dlopen()` (`tests/dlopen_tls_tests.cpp`). Keep `active()` out of line (an
+  inline accessor puts the variable in every consumer as dynamic TLS) and keep it the
+  library's only thread-local: a `dlopen()`ed library takes its initial-exec TLS from
+  glibc's small static TLS surplus.
 - `onSchema()`/`onSnapshot()`/`onStop()`/`onStart()` are serialized by the SinkWorker,
   and control operations (registration, sinks, `startLogging()`) wait for them. Never call a
   control operation from a sink callback or a serializer; inside `scopedWrite()` they are
@@ -139,10 +143,10 @@ DATA_TAMER_UPDATE_GOLDEN=1 \
   `stop()` runs `onStop()` once per stop, after the last delivery, and `start()` after a
   stop runs `onStart()`: a sink that needs to finish (close, flush, dump) or reopen does
   it there.
-- `ChannelSharedState` has default visibility (`DATA_TAMER_SHARED_STATE_VISIBILITY`), so
-  the thread-local transaction chain of `Transaction::active()` is one per process, also
-  in consumers built with `-fvisibility=hidden`; `tests/visibility_tests.cpp` checks it
-  in shared builds.
+- `ChannelSharedState` has default visibility (`DATA_TAMER_SHARED_STATE_VISIBILITY`).
+  The thread-local transaction chain is one per process, also with consumers built with
+  `-fvisibility=hidden`, because `Transaction::active()` and its variable are defined
+  once, in the library; `tests/visibility_tests.cpp` checks it in shared builds.
 - A registration changes the channel in one step, in `registerValueWithTypes()`:
   everything that can throw runs first and `addSeries()` is the last change; the
   templates only collect custom types (`discoverTypes()`, which also checks that a
@@ -216,8 +220,9 @@ that major. That is frozen inside 2.x:
   functions that inline templates call (`LogChannel::registerValueImpl`,
   `registerValueWithTypes`, `typeRegistry`, `controlMutex`, `checkValueName`,
   `schemaFrozen`, `hasCustomType`, `addCustomType`, `sharedState`, `sinkDropped` (the
-  inline `LogChannel::stats()` calls it),
-  `TypesRegistry::findOrCreate` and `replace`) and the lock contract between them.
+  inline `LogChannel::stats()` calls it), `TypesRegistry::findOrCreate` and `replace`,
+  and `ChannelSharedState::Transaction::active`, which the inline `Transaction` calls)
+  and the lock contract between them.
   Nothing in the tree calls `addCustomType` any more: it stays for binaries built
   against older headers, whose `registerValue` templates call it;
 - the size, alignment and member offsets of every type in `tests/abi_tests.cpp`:

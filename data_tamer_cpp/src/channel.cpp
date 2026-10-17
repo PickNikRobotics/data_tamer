@@ -727,6 +727,23 @@ Schema LogChannel::getSchema() const
   return _p->schema;
 }
 
+// Initial-exec TLS is reserved when the library is loaded, also by dlopen(), so no
+// access allocates; general-dynamic TLS, the default in a shared library, is allocated
+// with malloc() on its first access on each thread, which a real-time thread cannot
+// afford. A dlopen()ed library takes it from glibc's small static TLS surplus: keep
+// this the library's only thread-local. glibc only: musl, for one, allocates TLS when
+// the library is loaded and refuses initial-exec TLS in a dlopen()ed library.
+#if defined(__GLIBC__)
+#define DATA_TAMER_TLS_INITIAL_EXEC __attribute__((tls_model("initial-exec")))
+#else
+#define DATA_TAMER_TLS_INITIAL_EXEC
+#endif
+ChannelSharedState::Transaction*& ChannelSharedState::Transaction::active() noexcept
+{
+  static thread_local Transaction* transaction DATA_TAMER_TLS_INITIAL_EXEC = nullptr;
+  return transaction;
+}
+
 WriteTransaction LogChannel::scopedWrite()
 {
   return WriteTransaction(*_p->shared);
