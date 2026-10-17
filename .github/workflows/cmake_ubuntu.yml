@@ -31,7 +31,7 @@ jobs:
       id: conan
       uses: turtlebrowser/get-conan@main
       with:
-        version: 2.0.13
+        version: 2.27.1   # the mcap recipe needs conan >= 2.4
 
     - name: Create default profile
       run: conan profile detect
@@ -48,7 +48,7 @@ jobs:
     - name: Configure CMake
       shell: bash
       working-directory: ${{github.workspace}}/build
-      run: cmake ${{github.workspace}}/data_tamer_cpp -DCMAKE_BUILD_TYPE=Debug -DDATA_TAMER_WERROR=ON -DCMAKE_TOOLCHAIN_FILE="./build/Debug/generators/conan_toolchain.cmake" -DCMAKE_CXX_FLAGS_DEBUG="-g -fprofile-arcs -ftest-coverage"
+      run: cmake ${{github.workspace}}/data_tamer_cpp -DCMAKE_BUILD_TYPE=Debug -DDATA_TAMER_WERROR=ON -DDATA_TAMER_USE_SYSTEM_MCAP=ON -DCMAKE_TOOLCHAIN_FILE="./build/Debug/generators/conan_toolchain.cmake" -DCMAKE_CXX_FLAGS_DEBUG="-g -fprofile-arcs -ftest-coverage"
 
     - name: Build
       shell: bash
@@ -59,6 +59,12 @@ jobs:
       working-directory: ${{github.workspace}}/build
       run: ctest -T test -T Coverage
 
+    # Packages the library with conan and builds test_package/ against it.
+    - name: conan create
+      run: >
+        conan create ${{github.workspace}}/data_tamer_cpp --build=missing
+        -s build_type=Release -o "data_tamer/*:tests=False" -o "data_tamer/*:examples=False"
+
     - name: Upload coverage reports to Codecov
       uses: codecov/codecov-action@v3
       with:
@@ -67,3 +73,34 @@ jobs:
         verbose: true
       env:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  # Installs a static and a shared build (bundled MCAP, zstd and lz4 from apt) and builds
+  # test_package/, a find_package(data_tamer 2) consumer, against each.
+  install:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04]
+        shared: ['OFF', 'ON']
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: sudo apt-get update && sudo apt-get install -y libzstd-dev liblz4-dev
+
+    - name: Build and install the library
+      run: |
+        cmake -S data_tamer_cpp -B build -DCMAKE_BUILD_TYPE=Release \
+          -DBUILD_SHARED_LIBS=${{ matrix.shared }} -DDATA_TAMER_WERROR=ON \
+          -DDATA_TAMER_BUILD_TESTS=OFF -DDATA_TAMER_BUILD_EXAMPLES=OFF \
+          -DDATA_TAMER_BUILD_BENCHMARKS=OFF
+        cmake --build build -j4
+        cmake --install build --prefix "$RUNNER_TEMP/prefix"
+
+    - name: Build and run a consumer
+      run: |
+        cmake -S data_tamer_cpp/test_package -B build_consumer \
+          -DCMAKE_PREFIX_PATH="$RUNNER_TEMP/prefix"
+        cmake --build build_consumer
+        build_consumer/test_package

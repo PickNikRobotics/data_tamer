@@ -74,7 +74,7 @@ CMakeLists.txt.user*
 
 # Custom
 build*
-*/CMakeUserPresets.json
+CMakeUserPresets.json
 /perf.*
 /data_tamer/CMakeUserPresets.json
 .cache/*
