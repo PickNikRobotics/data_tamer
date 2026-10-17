@@ -5,7 +5,7 @@
 #include <mutex>
 #include <system_error>
 
-#include "data_tamer/details/spin_pause.hpp"
+#include "spin_pause.hpp"
 
 // Priority inheritance is a POSIX option, not a Linux feature (QNX has it too).
 // Without it WriteMutex is a plain std::mutex.

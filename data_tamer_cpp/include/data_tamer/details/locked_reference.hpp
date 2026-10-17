@@ -1,9 +1,44 @@
 #pragma once
 
-#include "data_tamer/details/shared_state.hpp"
-
 namespace DataTamer
 {
+
+/// Defined in the library only: consumers hold it through pointers.
+class ChannelSharedState;
+
+/**
+ * @brief Scoped ownership of a channel's write mutex, returned by
+ * LogChannel::scopedWrite() and held by the guards below and by the set() and get()
+ * of a non-scalar LoggedValue. A nested transaction on the same channel and thread
+ * does nothing.
+ *
+ * The constructor and destructor are defined in the library, with the thread-local
+ * chain they maintain: it is initial-exec TLS, so no access allocates, also when the
+ * library is loaded with dlopen(). Only the size of this class reaches consumers.
+ * Destroy it on the creating thread (never across a coroutine suspension) and before
+ * the channel or LoggedValue it came from: it does not keep the state alive.
+ * Out-of-order destruction is supported: the mutex passes to the next younger
+ * transaction on the same channel.
+ */
+class WriteTransaction
+{
+public:
+  /// Locks the state's write mutex unless this thread holds a transaction on it.
+  explicit WriteTransaction(ChannelSharedState& state);
+  ~WriteTransaction();
+
+  WriteTransaction(const WriteTransaction&) = delete;
+  WriteTransaction& operator=(const WriteTransaction&) = delete;
+  WriteTransaction(WriteTransaction&&) = delete;
+  WriteTransaction& operator=(WriteTransaction&&) = delete;
+
+private:
+  friend class ChannelSharedState;
+
+  ChannelSharedState* state_;
+  WriteTransaction* previous_;
+  bool owns_ = false;
+};
 
 /**
  * @brief Read-only access to a non-scalar LoggedValue. Holds the channel's write
@@ -24,7 +59,7 @@ public:
 
 private:
   const T* obj_;
-  ChannelSharedState::Transaction tx_;
+  WriteTransaction tx_;
 };
 
 /// Mutable counterpart of ConstPtr. The snapshot thread waits while it lives: keep the
@@ -42,7 +77,7 @@ public:
 
 private:
   T* obj_;
-  ChannelSharedState::Transaction tx_;
+  WriteTransaction tx_;
 };
 
 }  // namespace DataTamer

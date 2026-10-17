@@ -9,7 +9,7 @@
 #include "data_tamer/types.hpp"
 #include "data_tamer/values.hpp"
 #include "data_tamer/details/abi.hpp"
-#include "data_tamer/details/shared_state.hpp"
+#include "data_tamer/details/locked_reference.hpp"
 
 #include <array>
 #include <atomic>
@@ -34,10 +34,6 @@ inline std::chrono::nanoseconds NsecSinceEpoch()
   auto since_epoch = std::chrono::system_clock::now().time_since_epoch();
   return std::chrono::duration_cast<std::chrono::nanoseconds>(since_epoch);
 }
-
-/// Returned by LogChannel::scopedWrite(): holds the channel's write mutex for its
-/// scope. A nested transaction on the same thread does nothing.
-using WriteTransaction = ChannelSharedState::Transaction;
 
 //---------------------------------------------------------
 

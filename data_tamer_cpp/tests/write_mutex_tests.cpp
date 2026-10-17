@@ -1,4 +1,4 @@
-#include "data_tamer/details/write_mutex.hpp"
+#include "write_mutex.hpp"
 #include "wait_for_sleeping_thread.hpp"
 
 #include <gtest/gtest.h>
@@ -71,31 +71,43 @@ TEST(WriteMutex, LockWithSpinOwnsMutexAndReportsWaitAfterHandoff)
                     .count();
       acquired = true;
       while(!release)
+      {
         std::this_thread::yield();
+      }
       m.unlock();
     });
     while(!started)
+    {
       std::this_thread::yield();
+    }
     EXPECT_FALSE(acquired.load());  // Cannot acquire while this thread owns it.
     m.unlock();
     while(!acquired)
+    {
       std::this_thread::yield();
+    }
     const bool stolen = m.try_lock();
     EXPECT_FALSE(stolen);  // Returning from lockWithSpin must convey ownership.
     if(stolen)
+    {
       m.unlock();
+    }
     release = true;
     waiter.join();
 
     // The scheduler may run the waiter before or after the handoff, regardless
     // of budget. Validate the reported path, not a presumed scheduling delay.
     if(!blocked)
+    {
       EXPECT_EQ(waited, 0u);
+    }
     EXPECT_LE(waited, elapsed);
     const bool reusable = m.try_lock();
     EXPECT_TRUE(reusable);
     if(reusable)
+    {
       m.unlock();
+    }
   }
 }
 
@@ -103,7 +115,9 @@ TEST(WriteMutex, ObservedSleepingWaiterReportsBlockingFallback)
 {
 #if defined(__linux__)
   if(!std::ifstream("/proc/self/stat"))
+  {
     GTEST_SKIP() << "needs readable procfs";
+  }
   WriteMutex m;
   m.lock();
   std::atomic<pid_t> tid{ 0 };

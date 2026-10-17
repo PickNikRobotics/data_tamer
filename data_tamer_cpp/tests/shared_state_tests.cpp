@@ -1,4 +1,4 @@
-#include "data_tamer/details/shared_state.hpp"
+#include "shared_state.hpp"
 #include "alloc_counter.hpp"
 
 #include <gtest/gtest.h>

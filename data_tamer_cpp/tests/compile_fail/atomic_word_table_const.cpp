@@ -2,7 +2,7 @@
 // A const AtomicWordTable can be read but not written. As written the file reads
 // through the const table and writes through a mutable one; DT_WRITE_THROUGH_CONST
 // adds a write through the const table.
-#include "data_tamer/details/shared_state.hpp"
+#include "shared_state.hpp"
 
 namespace probe
 {

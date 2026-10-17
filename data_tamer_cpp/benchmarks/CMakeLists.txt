@@ -1,8 +1,10 @@
 # Every benchmark links the library and the test allocation hook, so that
-# allocations on the measured thread can be counted.
+# allocations on the measured thread can be counted. src/ gives the library-private
+# WriteMutex.
 function(CompileBenchmark TARGET)
     add_executable(${TARGET} ${TARGET}.cpp ${PROJECT_SOURCE_DIR}/tests/alloc_counter.cpp)
-    target_include_directories(${TARGET} PRIVATE ${PROJECT_SOURCE_DIR}/tests)
+    target_include_directories(${TARGET} PRIVATE ${PROJECT_SOURCE_DIR}/tests
+                                                  ${PROJECT_SOURCE_DIR}/src)
     target_link_libraries(${TARGET} PRIVATE data_tamer ${ARGN})
 endfunction()
 

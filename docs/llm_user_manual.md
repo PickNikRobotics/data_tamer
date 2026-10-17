@@ -331,8 +331,8 @@ from it), write them in one transaction:
 ```
 
 Keep transactions and pointer guards short and free of blocking calls. `takeSnapshot()`
-spins for 2 microseconds (`WriteMutex::kLockSpinNs`) and then blocks on the mutex, with
-priority inheritance where POSIX provides it. `tryTakeSnapshot()` returns `blocked`
+spins for 2 microseconds and then blocks on the mutex, with priority inheritance where
+POSIX provides it. `tryTakeSnapshot()` returns `blocked`
 instead. A snapshot taken by a thread that holds the transaction or a guard itself
 returns `blocked` at once, from either variant, and captures nothing: release guards
 first.

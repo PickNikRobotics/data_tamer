@@ -1,4 +1,4 @@
-#include "data_tamer/details/write_mutex.hpp"
+#include "write_mutex.hpp"
 
 #include <gtest/gtest.h>
 

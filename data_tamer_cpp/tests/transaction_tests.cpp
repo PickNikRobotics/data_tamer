@@ -210,7 +210,7 @@ TEST(Transaction, NestedSetAndGetDoNotRelock)
 
 TEST(Transaction, NestingAcrossMoreThanEightChannelsDoesNotAllocateOrAlias)
 {
-  static_assert(!std::is_move_constructible_v<ChannelSharedState::Transaction>);
+  static_assert(!std::is_move_constructible_v<WriteTransaction>);
   std::vector<std::shared_ptr<LogChannel>> channels;
   for(int i = 0; i < 10; ++i)
   {

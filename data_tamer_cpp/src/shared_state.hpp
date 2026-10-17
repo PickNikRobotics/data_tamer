@@ -1,6 +1,11 @@
 #pragma once
 
-#include "data_tamer/details/write_mutex.hpp"
+// Library-private: no installed header includes this file. Consumers see
+// ChannelSharedState only as an incomplete type (LoggedValue holds a shared_ptr to it)
+// and reach it through functions defined in channel.cpp: WriteTransaction for the write
+// mutex, details::setSeriesEnabled() and isSeriesEnabled() for a LoggedValue's flag. So
+// its layout, the flag word encoding and WriteMutex can change in a minor release.
+#include "write_mutex.hpp"
 #include "data_tamer/types.hpp"
 
 #include <array>
@@ -8,16 +13,6 @@
 #include <cstddef>
 #include <memory>
 #include <stdexcept>
-
-// Default visibility, also in a consumer built with -fvisibility=hidden: the
-// Transaction functions are defined once, in the library, with the thread-local chain
-// they maintain, so the chain is one per process and a transaction opened by one
-// module nests another's.
-#if defined(__GNUC__) || defined(__clang__)
-#define DATA_TAMER_SHARED_STATE_VISIBILITY __attribute__((visibility("default")))
-#else
-#define DATA_TAMER_SHARED_STATE_VISIBILITY
-#endif
 
 namespace DataTamer
 {
@@ -99,39 +94,9 @@ private:
  * mutex and one atomic flag word per series, appended by the control thread and read
  * lock-free by the snapshot thread and the writers.
  */
-class DATA_TAMER_SHARED_STATE_VISIBILITY ChannelSharedState
+class ChannelSharedState
 {
 public:
-  /**
-   * @brief Scoped ownership of the state's write mutex. A nested transaction on the
-   * same state and thread is a no-op. The constructor and destructor are defined in the
-   * library, with the thread-local chain they maintain: it is initial-exec TLS, so no
-   * access allocates, also when the library is loaded with dlopen().
-   * Destroy it on the creating thread (never across a coroutine suspension) and before
-   * the channel or LoggedValue it came from: it does not keep the state alive.
-   * Out-of-order destruction is supported: the mutex passes to the next younger
-   * transaction on the same state.
-   */
-  class Transaction
-  {
-  public:
-    /// Locks the state's write mutex unless this thread holds a transaction on it.
-    explicit Transaction(ChannelSharedState& state);
-    ~Transaction();
-
-    Transaction(const Transaction&) = delete;
-    Transaction& operator=(const Transaction&) = delete;
-    Transaction(Transaction&&) = delete;
-    Transaction& operator=(Transaction&&) = delete;
-
-  private:
-    friend class ChannelSharedState;
-
-    ChannelSharedState* state_;
-    Transaction* previous_;
-    bool owns_ = false;
-  };
-
   /// Held by writers inside a transaction, and by a snapshot from its pool slot to its
   /// last push.
   WriteMutex write_mutex;

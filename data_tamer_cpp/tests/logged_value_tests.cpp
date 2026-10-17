@@ -6,6 +6,7 @@
 
 #include <gtest/gtest.h>
 
+#include <array>
 #include <atomic>
 #include <cstring>
 #include <thread>
@@ -81,6 +82,28 @@ TEST(LoggedValue, ScalarSetIsSeenBySnapshotAndDoesNotAllocate)
   double stored = 0;
   std::memcpy(&stored, snap.payload.data(), sizeof(double));
   ASSERT_EQ(stored, 999.0);
+}
+
+// setEnabled()/isEnabled() and the write transaction of a non-scalar set() are calls
+// into the library: none allocates.
+TEST(LoggedValue, SetEnabledAndNonScalarSetDoNotAllocate)
+{
+  auto channel = LogChannel::create("chan");
+  auto scalar = channel->createLoggedValue<double>("scalar");
+  auto pair = channel->createLoggedValue<std::array<double, 2>>("pair");
+  bool enabled = true;
+  {
+    AllocCounter::Scope scope;
+    for(int i = 0; i < 100; i++)
+    {
+      scalar->setEnabled(i % 2 == 0);
+      enabled = enabled && scalar->isEnabled() == (i % 2 == 0);
+      pair->set({ double(i), double(i) });
+    }
+    ASSERT_EQ(scope.allocations(), 0u);
+  }
+  ASSERT_TRUE(enabled);
+  ASSERT_EQ(pair->get()[0], 99.0);
 }
 
 TEST(LoggedValue, SetEnabledFromWriterThreadNeedsNoChannel)

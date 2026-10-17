@@ -3,7 +3,7 @@
 #include "data_tamer/data_sink.hpp"
 #include "data_tamer/data_tamer.hpp"
 #include "data_tamer/details/snapshot_pool.hpp"
-#include "data_tamer/details/write_mutex.hpp"
+#include "write_mutex.hpp"
 #include "../examples/geometry_types.hpp"
 #include "alloc_counter.hpp"
 #include "null_sink.hpp"

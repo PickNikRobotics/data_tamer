@@ -3,8 +3,6 @@
 #include "data_tamer/data_sink.hpp"
 #include "data_tamer/data_tamer.hpp"
 #include "data_tamer/details/locked_reference.hpp"
-#include "data_tamer/details/shared_state.hpp"
-#include "data_tamer/details/write_mutex.hpp"
 #include "data_tamer/logged_value.hpp"
 #include "data_tamer/sinks/mcap_ring_sink.hpp"
 #include "data_tamer/sinks/mcap_sink.hpp"
@@ -17,7 +15,6 @@
 
 #include <gtest/gtest.h>
 
-#include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -113,9 +110,9 @@ TEST(ABI, DataSinkHasNoDataAndChannelDefaultsIsPinned)
 
 // Exact byte values are pinned for x86_64 only: Linux, glibc, libstdc++ with the dual
 // ABI on and no debug containers (the CI platform). Other platforms lay std::string,
-// std::vector and friends out differently, and glibc sizes pthread_mutex_t at 40
-// bytes on x86_64 but 48 on aarch64, so the same pins would fail to compile there.
-// What contains a mutex is pinned relationally, on any libstdc++ platform, below.
+// std::vector and friends out differently, so the same pins would fail to compile
+// there. ChannelSharedState, its WriteMutex and its flag table are library-private
+// (consumers see an incomplete type), so nothing pinned here contains a mutex.
 #if defined(__GLIBCXX__) && defined(__linux__) && !defined(_GLIBCXX_DEBUG) &&            \
     _GLIBCXX_USE_CXX11_ABI == 1
 #define DT_ABI_GLIBCXX 1
@@ -193,43 +190,15 @@ DT_ABI_REQUIRE(alignof(rclcpp::QoS) <= 8 && alignof(ROS2PublisherOptions) == 8 &
 DT_PIN(ValuePtr, 56, 8);
 DT_PIN(LoggedValue<double>, 48, 8);  // state_, channel_, value_, id_
 DT_PIN(LoggedValue<int>, 48, 8);
-DT_PIN(AtomicWordTable, 216, 8);
-DT_PIN(ChannelSharedState::Transaction, 24, 8);
+DT_PIN(WriteTransaction, 24, 8);  // state_, previous_, owns_
 DT_PIN(ConstPtr<double>, 32, 8);
 DT_PIN(MutablePtr<double>, 32, 8);
-DT_ABI_REQUIRE(AtomicWordTable::kFirstBlock == 64 && AtomicWordTable::kBlocks == 26);
-DT_ABI_REQUIRE(ChannelSharedState::kMaxGeneration == (uint32_t(1) << 24) - 1);
 
 #if defined(__GNUC__)
 #pragma GCC diagnostic pop
 #endif
 
 #endif  // DT_ABI_PINS
-
-// ---- What contains a pthread_mutex_t (WriteMutex, and ChannelSharedState that starts
-// with one) depends on the platform, so it is pinned by relation. ----
-#if DT_ABI_GLIBCXX
-#if defined(__GNUC__)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Winvalid-offsetof"
-#endif
-constexpr size_t RoundUp(size_t value, size_t multiple)
-{
-  return (value + multiple - 1) / multiple * multiple;
-}
-DT_ABI_REQUIRE(sizeof(WriteMutex) == sizeof(details::PlatformWriteMutex));
-DT_ABI_REQUIRE(alignof(WriteMutex) == alignof(details::PlatformWriteMutex));
-DT_ABI_REQUIRE(offsetof(ChannelSharedState, write_mutex) == 0);
-DT_ABI_REQUIRE(offsetof(ChannelSharedState, mask_dirty) == sizeof(WriteMutex));
-DT_ABI_REQUIRE(sizeof(ChannelSharedState) ==
-               RoundUp(sizeof(WriteMutex) + sizeof(std::atomic<bool>),
-                       alignof(AtomicWordTable)) +
-                   sizeof(AtomicWordTable));
-DT_ABI_REQUIRE(alignof(ChannelSharedState) == alignof(AtomicWordTable));
-#if defined(__GNUC__)
-#pragma GCC diagnostic pop
-#endif
-#endif  // DT_ABI_GLIBCXX
 
 // ---- Independent of the platform: widths of enums and signatures of the function
 // pointers that cross the boundary. ----
