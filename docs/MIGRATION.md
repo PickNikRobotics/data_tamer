@@ -234,10 +234,11 @@ if(channel->takeSnapshot() != DataTamer2::SnapshotResult::ok)
 ```
 
 `channel->stats()` counts the calls (`attempts`) and the snapshots a sink took
-(`accepted`: `ok` and `partial`). `pool_exhausted` and `oversize` have counters of their
-own (`pool_exhausted`, `dropped_oversize`), and `blocked` is in `write_lock_contended`,
-with the `takeSnapshot()` calls that waited. `rejected`, `no_sinks` and `not_started`
-have none: `attempts - accepted` covers them with the others.
+(`accepted`: `ok` and `partial`). `pool_exhausted`, `oversize` and `serialize_failed` have
+counters of their own (`pool_exhausted`, `dropped_oversize`, `serialize_failures`), and
+`blocked` is in `write_lock_contended`, with the `takeSnapshot()` calls that waited.
+`rejected`, `no_sinks` and `not_started` have none: `attempts - accepted` covers them with
+the others.
 
 `getActiveFlags()` is removed. A sink reads the mask of each snapshot from
 `Snapshot::active_mask`; the application asks `channel->isEnabled(id)`, or

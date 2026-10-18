@@ -198,7 +198,12 @@ DATA_TAMER_UPDATE_GOLDEN=1 \
   scalar `LoggedValue::set()`/`get()`, `trySetEnabled()` and
   `MCAPRingSink::requestDump()`. Tests assert it with `AllocCounter::Scope`
   (`tests/alloc_counter.hpp`): add one when you touch these paths. `takeSnapshot()` may
-  block and grow a slot; keep the two variants distinct. The real-time path makes no
+  block and grow a slot; keep the two variants distinct. Nothing is thrown out of the
+  real-time path: `tryTakeSnapshot()` is `noexcept`, and `takeSnapshotImpl()` catches
+  around the sizing and serialization of the values, where a serializer may throw (user
+  code, or SerializeMe when a container changed size outside `scopedWrite()`), and
+  returns `serialize_failed`; `takeSnapshot()` rethrows. That catch, on a fault path, is
+  the only place a throw may happen (the throw allocates). The real-time path makes no
   futex call unless a control operation or a `stop()` registered as waiting
   (`details::WaiterCount` in `src/waiter_count.hpp`, `tests/rt_syscall_tests.cpp`),
   a writer is blocked on the write mutex in `scopedWrite()` or a guard (releasing the
@@ -216,9 +221,8 @@ DATA_TAMER_UPDATE_GOLDEN=1 \
 - The real-time API (the "yes" rows of the Threading table in `docs/llm_user_manual.md`
   and `NsecSinceEpoch()`) is `noexcept` and `DATA_TAMER_NONBLOCKING` (`details/abi.hpp`:
   `[[clang::nonblocking]]` on Clang 20 or later) on the declaration and the out-of-line
-  definition. Exceptions: `tryTakeSnapshot()` is not `noexcept` (a throwing serializer
-  unwinds through it), and Clang infers the attribute for the scalar
-  `LoggedValue::set()`/`get()`. A new real-time function gets the macro, a call in
+  definition (`tryTakeSnapshot()` catches what a serializer throws). Clang infers the
+  attribute for the scalar `LoggedValue::set()`/`get()`. A new real-time function gets the macro, a call in
   `tests/compile_fail/nonblocking_caller.cpp` and one in `cycle()` of
   `tests/rtsan_tests.cpp`. The futex calls the bullet above allows run inside
   `details::AllowedRealTimeCall` (`src/realtime_sanitizer.hpp`), and nothing else does.

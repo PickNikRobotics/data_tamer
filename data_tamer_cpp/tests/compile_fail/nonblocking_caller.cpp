@@ -26,6 +26,7 @@ controlCycle(LogChannel& channel, LoggedValue<double>& value, const Registration
   (void)channel.writeLockWaitMaxNs();
   (void)channel.payloadReallocations();
   (void)channel.droppedOversize();
+  (void)channel.serializeFailures();
   (void)channel.snapshotAttempts();
   (void)channel.snapshotsAccepted();
   (void)channel.poolExhausted();

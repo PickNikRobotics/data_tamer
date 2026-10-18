@@ -46,12 +46,13 @@ int main()
       case DataTamer2::SnapshotResult::partial:  // Some stopped sinks refused it.
         ++partial;
         break;
-      case DataTamer2::SnapshotResult::rejected:        // Every sink stopped.
-      case DataTamer2::SnapshotResult::no_sinks:        // No sink attached.
-      case DataTamer2::SnapshotResult::not_started:     // Preparation was skipped.
-      case DataTamer2::SnapshotResult::pool_exhausted:  // Sinks hold every slot.
-      case DataTamer2::SnapshotResult::oversize:        // Payload outgrew a slot.
-      case DataTamer2::SnapshotResult::blocked:         // A writer holds the mutex.
+      case DataTamer2::SnapshotResult::rejected:          // Every sink stopped.
+      case DataTamer2::SnapshotResult::no_sinks:          // No sink attached.
+      case DataTamer2::SnapshotResult::not_started:       // Preparation was skipped.
+      case DataTamer2::SnapshotResult::pool_exhausted:    // Sinks hold every slot.
+      case DataTamer2::SnapshotResult::oversize:          // Payload outgrew a slot.
+      case DataTamer2::SnapshotResult::blocked:           // A writer holds the mutex.
+      case DataTamer2::SnapshotResult::serialize_failed:  // A serializer threw.
         ++missed;
         break;
     }

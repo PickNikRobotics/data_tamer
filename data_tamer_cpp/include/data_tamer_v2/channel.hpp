@@ -66,7 +66,10 @@ enum class SnapshotResult : uint8_t
   oversize,
   /// tryTakeSnapshot(): a writer held the write mutex past the spin budget. Both
   /// variants: the calling thread holds it itself (scopedWrite(), a LoggedValue guard).
-  blocked
+  blocked,
+  /// tryTakeSnapshot(): a serializer threw, so nothing is queued (see
+  /// serializeFailures()); takeSnapshot() propagates the exception instead.
+  serialize_failed
 };
 
 /**
@@ -241,8 +244,11 @@ public:
    * tryTakeSnapshot(). RealtimeSanitizer reports a call from a [[clang::nonblocking]]
    * function, also when it does neither.
    * The result may be ignored: stats() counts every call (`attempts`) and the `ok` and
-   * `partial` ones (`accepted`); `pool_exhausted`, `oversize` and `blocked` also have
-   * counters of their own, and `attempts - accepted` covers the other results.
+   * `partial` ones (`accepted`); `pool_exhausted`, `oversize`, `blocked` and
+   * `serialize_failed` also have counters of their own, and `attempts - accepted` covers
+   * the other results. It throws what startLogging() throws, std::length_error or
+   * std::bad_alloc when a slot cannot grow, and, unlike tryTakeSnapshot(), what a
+   * serializer throws.
    * @param timestamp time of the snapshot; by default the system clock.
    */
   SnapshotResult takeSnapshot(std::chrono::nanoseconds timestamp = NsecSinceEpoch());
@@ -251,12 +257,18 @@ public:
    * @brief Lock-free takeSnapshot() for real-time threads: it never blocks or
    * allocates. Where takeSnapshot() would wait or allocate, it returns `blocked` (a
    * writer or another snapshot holds the mutex), `oversize` (the payload outgrew its
-   * slot) or `not_started` (call startLogging() before the loop). Serializers run on
-   * this path: they must not throw, allocate or block. Marked [[clang::nonblocking]]
-   * (DATA_TAMER_NONBLOCKING), like the rest of the real-time API.
+   * slot) or `not_started` (call startLogging() before the loop).
+   *
+   * It never throws: an exception from a serializer (a CustomSerializer, the define()
+   * or TypeDefinition() of a custom type, or SerializeMe's own check when a container
+   * changed size outside scopedWrite()) ends it with `serialize_failed`, with nothing
+   * queued and the pool slot and the write mutex released. The throw itself allocates
+   * on the calling thread: fix the serializer. A pthread_cancel() acted on inside a
+   * serializer terminates the program, as in any noexcept function. Marked
+   * [[clang::nonblocking]] (DATA_TAMER_NONBLOCKING), like the rest of the real-time API.
    */
   [[nodiscard]] SnapshotResult tryTakeSnapshot(
-      std::chrono::nanoseconds timestamp = NsecSinceEpoch()) DATA_TAMER_NONBLOCKING;
+      std::chrono::nanoseconds timestamp = NsecSinceEpoch()) noexcept DATA_TAMER_NONBLOCKING;
 
   /// A copy of the channel's schema. Takes the control mutex: not real-time safe.
   [[nodiscard]] Schema getSchema() const;
@@ -317,6 +329,9 @@ public:
   /// tryTakeSnapshot() calls that returned `oversize`.
   [[nodiscard]] uint64_t droppedOversize() const noexcept DATA_TAMER_NONBLOCKING;
 
+  /// tryTakeSnapshot() calls that returned `serialize_failed`.
+  [[nodiscard]] uint64_t serializeFailures() const noexcept DATA_TAMER_NONBLOCKING;
+
   /// Calls of takeSnapshot() and tryTakeSnapshot() so far, whatever the result
   /// (calls that threw count too).
   [[nodiscard]] uint64_t snapshotAttempts() const noexcept DATA_TAMER_NONBLOCKING;
@@ -347,6 +362,8 @@ public:
     uint64_t pool_exhausted = 0;
     uint64_t payload_reallocations = 0;
     uint64_t dropped_oversize = 0;
+    /// `serialize_failed` results; see serializeFailures().
+    uint64_t serialize_failures = 0;
     /// Calls of takeSnapshot()/tryTakeSnapshot(); see snapshotAttempts().
     uint64_t attempts = 0;
     /// Snapshots at least one sink took (ok + partial); see snapshotsAccepted().
@@ -368,6 +385,7 @@ public:
     result.pool_exhausted = poolExhausted();
     result.payload_reallocations = payloadReallocations();
     result.dropped_oversize = droppedOversize();
+    result.serialize_failures = serializeFailures();
     result.accepted = snapshotsAccepted();
     result.attempts = snapshotAttempts();
     const SinkWorker* sinks[kMaxSinks];

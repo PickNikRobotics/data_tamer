@@ -194,12 +194,13 @@ int main()
     {
       case SnapshotResult::ok:
         break;
-      case SnapshotResult::partial:         // a sink was stopped
-      case SnapshotResult::rejected:        // every sink was stopped
-      case SnapshotResult::pool_exhausted:  // sinks hold every slot
-      case SnapshotResult::blocked:         // a writer held scopedWrite()
-      case SnapshotResult::oversize:        // payload outgrew the slot
-        ++lost;                             // count, never block or log here
+      case SnapshotResult::partial:           // a sink was stopped
+      case SnapshotResult::rejected:          // every sink was stopped
+      case SnapshotResult::pool_exhausted:    // sinks hold every slot
+      case SnapshotResult::blocked:           // a writer held scopedWrite()
+      case SnapshotResult::oversize:          // payload outgrew the slot
+      case SnapshotResult::serialize_failed:  // a serializer threw
+        ++lost;                               // count, never block or log here
         break;
       case SnapshotResult::no_sinks:
       case SnapshotResult::not_started:
@@ -238,7 +239,8 @@ The recorded names are `joints/LF/position`, `joints/LF/velocity`, ...,
   destructor (`data_tamer_v2/logged_value.hpp`). `T` defaults to `double`.
 - `registerCustomValue(name, ptr, CustomSerializer::Ptr)` bypasses the built-in
   serialization. Generic decoders may not be able to read the result: prefer a custom
-  type.
+  type. Its `serializedSize()`, `isFixedSize()` and `serialize()` run in every snapshot,
+  `tryTakeSnapshot()` included: no allocation, lock or throw.
 
 An integer is recorded by size and signedness, so `long long`, `unsigned long long`,
 `char16_t` and `char32_t` work like `int64_t`, `uint64_t`, `uint16_t` and `uint32_t`, and
@@ -490,6 +492,13 @@ needed. If such a `dlopen()` fails with "cannot allocate memory in static TLS bl
 other libraries used up glibc's static TLS surplus: link data_tamer into the executable
 or set `GLIBC_TUNABLES=glibc.rtld.optional_static_tls=2048` (glibc 2.32 or later).
 
+User code runs inside both variants: the `CustomSerializer` of a `registerCustomValue()`,
+and the `define()` or `TypeDefinition()` of every custom type. That code must not throw.
+An exception it throws anyway, or one SerializeMe throws for a container that another
+thread changed without `scopedWrite()`, leaves `takeSnapshot()`; `tryTakeSnapshot()` is
+`noexcept` and returns `serialize_failed` instead. Either way nothing is queued, the
+channel stays usable, and the throw has allocated on the calling thread.
+
 | | `takeSnapshot()` | `tryTakeSnapshot()` |
 |---|---|---|
 | Before `startLogging()` | calls `startLogging()` if a sink is attached | returns `not_started` |
@@ -499,9 +508,9 @@ or set `GLIBC_TUNABLES=glibc.rtld.optional_static_tls=2048` (glibc 2.32 or later
 | Use from a real-time thread | no | yes |
 
 Both return a `SnapshotResult`. The result of `takeSnapshot()` may be ignored: `stats()`
-counts the calls and the `ok` and `partial` results, `pool_exhausted`, `oversize` and
-`blocked` have counters of their own, and `attempts - accepted` covers `rejected`,
-`no_sinks` and `not_started` (see
+counts the calls and the `ok` and `partial` results, `pool_exhausted`, `oversize`,
+`serialize_failed` and `blocked` have counters of their own, and `attempts - accepted`
+covers `rejected`, `no_sinks` and `not_started` (see
 [Monitoring](#monitoring-one-struct-per-channel-one-per-sink)). The result of
 `tryTakeSnapshot()` is `[[nodiscard]]`: before `startLogging()` it fails on every call
 with `not_started`.
@@ -516,6 +525,7 @@ with `not_started`.
 | `pool_exhausted` | Sinks still hold every pool slot; the sample is lost for every sink. | Raise `setPoolCapacity()`, or fix the slow sink. |
 | `oversize` | `tryTakeSnapshot()`: the payload outgrew the slot. | Raise `setPayloadCapacity()`. |
 | `blocked` | `tryTakeSnapshot()`: a writer or another snapshot held the write mutex past the spin budget. Either variant: the calling thread holds it. | Shorten `scopedWrite()` scopes and pointer guards; release them before a snapshot. |
+| `serialize_failed` | `tryTakeSnapshot()`: a serializer threw; nothing captured. A `CustomSerializer` or a type's `define()`/`TypeDefinition()` failed, or another thread changed a container without `scopedWrite()` (a data race, which can also crash). | Make the serializer not throw; write such variables inside `scopedWrite()`. |
 
 On a real-time thread, count these outcomes and report them from another thread. Do not
 log, allocate or retry inside the loop.
@@ -985,6 +995,7 @@ copyable.
 | `accepted` | Snapshots at least one sink took: the results `ok` and `partial` |
 | `pool_exhausted` | `pool_exhausted` results (the pool, not a queue, is the bound) |
 | `dropped_oversize` | `oversize` results of `tryTakeSnapshot()` |
+| `serialize_failures` | `serialize_failed` results of `tryTakeSnapshot()` |
 | `payload_reallocations` | Slots `takeSnapshot()` had to grow |
 | `write_lock_contended`, `write_lock_wait_max_ns` | `blocked` results, those of a snapshot inside the caller's own `scopedWrite()` or guard included, and slow `takeSnapshot()` calls; the longest wait |
 | `dropped_by_sink` | One `{sink, dropped}` entry per sink attached at the read, in no promised order: publications it refused because its worker is stopped. `sink` is the worker's address, only to tell entries apart (a removed worker's address can be reused by a new one) |
@@ -994,7 +1005,7 @@ for a control loop is `(attempts - accepted) / attempts` over a window: take two
 subtract. A snapshot in flight at the time of a read is counted in `attempts` before it
 is in `accepted`, so a window's difference is approximate by the calls in flight: clamp
 it at zero before you divide. Without calls that threw, `attempts` is the sum over all
-eight results.
+nine results.
 
 `worker->stats()` returns a `SinkWorker::Stats`, cumulative over the worker's life
 (`stop()` and `start()` do not reset it):
@@ -1023,13 +1034,13 @@ The two extra counters cost the snapshot path two atomic increments (`attempts` 
 
 | Call | Real-time safe | Notes |
 |---|---|---|
-| `tryTakeSnapshot()` | yes | Requires `startLogging()`. Custom serializers must not allocate, block or throw. |
+| `tryTakeSnapshot()` | yes | Requires `startLogging()`. `noexcept`. Custom serializers must not allocate, block or throw (a throw returns `serialize_failed`). |
 | `takeSnapshot()` | no | Can block on the write mutex, grow a slot, or call `startLogging()`. |
 | scalar `LoggedValue::set()`, `get()` | yes | Wait-free. |
 | non-scalar `LoggedValue::set()`, `get()`, pointer guards | no | Lock the write mutex while a snapshot serializes. |
 | `trySetEnabled()`, `LogChannel::isEnabled()`, `LoggedValue::setEnabled()`, `LoggedValue::isEnabled()` | yes | Lock-free, `noexcept`. `LogChannel::setEnabled()` can throw. |
 | `MCAPRingSink::requestDump()` | yes | One compare-exchange; `noexcept`. |
-| `writeLockContended()`, `writeLockWaitMaxNs()`, `payloadReallocations()`, `droppedOversize()`, `snapshotAttempts()`, `snapshotsAccepted()`, `poolExhausted()` | yes | Atomic loads; `noexcept`. |
+| `writeLockContended()`, `writeLockWaitMaxNs()`, `payloadReallocations()`, `droppedOversize()`, `serializeFailures()`, `snapshotAttempts()`, `snapshotsAccepted()`, `poolExhausted()` | yes | Atomic loads; `noexcept`. |
 | `registerValue()`, `createLoggedValue()`, `unregister()`, `LoggedValue` destructor | no | Control mutex; can wait for a snapshot. |
 | `addDataSink()`, `removeDataSink()`, `startLogging()` | no | Control mutex; run sink callbacks. |
 | `LogChannel::stats()`, `getSchema()` | no | Control mutex. |
