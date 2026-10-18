@@ -8,8 +8,8 @@ name: release
 #
 # workflow_dispatch is a dry run: it checks the branch it runs on as if its
 # package.xml version had been tagged, builds the notes (shown in the job
-# summary) and creates nothing. It fails while the CHANGELOG head is still
-# "Unreleased".
+# summary) and packages the extension without creating a release. It fails while
+# the CHANGELOG head is still "Unreleased".
 
 on:
   push:
@@ -56,16 +56,13 @@ jobs:
         name: release-notes
         path: release-notes.md
 
-  # The Foxglove extension (.foxe) build job goes here when
-  # data_tamer_foxglove/extension/ exists, as in Cloudini's release-appimage.yaml:
-  # needs: check; setup-node; `npm ci`; `npm version "$VERSION" --no-git-tag-version
-  # --allow-same-version` (VERSION from needs.check.outputs.version); `npm run package`;
-  # upload-artifact of release/*.foxe. Then add the job to `needs` of `release` and
-  # list the file under `files:` there.
+  foxglove:
+    needs: check
+    uses: ./.github/workflows/foxglove.yml
 
   release:
     if: github.event_name == 'push'
-    needs: [check, notes]
+    needs: [check, notes, foxglove]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -76,4 +73,5 @@ jobs:
       with:
         name: ${{ github.ref_name }}
         body_path: release-notes/release-notes.md
-        # files: foxglove-extension/*.foxe
+        files: foxglove-extension/*.foxe
+        fail_on_unmatched_files: true

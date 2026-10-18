@@ -356,6 +356,10 @@ auto channel = registry.getChannel("controller");
 [PlotJuggler](https://github.com/facontidavide/PlotJuggler) 4 or later opens the MCAP
 files and subscribes to the ROS 2 topics.
 
+[Foxglove with the extension](../data_tamer_foxglove/extension/README.md) reads ROS 2 topics and rosbag2 recordings.
+To plot, use one Snapshot per message (the default, `aggregate = false`); batches are inspectable.
+Direct `MCAPSink`/`MCAPRingSink` files are **not readable in Foxglove**: use PlotJuggler 4 or Python.
+
 In Python, install `data-tamer-parser` with its MCAP extra:
 
 ```bash
