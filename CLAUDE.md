@@ -89,12 +89,16 @@ under "Unreleased" in `data_tamer_cpp/CHANGELOG.rst`.
   `wire_format/vectors/` (`v4/`: a 1.0.4 recording).
 - `tools/`: `check_versions.py` (every version number agrees), `abi_check.sh` (the
   libabigail comparison) and `abi_probe.cpp` (the consumer side of that comparison),
-  `check_ros_install.sh` (the checks of a ROS 2 install, see "Build and test").
+  `check_ros_install.sh` (the checks of a ROS 2 install, see "Build and test"),
+  `release_notes.py` (a version's CHANGELOG section as Markdown, for the GitHub release)
+  and its test `test_release_notes.py` (ctest case `release_notes`).
 - `.github/workflows/`: plain CMake through conan plus `conan create`, the `install` job
   (static and shared installs, `test_package/` built against each, Ubuntu 22.04 and
   24.04), one ROS 2 job per distribution (industrial_ci; its `AFTER_SCRIPT` runs
   `tools/check_ros_install.sh` on the install space), asan, tsan and rtsan presets,
-  Python tests and PyPI release, and the `abi` job (libabigail).
+  Python tests and PyPI release, the `abi` job (libabigail), and `release.yml`, which
+  creates the GitHub release when a tag `X.Y.Z` is pushed (see "Versioning and ABI
+  policy").
 
 ## Build and test
 
@@ -326,6 +330,21 @@ One version number covers the C++ library, the ROS packages and the Python decod
 
 `tools/check_versions.py` compares them and runs as the ctest case `version_consistency`.
 Change them together.
+
+To cut a release:
+
+1. In one commit on `main`, rename the CHANGELOG head section "Unreleased" to
+   `x.y.z (date)` and set the version in every file above (a first 2.0.0 release keeps
+   them, since the tree already says 2.0.0). `python3 tools/check_versions.py` must pass.
+2. Tag that commit `x.y.z` (no `v` prefix) and push the tag.
+
+The tag starts two workflows: `python.yml` publishes the Python package to PyPI, and
+`release.yml` fails unless the tag equals the `package.xml` version and the CHANGELOG has a
+section for it, then creates the GitHub release named after the tag, with that section
+as its notes (`tools/release_notes.py --version x.y.z` prints it locally). Running
+`release.yml` by hand (workflow_dispatch) is a dry run on the chosen branch: the same
+checks and notes, no release. Artifacts for the release page (the Foxglove extension
+`.foxe`, planned) get a job in `release.yml`, where a comment marks the place.
 
 The SOVERSION is the ABI generation. Within one major version a newer
 `libdata_tamer.so` must keep working with consumers built against any older header of

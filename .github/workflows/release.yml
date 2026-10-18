@@ -1,0 +1,79 @@
+name: release
+
+# Creates the GitHub release when a release tag X.Y.Z is pushed (the pattern of
+# python.yml, which publishes the Python package on the same tag). The release
+# is named after the tag and its notes are the CHANGELOG section of that version
+# (tools/release_notes.py). How to cut a release: CLAUDE.md, "Versioning and ABI
+# policy".
+#
+# workflow_dispatch is a dry run: it checks the branch it runs on as if its
+# package.xml version had been tagged, builds the notes (shown in the job
+# summary) and creates nothing. It fails while the CHANGELOG head is still
+# "Unreleased".
+
+on:
+  push:
+    tags: ['[0-9]+.[0-9]+.[0-9]+']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+    - uses: actions/checkout@v4
+    - name: Every version number agrees
+      run: python3 tools/check_versions.py
+    - name: Tag, version and CHANGELOG section agree
+      id: version
+      run: |
+        version=$(sed -n 's|.*<version>\([^<]*\)</version>.*|\1|p' data_tamer_cpp/package.xml | head -n1)
+        if [ "${GITHUB_REF_TYPE}" = tag ] && [ "${GITHUB_REF_NAME}" != "$version" ]; then
+          echo "tag ${GITHUB_REF_NAME} != version $version (data_tamer_cpp/package.xml)"
+          exit 1
+        fi
+        # Fails unless CHANGELOG.rst has a section titled with the version.
+        python3 tools/release_notes.py --version "$version" > /dev/null
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  notes:
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Extract the CHANGELOG section
+      env:
+        VERSION: ${{ needs.check.outputs.version }}
+      run: |
+        python3 tools/release_notes.py --version "$VERSION" > release-notes.md
+        cat release-notes.md >> "$GITHUB_STEP_SUMMARY"
+    - uses: actions/upload-artifact@v4
+      with:
+        name: release-notes
+        path: release-notes.md
+
+  # The Foxglove extension (.foxe) build job goes here when
+  # data_tamer_foxglove/extension/ exists, as in Cloudini's release-appimage.yaml:
+  # needs: check; setup-node; `npm ci`; `npm version "$VERSION" --no-git-tag-version
+  # --allow-same-version` (VERSION from needs.check.outputs.version); `npm run package`;
+  # upload-artifact of release/*.foxe. Then add the job to `needs` of `release` and
+  # list the file under `files:` there.
+
+  release:
+    if: github.event_name == 'push'
+    needs: [check, notes]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+    # Without `name`, every artifact lands in a directory of its own name.
+    - uses: actions/download-artifact@v4
+    - uses: softprops/action-gh-release@v3
+      with:
+        name: ${{ github.ref_name }}
+        body_path: release-notes/release-notes.md
+        # files: foxglove-extension/*.foxe
