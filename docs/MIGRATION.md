@@ -173,8 +173,10 @@ auto worker = DataTamer2::SinkWorker::create<CsvSink>();
 A `SnapshotRef` holds a slot of the channel's snapshot pool, which all sinks of the
 channel share. Return from `onSnapshot()` quickly. For slow work, copy the snapshot
 (`DataTamer2::Snapshot copy = *snapshot;`) and hand the copy to a thread of your own.
-Never call a function that changes the channel (registration, sinks, `startLogging()`)
-from a callback: it deadlocks.
+Keep functions that change the channel (registration, sinks, `startLogging()`) out of
+callbacks: a control call that would wait for the callback's own worker throws
+`std::logic_error` there instead of deadlocking (the list is in the `DataSink`
+documentation, `data_sink.hpp`).
 
 `DummySink` has accessors instead of public members: `latestSnapshot()`,
 `latestPayloadSize()`, `latestActiveMask()`, `snapshotsCount(hash)`, `schemasCount()`,

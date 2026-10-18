@@ -607,9 +607,13 @@ bool LogChannel::addDataSink(std::shared_ptr<SinkWorker> sink)
     throw std::invalid_argument("Can't add a null sink");
   }
   std::unique_lock lock(_p->control_mutex);
-  // One announcement per worker: a concurrent addDataSink() of the same worker
-  // waits for it, then finds the worker attached.
-  _p->announced.wait(lock, [&] { return !_p->isAnnouncing(sink.get()); });
+  // One announcement per worker: a concurrent addDataSink() of the same worker waits
+  // for it (refused from that worker's callback, which it would wait for).
+  while(_p->isAnnouncing(sink.get()))
+  {
+    sink->throwIfDelivering("LogChannel::addDataSink()");
+    _p->announced.wait(lock);
+  }
   // Duplicate check and free slot; repeated after an unlocked announcement.
   const auto find_slot = [&]() -> std::optional<size_t> {
     if(_p->findLink(sink) != Pimpl::kMaxSinks)
@@ -1012,6 +1016,16 @@ void LogChannel::startLogging()
   if(_p->logging_started.load(std::memory_order_acquire))
   {
     return;
+  }
+  {
+    // A start from an attached worker's callback would wait for it, or lock in reverse
+    // order: refuse it before taking start_mutex or the write mutex.
+    // ponytail: a worker attached after this check still deadlocks; closing it needs
+    // start_mutex turned into a wait on control_mutex.
+    std::lock_guard const lock(_p->control_mutex);
+    _p->forEachLink([](const Pimpl::SinkLink& link) {
+      link.sink->throwIfDelivering("LogChannel::startLogging()");
+    });
   }
   // Lock order: the write mutex, then start_mutex, then control_mutex, like a writer
   // that queries the channel inside its transaction. A transaction nests in the

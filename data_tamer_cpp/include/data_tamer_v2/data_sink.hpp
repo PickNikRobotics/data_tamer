@@ -94,8 +94,16 @@ private:
  * (SnapshotResult::pool_exhausted). For slow work, copy the snapshot
  * (`Snapshot copy = *ref;`) and hand the copy to a thread of your own.
  *
- * A callback can call the channel's const queries (getSchema(), stats(), ...) but
- * never anything that changes it (registration, sinks, startLogging()): that deadlocks.
+ * A callback can call the channel's const queries (getSchema(), stats(), ...). A control
+ * operation that would wait for this sink's own worker throws std::logic_error instead
+ * of deadlocking, and changes nothing:
+ * - stop(), start() and drain() of that worker;
+ * - addDataSink() of it to a channel whose schema is frozen, or while another thread
+ *   attaches it to the same channel; addDefaultSink() when that addDataSink() throws;
+ * - startLogging(), and so the first takeSnapshot(), of a channel it is attached to.
+ * Operations that wait only for other workers or for a snapshot in progress work.
+ * Not detected: cycles through another worker, and a race with a concurrent start.
+ * Keep control operations out of callbacks where you can.
  *
  * ABI: the virtual functions are frozen for 2.x, because the library calls them through
  * vtables compiled into user binaries. New behaviour goes into non-virtual functions of
@@ -243,6 +251,8 @@ private:
   Push tryPush(Attachment& attachment, SnapshotRef&& snapshot);
   /// Serialized with onSnapshot(); exceptions from onSchema() propagate.
   void addSchema(const Schema& schema);
+  /// Throws std::logic_error on this worker's delivery thread.
+  void throwIfDelivering(const char* operation) const;
 
   struct Pimpl;  // holds the sink too: the layout is one pointer
   /// Wakes the worker after a push that returned Push::wake_owed: one futex call. Takes

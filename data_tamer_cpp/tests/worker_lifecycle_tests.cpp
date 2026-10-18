@@ -1,10 +1,12 @@
 // SinkWorker lifecycle calls (stop(), start(), drain(), destruction) made from sink
-// callbacks and from several threads at once.
+// callbacks and from several threads at once, and the control operations that would
+// wait for the worker whose callback calls them.
 #include "data_tamer_v2/channel.hpp"
 #include "data_tamer_v2/data_sink.hpp"
 #include "data_tamer_v2/data_tamer.hpp"
 #include "gate.hpp"
 #include "hang_watchdog.hpp"
+#include "observed_thread.hpp"
 #include "test_sinks.hpp"
 
 #include <gtest/gtest.h>
@@ -96,6 +98,11 @@ private:
   From from_;
   std::function<void(SinkWorker&)> call_;
 };
+
+const char* fromName(ReentrantSink::From from)
+{
+  return from == ReentrantSink::From::Schema ? "onSchema()" : "onSnapshot()";
+}
 
 struct Call
 {
@@ -202,16 +209,13 @@ TEST(WorkerLifecycle, LifecycleCallsFromOwnCallbacksThrowLogicError)
   {
     for(const auto& call : kCalls)
     {
-      SCOPED_TRACE(std::string(call.name) + " from " +
-                   (from == ReentrantSink::From::Schema ? "onSchema()" : "onSnapshot()"));
+      SCOPED_TRACE(std::string(call.name) + " from " + fromName(from));
       expectFinishes([from, call] {
         Attached<ReentrantSink> sink(from, call.function);
         sink->self = sink.worker.get();
-        auto channel = LogChannel::create("reentrant");
         double value = 1;
-        channel->registerValue("value", &value);
-        channel->startLogging();
-        channel->addDataSink(sink);  // onSchema() on this thread
+        auto channel = DataTamerTest::channelWith(sink, &value, "reentrant");
+        channel->startLogging();  // onSchema() on this thread
         ASSERT_EQ(channel->takeSnapshot(), SnapshotResult::ok);
         ASSERT_TRUE(waitFor([&] { return sink->snapshots == 1; }));
         EXPECT_EQ(sink->outcome, Outcome::LogicError);
@@ -288,5 +292,222 @@ TEST(WorkerLifecycle, WorkerReleasedByItsOwnCallbackFinishesTheSink)
     journal->gate.release();
     EXPECT_TRUE(waitFor([&] { return journal->destroyed.load(); }));
     EXPECT_EQ(journal->stops, 1);
+  });
+}
+
+namespace
+{
+/// The channels and registry a callback of `worker` acts on.
+struct Scene
+{
+  Scene()
+  {
+    started->registerValue("value", &value);
+    started->startLogging();
+    attached->registerValue("value", &value);
+    auto channel = registry.getChannel("registered");
+    channel->registerValue("value", &value);
+    channel->startLogging();
+  }
+
+  /// Attaches `sink` to `attached`; returns a started channel whose snapshots run its
+  /// callbacks.
+  std::shared_ptr<LogChannel> arm(Attached<ReentrantSink>& sink)
+  {
+    worker = sink.worker;
+    sink->self = worker.get();
+    attached->addDataSink(worker);  // not started: no onSchema() yet
+    auto feed = DataTamerTest::channelWith(worker, &value, "feed");
+    feed->startLogging();
+    return feed;
+  }
+
+  double value = 1;
+  std::shared_ptr<SinkWorker> worker;  // the worker whose callback makes the call
+  std::shared_ptr<LogChannel> started = LogChannel::create("started");    // without it
+  std::shared_ptr<LogChannel> attached = LogChannel::create("attached");  // see arm()
+  ChannelsRegistry registry;  // one started channel, "registered"
+};
+
+/// A control operation that waits for `Scene::worker`, and what it leaves unchanged.
+struct ControlCall
+{
+  const char* name;
+  void (*call)(Scene&);
+  void (*expectUnchanged)(Scene&);
+};
+
+const ControlCall kWaitingCalls[] = {
+  { "addDataSink() to a started channel",
+    [](Scene& s) { s.started->addDataSink(s.worker); },
+    [](Scene& s) { EXPECT_EQ(s.started->getNumberOfSinks(), 0u); } },
+  { "startLogging() of a channel it is attached to",
+    [](Scene& s) { s.attached->startLogging(); },
+    [](Scene& s) { EXPECT_FALSE(s.attached->isLoggingStarted()); } },
+  { "first takeSnapshot() of a channel it is attached to",
+    [](Scene& s) { (void)s.attached->takeSnapshot(); },
+    [](Scene& s) { EXPECT_FALSE(s.attached->isLoggingStarted()); } },
+  { "ChannelsRegistry::addDefaultSink() with a started channel",
+    [](Scene& s) { s.registry.addDefaultSink(s.worker); },
+    [](Scene& s) {
+      EXPECT_EQ(s.registry.getChannel("registered")->getNumberOfSinks(), 0u);
+    } },
+};
+
+/// Refuses the first schema it hears.
+class RefusingOnceSink : public DataSink
+{
+protected:
+  void onSchema(const Schema&) override
+  {
+    if(!refused_)
+    {
+      refused_ = true;
+      throw std::runtime_error("schema refused");
+    }
+  }
+  void onSnapshot(const SnapshotRef&) override {}
+
+private:
+  bool refused_ = false;  // the worker serializes the callbacks
+};
+}  // namespace
+
+// From a callback, a call that would wait for its own worker throws and changes nothing;
+// from the test thread it works.
+TEST(WorkerLifecycle, ControlCallsThatWaitForTheirOwnWorkerThrowLogicError)
+{
+  for(const auto from : { ReentrantSink::From::Schema, ReentrantSink::From::Snapshot })
+  {
+    for(const auto& control : kWaitingCalls)
+    {
+      SCOPED_TRACE(std::string(control.name) + " from " + fromName(from));
+      expectFinishes([from, control] {
+        Scene s;
+        Attached<ReentrantSink> sink(from,
+                                     [&s, control](SinkWorker&) { control.call(s); });
+        auto feed = s.arm(sink);
+        ASSERT_EQ(feed->takeSnapshot(), SnapshotResult::ok);
+        ASSERT_TRUE(waitFor([&] { return sink->snapshots == 1; }));
+        EXPECT_EQ(sink->outcome, Outcome::LogicError);
+        control.expectUnchanged(s);
+        EXPECT_NO_THROW(control.call(s));
+      });
+    }
+  }
+}
+
+#if defined(__linux__)
+// The same call from a callback, while another thread's call waits for the worker:
+// the callback's throws, the other finishes once the callback returns.
+TEST(WorkerLifecycle, ControlCallsBehindAWaitForTheirOwnWorkerThrowLogicError)
+{
+  for(const auto& control : kWaitingCalls)
+  {
+    SCOPED_TRACE(control.name);
+    expectFinishes([control] {
+      Scene s;
+      DataTamerTest::Gate gate;  // parks the callback, which holds the worker
+      Attached<ReentrantSink> sink(ReentrantSink::From::Snapshot,
+                                   [&s, &gate, control](SinkWorker&) {
+                                     gate.pause();
+                                     control.call(s);
+                                   });
+      auto feed = s.arm(sink);
+      ASSERT_EQ(feed->takeSnapshot(), SnapshotResult::ok);
+      ASSERT_TRUE(gate.waitEntered());
+      {
+        DataTamerTest::ObservedThread other([&s, control] { control.call(s); });
+        EXPECT_TRUE(other.sleeps());  // it waits for the parked callback
+        gate.release();
+      }  // joined: its call returned, after the callback's
+      EXPECT_EQ(sink->outcome, Outcome::LogicError);
+    });
+  }
+}
+#endif
+
+// After a failed start that reached the worker, a retry from its callback throws too
+// (it would lock in reverse order); from the test thread it works.
+TEST(WorkerLifecycle, CallbacksCannotRetryAStartThatAnnouncedToTheirWorker)
+{
+  struct Start
+  {
+    const char* name;
+    void (*call)(LogChannel&);
+  };
+  const Start starts[] = { { "startLogging()", [](LogChannel& c) { c.startLogging(); } },
+                           { "first takeSnapshot()",
+                             [](LogChannel& c) { (void)c.takeSnapshot(); } } };
+  for(const auto& start : starts)
+  {
+    SCOPED_TRACE(start.name);
+    expectFinishes([start] {
+      Scene s;
+      std::shared_ptr<LogChannel> retried;
+      Attached<ReentrantSink> sink(ReentrantSink::From::Snapshot,
+                                   [&](SinkWorker&) { start.call(*retried); });
+      auto feed = s.arm(sink);
+      // Slots are filled from the highest down and announced from the lowest up: the
+      // worker hears the schema before `refusing` throws.
+      retried = DataTamerTest::channelWith(DataTamerTest::manual<RefusingOnceSink>(),
+                                           &s.value, "retried");
+      retried->addDataSink(s.worker);
+      EXPECT_THROW(retried->startLogging(), std::runtime_error);
+      ASSERT_EQ(feed->takeSnapshot(), SnapshotResult::ok);
+      ASSERT_TRUE(waitFor([&] { return sink->outcome != Outcome::NotCalled; }));
+      EXPECT_EQ(sink->outcome, Outcome::LogicError);
+      EXPECT_FALSE(retried->isLoggingStarted());
+      EXPECT_NO_THROW(start.call(*retried));
+      EXPECT_TRUE(retried->isLoggingStarted());
+    });
+  }
+}
+
+// What waits only for other workers, or for none, still works from a callback.
+TEST(WorkerLifecycle, CallbacksStillMakeControlCallsThatDoNotWaitForTheirWorker)
+{
+  expectFinishes([] {
+    Scene s;
+    double late = 2;
+    auto other = DataTamerTest::manual<DummySink>();
+    // the other worker attached, not started
+    auto fresh = DataTamerTest::channelWith(other, &s.value, "fresh");
+    auto open = LogChannel::create("open");  // nothing attached, not started
+    std::shared_ptr<LogChannel> feed;
+    std::shared_ptr<LogChannel> extra;  // started, this worker attached
+    struct
+    {
+      bool attached_other = false, attached_open = false, attached_twice = true;
+      SnapshotResult fresh_snapshot{}, feed_snapshot{};
+    } seen;
+    Attached<ReentrantSink> sink(ReentrantSink::From::Snapshot, [&](SinkWorker&) {
+      seen.attached_other = s.started->addDataSink(other);  // onSchema() of `other` here
+      fresh->startLogging();
+      seen.fresh_snapshot = fresh->takeSnapshot();
+      seen.attached_open = open->addDataSink(s.worker);  // schema open: no announcement
+      (void)open->registerValue("late", &late);
+      seen.attached_twice = feed->addDataSink(s.worker);  // attached already: false
+      seen.feed_snapshot = feed->takeSnapshot();          // queued on this very worker
+      extra->removeDataSink(s.worker);
+      other.drain();
+    });
+    feed = s.arm(sink);
+    extra = DataTamerTest::channelWith(s.worker, &s.value, "extra");
+    extra->startLogging();
+    ASSERT_EQ(feed->takeSnapshot(), SnapshotResult::ok);
+    ASSERT_TRUE(waitFor([&] { return sink->snapshots == 2; }));  // and its own snapshot
+    EXPECT_EQ(sink->outcome, Outcome::Returned);
+    EXPECT_TRUE(seen.attached_other);
+    EXPECT_EQ(seen.fresh_snapshot, SnapshotResult::ok);
+    EXPECT_TRUE(seen.attached_open);
+    EXPECT_FALSE(seen.attached_twice);
+    EXPECT_EQ(seen.feed_snapshot, SnapshotResult::ok);
+    EXPECT_EQ(other->schemasCount(), 2u);  // "started" and "fresh"
+    EXPECT_EQ(other->snapshotsCount(fresh->getSchema().hash), 1);
+    EXPECT_TRUE(fresh->isLoggingStarted());
+    EXPECT_EQ(open->getNumberOfSinks(), 1u);
+    EXPECT_EQ(open->getSchema().fields.size(), 1u);
+    EXPECT_EQ(extra->getNumberOfSinks(), 0u);
   });
 }

@@ -198,10 +198,14 @@ DATA_TAMER_UPDATE_GOLDEN=1 \
   takes its initial-exec TLS from glibc's small static TLS surplus.
 - `onSchema()`/`onSnapshot()`/`onStop()`/`onStart()` are serialized by the SinkWorker,
   and control operations (registration, sinks, `startLogging()`) wait for them. Never call a
-  control operation from a sink callback or a serializer; inside `scopedWrite()` they are
-  safe. Lock order: write mutex, then `start_mutex`, then `control_mutex`, then the
-  snapshot epoch; the snapshot path takes the write mutex before the epoch. `stop()`,
-  `start()` and `drain()` throw `std::logic_error` from a callback of their own worker.
+  control operation from a serializer; inside `scopedWrite()` they are safe. Lock order:
+  write mutex, then `start_mutex`, then `control_mutex`, then the snapshot epoch; the
+  snapshot path takes the write mutex before the epoch. A control operation that would
+  wait for a worker, called on the thread running that worker's callback, throws
+  `std::logic_error` there and changes nothing (the list is in the `DataSink` doc):
+  `SinkWorker::throwIfDelivering()`, over `throwIfDeliverer()` in `src/data_sink.cpp`,
+  compares the worker's deliverer id, no thread-local. A new wait for a worker gets the
+  same check. Cycles through other workers are not detected.
   `stop()` runs `onStop()` once per stop, after the last delivery, and `start()` after a
   stop runs `onStart()`: a sink that needs to finish (close, flush, dump) or reopen does
   it there.

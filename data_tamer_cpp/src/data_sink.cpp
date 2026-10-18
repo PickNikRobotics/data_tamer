@@ -293,13 +293,13 @@ struct SinkWorker::Pimpl
     return deliverer.load(std::memory_order_relaxed) == std::this_thread::get_id();
   }
 
-  // stop(), start() and drain() called from a callback would wait for that callback.
-  void throwIfDeliverer(const char* function) const
+  // An operation that waits for this worker's store would wait for its own callback.
+  void throwIfDeliverer(const char* operation) const
   {
     if(isDeliverer())
     {
-      throw std::logic_error(std::string("SinkWorker::") + function +
-                             " called from a callback of its own sink");
+      throw std::logic_error(std::string(operation) + " called from a callback of the "
+                                                      "sink it would wait for");
     }
   }
 
@@ -642,14 +642,20 @@ void SinkWorker::wake(Pimpl& target) noexcept
 
 void SinkWorker::addSchema(const Schema& schema)
 {
+  _p->throwIfDeliverer("LogChannel::startLogging() or addDataSink()");
   Pimpl::StoreLock lock(*_p);
   _p->sink->onSchema(schema);
+}
+
+void SinkWorker::throwIfDelivering(const char* operation) const
+{
+  _p->throwIfDeliverer(operation);
 }
 
 void SinkWorker::stop()
 {
   auto& p = *_p;  // a callback may destroy this worker meanwhile: see ~SinkWorker()
-  p.throwIfDeliverer("stop()");
+  p.throwIfDeliverer("SinkWorker::stop()");
   std::lock_guard lifecycle(p.lifecycle_mutex);
   p.stopDelivery();
 }
@@ -657,7 +663,7 @@ void SinkWorker::stop()
 void SinkWorker::start()
 {
   auto& p = *_p;  // see stop()
-  p.throwIfDeliverer("start()");
+  p.throwIfDeliverer("SinkWorker::start()");
   std::lock_guard lifecycle(p.lifecycle_mutex);
   {
     Pimpl::StoreLock lock(p);
@@ -677,7 +683,7 @@ void SinkWorker::start()
 void SinkWorker::drain()
 {
   auto& p = *_p;  // see stop()
-  p.throwIfDeliverer("drain()");
+  p.throwIfDeliverer("SinkWorker::drain()");
   p.drainQueues();
 }
 
