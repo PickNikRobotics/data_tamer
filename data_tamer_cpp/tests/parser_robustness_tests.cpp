@@ -187,6 +187,59 @@ TEST(ParserRobustness, CyclicTypeInAVectorIsRejected)
                             [](const std::string&, const VarNumber&) {}));
 }
 
+TEST(ParserRobustness, DepthLimitDoesNotDependOnTheOrderOfTheFields)
+{
+  // The fewest bytes of the B[2] or B1[2] of C63, 62 types deep, go too deep. In the
+  // second case the element of v needs those of B1 first, near the top: the decode
+  // throws in both field orders all the same. python/test_fast_path.py has the same
+  // schemas.
+  std::string chain;
+  for(int i = 1; i < 63; i++)
+  {
+    chain += kSeparator + "\nMSG: C" + std::to_string(i) + "\nC" + std::to_string(i + 1) +
+             " c\n";
+  }
+  const std::string nested = kSeparator + "\nMSG: B\nB1 x\n" + kSeparator +
+                             "\nMSG: B1\nB2 x\n" + kSeparator + "\nMSG: B2\nB3 x\n" +
+                             kSeparator + "\nMSG: B3\n";
+  struct Case
+  {
+    std::string vector_field;
+    std::string types;
+    std::vector<uint8_t> payload;
+  };
+  const Case cases[] = {
+    { "A[] v\n",
+      kSeparator + "\nMSG: C63\nB[2] b\n" + kSeparator + "\nMSG: A\nB[2] b\n",
+      { 0, 0, 0, 0 } },  // no element
+    { "P[] v\n",
+      kSeparator + "\nMSG: C63\nB1[2] b\n" + kSeparator + "\nMSG: P\nint8 x\nB1 t\n",
+      { 1, 0, 0, 0, 5 } },  // one element
+  };
+  const std::vector<uint8_t> mask = { 0b11 };
+  for(const auto& c : cases)
+  {
+    for(const auto& fields :
+        { c.vector_field + "C1 deep\n", "C1 deep\n" + c.vector_field })
+    {
+      const auto schema =
+          BuildSchemaFromText(kHeader + fields + chain + c.types + nested);
+      try
+      {
+        (void)ParseSnapshot(schema, viewOf(mask, c.payload),
+                            [](const std::string&, const VarNumber&) {});
+        ADD_FAILURE() << "no exception for\n" << fields;
+      }
+      catch(const std::runtime_error& error)
+      {
+        EXPECT_NE(std::string(error.what()).find("nested too deeply"), std::string::npos)
+            << error.what() << " for\n"
+            << fields;
+      }
+    }
+  }
+}
+
 TEST(ParserRobustness, MinimumSizeOfNestedArraysSaturatesInsteadOfWrapping)
 {
   // 65535^5 bytes at least: the exact product wraps around to 2814706817761279
@@ -227,6 +280,31 @@ TEST(ParserRobustness, NamesBeyondTheSmallStringBufferAreJoinedWhole)
                                               "robot/waypoints/planned_path[1]/y" }));
 }
 
+TEST(ParserRobustness, CallbackThatMovesTheNameLeavesTheNextNamesWhole)
+{
+  // The parser builds every name in one buffer: a generic callback that moves from the
+  // name it is given must get a const string, which it can only copy.
+  const auto schema =
+      BuildSchemaFromText(kHeader + "float64 t\nPose[2] poses\nuint8[11] bytes\n" +
+                          kSeparator + "\nMSG: Pose\nPoint p\nfloat64 w\n" + kSeparator +
+                          "\nMSG: Point\nfloat64 x\nfloat64 y\n");
+  const std::vector<uint8_t> mask = { 0b111 };
+  const std::vector<uint8_t> payload(7 * sizeof(double) + 11);
+  std::vector<std::string> names;
+  EXPECT_TRUE(
+      ParseSnapshot(schema, viewOf(mask, payload), [&](auto&& name, const VarNumber&) {
+        names.push_back(std::move(name));
+      }));
+  std::vector<std::string> expected = { "t",          "poses[0]/p/x", "poses[0]/p/y",
+                                        "poses[0]/w", "poses[1]/p/x", "poses[1]/p/y",
+                                        "poses[1]/w" };
+  for(int i = 0; i < 11; i++)
+  {
+    expected.push_back("bytes[" + std::to_string(i) + "]");
+  }
+  EXPECT_EQ(names, expected);
+}
+
 TEST(ParserRobustness, MinSizesFindsTheTypesStoredInPlaceAndBeyond)
 {
   const std::array<std::string, 7> names = { "a", "b", "c", "d", "e", "f", "g" };
@@ -234,11 +312,13 @@ TEST(ParserRobustness, MinSizesFindsTheTypesStoredInPlaceAndBeyond)
   for(size_t i = 0; i < names.size(); i++)
   {
     EXPECT_EQ(sizes.find(names[i]), nullptr) << names[i];
-    sizes.insert(names[i], 10 * i);
+    sizes.insert(names[i], { 10 * i, int(i) });
     for(size_t j = 0; j <= i; j++)
     {
       ASSERT_NE(sizes.find(names[j]), nullptr) << names[j] << " after " << names[i];
-      EXPECT_EQ(*sizes.find(names[j]), 10 * j) << names[j] << " after " << names[i];
+      EXPECT_EQ(sizes.find(names[j])->size, 10 * j) << names[j] << " after " << names[i];
+      EXPECT_EQ(sizes.find(names[j])->height, int(j))
+          << names[j] << " after " << names[i];
     }
   }
   EXPECT_EQ(sizes.find("missing"), nullptr);

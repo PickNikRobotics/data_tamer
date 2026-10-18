@@ -137,6 +137,9 @@ reads 1.x files.
   code that writes data_tamer MCAP files itself) and ``fwd.hpp`` (forward declarations).
 * Parser: ``SchemaRegistry``, ``ToSnapshotView()`` and ``ForEachSnapshotInBatch()``
   decode the ROS 2 messages without ROS; ``SplitMcapMessage()`` splits an MCAP message.
+* Parser: ``ParseSnapshot()`` decodes several times faster and allocates nothing per
+  value (``benchmarks/parser_benchmark.cpp`` measures it); its depth limit no longer
+  depends on the order of the fields.
 * Python decoder, standard library only: ``pip install "data-tamer-parser[mcap]"``.
   ``parse_snapshot()`` compiles each schema and active mask into ``struct`` formats,
   5 to 15 times faster than a value-by-value walk; ``parse_snapshot_values()`` returns

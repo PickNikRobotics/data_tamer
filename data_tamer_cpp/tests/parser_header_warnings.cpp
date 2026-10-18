@@ -1,13 +1,15 @@
 // The standalone parser is copied into other projects. Compiled as strict C++17 with
 // the warnings of this library as errors (see CMakeLists.txt), and with its templates
-// instantiated, it must not produce a single warning.
+// instantiated, it must not produce a single warning. useEverything() is external, so
+// that an optimised build compiles it and reports the warnings of the optimiser too
+// (-Wmaybe-uninitialized): the optimiser drops an unused function of internal linkage.
 #include "data_tamer_v2/data_tamer_parser.hpp"
 
 #include <cstdint>
 #include <string>
 #include <vector>
 
-namespace
+namespace ParserHeaderWarnings
 {
 // Same field names as the data_tamer_msgs types, without depending on ROS.
 struct SchemaMsg
@@ -29,7 +31,7 @@ struct BatchMsg
   std::vector<SnapshotMsg> snapshots;
 };
 
-[[maybe_unused]] size_t useEverything(const std::string& text, const BatchMsg& batch)
+size_t useEverything(const std::string& text, const BatchMsg& batch)
 {
   using namespace DataTamerParser;
   size_t total = 0;
@@ -56,4 +58,4 @@ struct BatchMsg
   total += ToSnapshotView(batch.snapshots.front()).payload.size;
   return total;
 }
-}  // namespace
+}  // namespace ParserHeaderWarnings

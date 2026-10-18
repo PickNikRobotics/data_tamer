@@ -58,7 +58,8 @@ under "Unreleased" in `data_tamer_cpp/CHANGELOG.rst`.
     The gtest programs come from `data_tamer_add_gtest()`.
   - `examples/`: T01 to T08, the progressive joint-controller tutorial (see its
     `README.md`); `mcap_1m_per_sec` and `ros2_publisher` (ROS only) are separate demos.
-  - `benchmarks/`: built only when Google Benchmark is found.
+  - `benchmarks/`: built only when Google Benchmark is found. `parser_benchmark` times
+    the standalone parser (`ParseSnapshot()`) on snapshots the library takes.
   - MCAP is not in the tree. Under ROS 2 it is `mcap_vendor`. Otherwise CMake downloads
     the MCAP C++ 2.1.3 release archive of foxglove/mcap (tag `releases/cpp/v2.1.3`,
     pinned by SHA256) with FetchContent, as `data_tamer_mcap`, unless

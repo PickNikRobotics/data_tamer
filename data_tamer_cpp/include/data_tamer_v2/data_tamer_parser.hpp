@@ -150,7 +150,8 @@ struct SnapshotView
 /// Decodes `snapshot` with `schema`, calling
 ///   callback_number(const std::string& name, const VarNumber& value)
 /// for each value of each active field, in schema order. Names join nested fields with
-/// '/' and index container elements: "pose/position/x", "points[1]/z".
+/// '/' and index container elements: "pose/position/x", "points[1]/z". `name` is valid
+/// only during the call: copy it to keep it.
 /// Returns false if the hash is not the schema's (nothing is decoded) or if bytes are
 /// left after the last field (the callback has already run). Throws std::runtime_error
 /// on malformed data, and for an active field of a type the schema does not define or
@@ -1204,39 +1205,45 @@ constexpr int kMaxSchemaDepth = 64;
 class MinSizes
 {
 public:
-  /// The size stored for `type_name`, or nullptr.
-  const size_t* find(const std::string& type_name) const
+  struct Entry
+  {
+    size_t size;  // fewest bytes
+    int height;   // how many custom types deep the type's fixed-size fields go
+  };
+
+  /// The entry stored for `type_name`, or nullptr.
+  const Entry* find(const std::string& type_name) const
   {
     for(size_t i = 0; i < in_place_; i++)
     {
       if(*names_[i] == type_name)
       {
-        return &sizes_[i];
+        return &entries_[i];
       }
     }
     const auto it = more_.find(type_name);
     return it == more_.end() ? nullptr : &it->second;
   }
 
-  void insert(const std::string& type_name, size_t size)
+  void insert(const std::string& type_name, Entry entry)
   {
     if(in_place_ < kInPlace)
     {
       names_[in_place_] = &type_name;
-      sizes_[in_place_++] = size;
+      entries_[in_place_++] = entry;
     }
     else
     {
-      more_.emplace(type_name, size);
+      more_.emplace(type_name, entry);
     }
   }
 
 private:
   static constexpr size_t kInPlace = 4;
   std::array<const std::string*, kInPlace> names_{};
-  std::array<size_t, kInPlace> sizes_{};
+  std::array<Entry, kInPlace> entries_{};
   size_t in_place_ = 0;
-  std::map<std::string, size_t> more_;
+  std::map<std::string, Entry> more_;
 };
 
 /// Larger sizes saturate here, so that products of array extents cannot overflow.
@@ -1285,7 +1292,9 @@ inline const FieldsVector& CustomFields(const Schema& schema, const std::string&
 }
 
 /// Fewest payload bytes one element of `field` takes: a basic type's size, or the sum
-/// of the fewest bytes of each field of the custom type.
+/// of the fewest bytes of each field of the custom type. A custom type found in
+/// `min_sizes` throws as deep as computing it again would, so that the depth limit does
+/// not depend on the fields decoded before.
 inline size_t MinElementSize(const TypeField& field, const Schema& schema,
                              MinSizes& min_sizes, int depth)
 {
@@ -1293,18 +1302,26 @@ inline size_t MinElementSize(const TypeField& field, const Schema& schema,
   {
     return SizeOf(field.type);
   }
-  if(const size_t* known = min_sizes.find(field.type_name))
+  if(const MinSizes::Entry* known = min_sizes.find(field.type_name))
   {
-    return *known;
+    CheckDepth(depth + known->height);
+    return known->size;
   }
   CheckDepth(depth);
   size_t total = 0;
+  int height = 0;
   for(const auto& sub_field : CustomFields(schema, field.type_name))
   {
     const size_t size = MinFieldSize(sub_field, schema, min_sizes, depth + 1);
     total = size > kHugeSize - total ? kHugeSize : total + size;
+    // MinFieldSize() stored the type of a custom field, unless it is a dynamic vector
+    if(sub_field.type == BasicType::OTHER &&
+       !(sub_field.is_vector && sub_field.array_size == 0))
+    {
+      height = std::max(height, min_sizes.find(sub_field.type_name)->height + 1);
+    }
   }
-  min_sizes.insert(field.type_name, total);
+  min_sizes.insert(field.type_name, { total, height });
   return total;
 }
 
@@ -1322,10 +1339,109 @@ inline size_t MinFieldSize(const TypeField& field, const Schema& schema,
   return (element != 0 && count > kHugeSize / element) ? kHugeSize : element * count;
 }
 
+/// Keeps the first `size` characters of `name` and writes the `length` characters of
+/// `text` after them. `name` is resized only when its length changes, so that names of
+/// one length overwrite their characters in place.
+inline void SetTail(std::string& name, size_t size, const char* text, size_t length)
+{
+  if(name.size() != size + length)
+  {
+    name.resize(size + length);
+  }
+  std::memcpy(&name[size], text, length);
+}
+
+/// Makes `name` its first `parent_size` characters (the parent's name, none at the top
+/// level), a '/' if there are any, and `field_name`.
+inline void SetFieldName(std::string& name, size_t parent_size,
+                         const std::string& field_name)
+{
+  if(parent_size == 0)
+  {
+    SetTail(name, 0, field_name.data(), field_name.size());
+    return;
+  }
+  const size_t size = parent_size + 1 + field_name.size();
+  if(name.size() != size)
+  {
+    name.resize(size);
+  }
+  name[parent_size] = '/';
+  std::memcpy(&name[parent_size + 1], field_name.data(), field_name.size());
+}
+
+/// Makes the name of a vector element the name of the next one, in place: `name` holds
+/// the field's name in its first `field_size` characters, then the element's index in
+/// `index_size` characters ("[9]"), then whatever the element left. Returns the size of
+/// the new index ("[10]").
+inline size_t NextIndex(std::string& name, size_t field_size, size_t index_size)
+{
+  if(name.size() != field_size + index_size)
+  {
+    name.resize(field_size + index_size);
+  }
+  for(size_t i = name.size() - 2; i > field_size; i--)  // the digits, from the last one
+  {
+    if(name[i] != '9')
+    {
+      name[i]++;
+      return index_size;
+    }
+    name[i] = '0';
+  }
+  // All nines: one more digit, "[99]" becomes "[100]".
+  name[field_size + 1] = '1';
+  name.back() = '0';
+  name.push_back(']');
+  return index_size + 1;
+}
+
+/// The fields of the custom types a decode has met below the top level, by the schema
+/// field that names the type, so that the elements of a vector look the types of their
+/// fields up once rather than once each. Past kInPlace fields it looks them up each time.
+class FieldTypes
+{
+public:
+  const FieldsVector& of(const TypeField& field, const Schema& schema)
+  {
+    for(size_t i = 0; i < count_; i++)
+    {
+      if(fields_[i] == &field)
+      {
+        return *types_[i];
+      }
+    }
+    const FieldsVector& type = CustomFields(schema, field.type_name);
+    if(count_ < kInPlace)
+    {
+      fields_[count_] = &field;
+      types_[count_++] = &type;
+    }
+    return type;
+  }
+
+private:
+  static constexpr size_t kInPlace = 16;
+  // Not zeroed: a decode would pay for it, and only the first count_ entries are read.
+  std::array<const TypeField*, kInPlace> fields_;
+  std::array<const FieldsVector*, kInPlace> types_;
+  size_t count_ = 0;
+};
+
+/// What one decode keeps from one value to the next.
+struct DecodeState
+{
+  MinSizes min_sizes;
+  FieldTypes types;
+  std::string name;  // the name of the value being decoded
+};
+
+/// Decodes `field`. The first `parent_size` characters of `state.name` are its parent's
+/// name (none at the top level), the rest is scratch.
 template <typename NumberCallback>
 void ParseSnapshotRecursive(const TypeField& field, const Schema& schema,
                             BufferSpan& buffer, const NumberCallback& callback_number,
-                            const std::string& prefix, MinSizes& min_sizes, int depth = 0)
+                            DecodeState& state, size_t parent_size, int depth = 0)
 {
   CheckDepth(depth);
   uint32_t vect_size = field.array_size;
@@ -1349,7 +1465,7 @@ void ParseSnapshotRecursive(const TypeField& field, const Schema& schema,
     }
     // An element takes at least min_size bytes: a count the payload cannot hold is
     // rejected. Elements of no byte hold no value, however many there are.
-    const size_t min_size = MinElementSize(field, schema, min_sizes, depth);
+    const size_t min_size = MinElementSize(field, schema, state.min_sizes, depth);
     if(min_size == 0)
     {
       return;
@@ -1360,49 +1476,49 @@ void ParseSnapshotRecursive(const TypeField& field, const Schema& schema,
     }
   }
 
-  // A top-level field is named as it is, without a copy; a nested one is appended to the
-  // name of its parent.
-  std::string joined;
-  if(!prefix.empty())
-  {
-    joined.reserve(prefix.size() + 1 + field.field_name.size());
-    joined.append(prefix).append(1, '/').append(field.field_name);
-  }
-  const std::string& new_prefix = prefix.empty() ? field.field_name : joined;
+  // A top-level field is decoded once: only the fields below it take a slot.
+  const FieldsVector* const sub_fields =
+      field.type != BasicType::OTHER ? nullptr :
+      depth == 0                     ? &CustomFields(schema, field.type_name) :
+                                       &state.types.of(field, schema);
 
-  auto doParse = [&](const std::string& var_name) {
-    if(field.type != BasicType::OTHER)
+  std::string& name = state.name;
+  // `name` holds the name of one value, or of one element of a custom type.
+  auto doParse = [&]() {
+    if(sub_fields == nullptr)
     {
       const auto var = DeserializeToVarNumber(field.type, buffer);
-      callback_number(var_name, var);
+      callback_number(std::as_const(name), var);  // const: a callback cannot move it away
     }
     else
     {
-      // Not CustomFields(): called from here it slows the flat scalar path by up to 17%
-      // (GCC 13, -O3), through the code it makes the compiler generate for the function.
-      const auto type_it = schema.custom_types.find(field.type_name);
-      if(type_it == schema.custom_types.end())
+      const size_t size = name.size();
+      for(const auto& sub_field : *sub_fields)
       {
-        UndecodableType(schema, field.type_name);
-      }
-      for(const auto& sub_field : type_it->second)
-      {
-        ParseSnapshotRecursive(sub_field, schema, buffer, callback_number, var_name,
-                               min_sizes, depth + 1);
+        ParseSnapshotRecursive(sub_field, schema, buffer, callback_number, state, size,
+                               depth + 1);
       }
     }
   };
 
+  SetFieldName(name, parent_size, field.field_name);
   if(!field.is_vector)
   {
-    doParse(new_prefix);
+    doParse();
   }
   else
   {
+    // The index follows the field's name: "[0]", then incremented in place.
+    const size_t field_size = name.size();
+    name.append("[0]");
+    size_t index_size = 3;
     for(uint32_t a = 0; a < vect_size; a++)
     {
-      const auto& name = new_prefix + "[" + std::to_string(a) + "]";
-      doParse(name);
+      if(a != 0)
+      {
+        index_size = NextIndex(name, field_size, index_size);
+      }
+      doParse();
     }
   }
 }
@@ -1417,8 +1533,7 @@ template <typename NumberCallback>
     return false;
   }
   BufferSpan buffer = snapshot.payload;
-  detail::MinSizes min_sizes;
-  const std::string no_prefix;  // one for all top-level fields: "" would build one each
+  detail::DecodeState state;
   if(snapshot.active_mask.size * 8 < schema.fields.size())
   {
     throw std::runtime_error("DataTamerParser: active mask shorter than the schema");
@@ -1427,10 +1542,19 @@ template <typename NumberCallback>
   for(size_t i = 0; i < schema.fields.size(); i++)
   {
     const auto& field = schema.fields[i];
-    if(GetBit(snapshot.active_mask, i))
+    if(!GetBit(snapshot.active_mask, i))
     {
-      detail::ParseSnapshotRecursive(field, schema, buffer, callback_number, no_prefix,
-                                     min_sizes);
+      continue;
+    }
+    if(field.type != BasicType::OTHER && !field.is_vector)
+    {
+      // A top-level scalar is named as it is, without a copy.
+      const auto var = DeserializeToVarNumber(field.type, buffer);
+      callback_number(field.field_name, var);
+    }
+    else
+    {
+      detail::ParseSnapshotRecursive(field, schema, buffer, callback_number, state, 0);
     }
   }
   // leftover bytes: the schema and the payload do not belong together
