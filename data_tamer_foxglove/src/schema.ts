@@ -46,12 +46,25 @@ export function schemaHash(text: string): bigint {
   return hashText(text);
 }
 function hashText(text: string): bigint {
-  const lines = text.split('\n'), index = lines.findIndex(l => l.startsWith('### hash:'));
-  if (index >= 0) lines.splice(index, 1);
-  let hash = 0xcbf29ce484222325n;
-  for (const byte of new TextEncoder().encode(lines.join('\n')))
-    hash = BigInt.asUintN(64, (hash ^ BigInt(byte)) * 0x100000001b3n);
-  return hash;
+  // The text without its first "### hash:" line, as the writer hashes it.
+  let body = text;
+  const at = text.startsWith('### hash:') ? 0 : text.indexOf('\n### hash:') + 1;
+  if (at > 0 || text.startsWith('### hash:')) {
+    const end = text.indexOf('\n', at);
+    body = at === 0 ? (end < 0 ? '' : text.slice(end + 1)) : text.slice(0, at - 1) + (end < 0 ? '' : text.slice(end));
+  }
+  // The 64-bit state as two 32-bit halves. The prime is 2^40 + 0x1b3, so the multiply is
+  // lo * 0x1b3 (its carry into hi), hi * 0x1b3, and lo << 8 into hi: every partial product
+  // stays below 2^53, exact in doubles, without a BigInt per byte.
+  const bytes = new TextEncoder().encode(body);
+  let hi = 0xcbf29ce4, lo = 0x84222325;
+  for (let i = 0; i < bytes.length; i++) {
+    lo = (lo ^ bytes[i]!) >>> 0;
+    const low = lo * 0x1b3;
+    hi = (hi * 0x1b3 + Math.floor(low / 0x100000000) + ((lo << 8) >>> 0)) >>> 0;
+    lo = low >>> 0;
+  }
+  return (BigInt(hi) << 32n) | BigInt(lo);
 }
 function firstLine(text: string): string {
   return text.split('\n').map(trim).find(l => l && (!l.startsWith('#') || l.startsWith('###'))) ?? '';
