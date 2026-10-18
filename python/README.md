@@ -28,6 +28,63 @@ Files of data_tamer 1.x (schema version 4) and 2.x are read; texts of releases b
 0.7.0 raise `ValueError`. `verify_hash=True` checks the schema hash of a 2.x file, but
 accepts the hash of a 1.x file unchecked: it came from the writer's `std::hash`.
 
+## Columns for analysis
+
+`parse_snapshot_values()` decodes a snapshot into two tuples, the names and the values in
+payload order: `tuple(d)` and `tuple(d.values())` of `d = parse_snapshot(...)`, without
+building the dict. Snapshots of one layout (the active mask and the length of every
+dynamic vector) return the same `names` object, so rows of one layout can be grouped by
+it. With pandas, one table per layout:
+
+```python
+import pandas as pd
+from mcap.reader import make_reader
+import data_tamer_parser as dt
+
+schemas, tables = {}, {}   # tables: names -> (log times, rows)
+with open("log.mcap", "rb") as stream:
+    for mcap_schema, channel, message in make_reader(stream).iter_messages(topics=["control"]):
+        schema = schemas.get(mcap_schema.id)
+        if schema is None:   # parse each schema once: it keeps its decoding plans
+            schema = schemas[mcap_schema.id] = dt.parse_schema(mcap_schema.data.decode())
+        mask, payload = dt.split_mcap_message(message.data)
+        names, values = dt.parse_snapshot_values(schema, mask, payload)
+        times, rows = tables.setdefault(names, ([], []))
+        times.append(message.log_time)
+        rows.append(values)
+
+frames = [pd.DataFrame(rows, columns=list(names), index=pd.to_datetime(times, unit="ns"))
+          for names, (times, rows) in tables.items()]
+```
+
+A layout can be evicted from the cache and come back as another tuple object, equal to
+the first: compare names with `==` (as the dict above does), and use `is` only as a
+shortcut. If two fields flatten to the same name (a field `a/b` next to a field `a` with
+a member `b`), `names` lists it once with its last value, as the dict does.
+
+## Speed
+
+`parse_snapshot()` compiles each schema and active mask once into `struct` formats and
+keeps them on the `Schema`, so parse a schema once and reuse it. A run of fixed-size
+values becomes one `unpack_from()` call, and so does a dynamic vector of a basic type or
+of a custom type of fixed size. A vector whose elements hold vectors or strings is
+decoded by the reference walker, at its speed. Microseconds per snapshot on Python 3.14
+(`python3 python/benchmark_decode.py`):
+
+| schema                           | values | reference | `parse_snapshot()` | `parse_snapshot_values()` |
+|----------------------------------|-------:|----------:|-------------------:|--------------------------:|
+| `float64[2]` x 3                 |      6 |       3.5 |         0.65 (5x)  |               0.48 (7x)   |
+| 1000 `float64`                   |   1000 |       427 |           30 (14x) |                9.2 (47x)  |
+| `float64[]`, 1000 long           |   1000 |       284 |           30 (9x)  |                9.3 (31x)  |
+| `Pose[100]`                      |    700 |       321 |           21 (15x) |                6.4 (50x)  |
+| `Point3D[]`, 100 long            |    300 |       124 |          8.8 (14x) |                3.3 (38x)  |
+| `Joint[]`, a string and a float  |    156 |        62 |           62 (1x)  |                 66 (1x)   |
+
+The schema walker that defines the result, `_parse_snapshot_reference()`, stays in the
+module: the tests check that both functions agree with it, values and errors, on random
+schemas, the golden vectors and the 1.0.4 recording. A `Schema` may be shared by
+threads; do not modify one after decoding with it.
+
 ## Field names from a schema
 
 `Schema.field_names()` lists the flattened names a schema can produce, without

@@ -128,6 +128,9 @@ reads 1.x files.
 * Parser: ``SchemaRegistry``, ``ToSnapshotView()`` and ``ForEachSnapshotInBatch()``
   decode the ROS 2 messages without ROS; ``SplitMcapMessage()`` splits an MCAP message.
 * Python decoder, standard library only: ``pip install "data-tamer-parser[mcap]"``.
+  ``parse_snapshot()`` compiles each schema and active mask into ``struct`` formats,
+  5 to 15 times faster than a value-by-value walk; ``parse_snapshot_values()`` returns
+  names and values as tuples, for column-oriented code.
 * Tutorials ``T01`` to ``T08``, run by ctest; ``docs/USER_MANUAL.md``,
   ``docs/llm_user_manual.md``, ``docs/MIGRATION.md`` and the wire format specification
   ``docs/wire_format.md``, with golden vectors.
