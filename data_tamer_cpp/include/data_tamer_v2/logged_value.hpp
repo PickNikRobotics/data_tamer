@@ -2,6 +2,7 @@
 
 #include "data_tamer_v2/fwd.hpp"
 #include "data_tamer_v2/types.hpp"
+#include "data_tamer_v2/details/abi.hpp"
 #include "data_tamer_v2/details/locked_reference.hpp"
 
 #include <atomic>
@@ -31,9 +32,10 @@ struct is_atomic_scalar<T, true> : std::bool_constant<std::atomic<T>::is_always_
 /// The enabled flag of the series in slot `index`, for LoggedValue::setEnabled() and
 /// isEnabled(). Defined in the library, which owns the flag encoding. Lock-free; no
 /// staleness check, a LoggedValue's own registration is always current.
-void setSeriesEnabled(ChannelSharedState& state, uint32_t index, bool enable) noexcept;
+void setSeriesEnabled(ChannelSharedState& state, uint32_t index,
+                      bool enable) noexcept DATA_TAMER_NONBLOCKING;
 [[nodiscard]] bool isSeriesEnabled(const ChannelSharedState& state,
-                                   uint32_t index) noexcept;
+                                   uint32_t index) noexcept DATA_TAMER_NONBLOCKING;
 }  // namespace details
 
 /// True for the scalars (numbers, bool, char, enums) of at most 8 bytes that have a
@@ -80,7 +82,8 @@ public:
 
   /// Stores the value. Wait-free for scalars; other types lock the channel's write
   /// mutex (no-op inside scopedWrite() on the same thread). Does not re-enable a
-  /// value disabled with setEnabled(false).
+  /// value disabled with setEnabled(false). Clang infers [[clang::nonblocking]] for
+  /// scalars, not for the other types.
   void set(const T& value);
 
   /// Returns a copy of the value. Locks like set().
@@ -99,9 +102,9 @@ public:
 
   /// Includes or excludes the value from the snapshots. Lock-free; callable from any
   /// thread, even after the channel is destroyed.
-  void setEnabled(bool enabled) noexcept;
+  void setEnabled(bool enabled) noexcept DATA_TAMER_NONBLOCKING;
 
-  [[nodiscard]] bool isEnabled() const noexcept;
+  [[nodiscard]] bool isEnabled() const noexcept DATA_TAMER_NONBLOCKING;
 
 private:
   std::shared_ptr<ChannelSharedState> state_;
@@ -111,13 +114,13 @@ private:
 };
 
 template <typename T>
-inline void LoggedValue<T>::setEnabled(bool enabled) noexcept
+inline void LoggedValue<T>::setEnabled(bool enabled) noexcept DATA_TAMER_NONBLOCKING
 {
   details::setSeriesEnabled(*state_, id_.index_, enabled);
 }
 
 template <typename T>
-inline bool LoggedValue<T>::isEnabled() const noexcept
+inline bool LoggedValue<T>::isEnabled() const noexcept DATA_TAMER_NONBLOCKING
 {
   return details::isSeriesEnabled(*state_, id_.index_);
 }

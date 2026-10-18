@@ -43,7 +43,9 @@ visualize your logs offline or in real-time.
 
 - **Serialization schema is created at run-time**: no need to do code generation.
 - **Suitable for real-time applications**: very low latency (on the side of the callee);
-  `tryTakeSnapshot()` neither blocks nor allocates.
+  `tryTakeSnapshot()` neither blocks nor allocates. With Clang 20 or later, the
+  real-time API is `[[clang::nonblocking]]`, so `-Wfunction-effects` and
+  RealtimeSanitizer check your control loop.
 - **Multi-sink architecture**: recorded data can be forwarded to multiple "backends".
 - **Very low serialization overhead**, in the order of 1 bit per traced value.
 - The user can enable/disable traced variables at run-time.

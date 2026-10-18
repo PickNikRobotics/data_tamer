@@ -5,6 +5,7 @@
 #include <mutex>
 #include <system_error>
 
+#include "realtime_sanitizer.hpp"
 #include "spin_pause.hpp"
 
 // Priority inheritance is a POSIX option, not a Linux feature (QNX has it too).
@@ -87,7 +88,13 @@ public:
   /// Fails while any thread holds the mutex, the calling one included: the mutex is not
   /// recursive (POSIX defines it so for the priority-inheriting mutex).
   bool try_lock() noexcept { return mutex_.try_lock(); }
-  void unlock() noexcept { mutex_.unlock(); }
+  /// Releasing to a writer that waits is a FUTEX_UNLOCK_PI call, which the real-time
+  /// path is allowed to make: RTSan is told so.
+  void unlock() noexcept
+  {
+    const details::AllowedRealTimeCall allowed;
+    mutex_.unlock();
+  }
 
   /// Spins on try_lock() for about spin_ns nanoseconds and never blocks. A budget that
   /// outlasts the clock spins until the lock is free.

@@ -125,6 +125,13 @@ reads 1.x files.
   the application calls ``drain()``) and ``ChannelsRegistry::stopAll()``.
 * ``TypeDefinitionTrait<T>`` describes a type without reopening its namespace (Eigen,
   ...).
+* Real-time checks with Clang 20 or later: the real-time API is declared
+  ``[[clang::nonblocking]]`` (``DATA_TAMER_NONBLOCKING``), so in a function marked
+  ``[[clang::nonblocking]]`` ``-Wfunction-effects`` rejects a call to ``takeSnapshot()``,
+  a registration or a non-scalar ``LoggedValue::set()``, and RealtimeSanitizer
+  (``-fsanitize=realtime``) reports every allocation, lock or system call at run time,
+  in data_tamer and in custom serializers. On Linux (ELF) data_tamer declares to RTSan
+  the futex calls the real-time contract allows. A new ``rtsan`` preset and CI job.
 * New headers: ``names.hpp`` (``JoinNames()`` and ``IsCanonicalName()`` build and check
   hierarchical names), ``sinks/mcap_encoding.hpp`` (the MCAP encoding of ``MCAPSink``, for
   code that writes data_tamer MCAP files itself) and ``fwd.hpp`` (forward declarations).

@@ -3,6 +3,7 @@
 #include "data_tamer_v2/contrib/SerializeMe.hpp"
 #include "data_tamer_v2/data_tamer.hpp"
 #include "data_tamer_v2/details/snapshot_pool.hpp"
+#include "realtime_sanitizer.hpp"
 #include "shared_state.hpp"
 #include "waiter_count.hpp"
 #include "write_mutex.hpp"
@@ -578,12 +579,13 @@ void LogChannel::setEnabled(const RegistrationID& id, bool enable)
   }
 }
 
-bool LogChannel::trySetEnabled(const RegistrationID& id, bool enable) noexcept
+bool LogChannel::trySetEnabled(const RegistrationID& id,
+                               bool enable) noexcept DATA_TAMER_NONBLOCKING
 {
   return _p->shared->setEnabled(id, enable);
 }
 
-bool LogChannel::isEnabled(const RegistrationID& id) const noexcept
+bool LogChannel::isEnabled(const RegistrationID& id) const noexcept DATA_TAMER_NONBLOCKING
 {
   return _p->shared->isEnabled(id);
 }
@@ -816,12 +818,14 @@ bool ChannelSharedState::inTransactionOnThisThread() const noexcept
 
 namespace details
 {
-void setSeriesEnabled(ChannelSharedState& state, uint32_t index, bool enable) noexcept
+void setSeriesEnabled(ChannelSharedState& state, uint32_t index,
+                      bool enable) noexcept DATA_TAMER_NONBLOCKING
 {
   state.setEnabled(index, enable);
 }
 
-bool isSeriesEnabled(const ChannelSharedState& state, uint32_t index) noexcept
+bool isSeriesEnabled(const ChannelSharedState& state,
+                     uint32_t index) noexcept DATA_TAMER_NONBLOCKING
 {
   return state.isEnabled(index);
 }
@@ -832,17 +836,17 @@ WriteTransaction LogChannel::scopedWrite()
   return WriteTransaction(*_p->shared);
 }
 
-uint64_t LogChannel::writeLockContended() const
+uint64_t LogChannel::writeLockContended() const noexcept DATA_TAMER_NONBLOCKING
 {
   return _p->write_lock_contended.load(std::memory_order_relaxed);
 }
 
-uint64_t LogChannel::writeLockWaitMaxNs() const
+uint64_t LogChannel::writeLockWaitMaxNs() const noexcept DATA_TAMER_NONBLOCKING
 {
   return _p->write_lock_wait_max_ns.load(std::memory_order_relaxed);
 }
 
-uint64_t LogChannel::poolExhausted() const
+uint64_t LogChannel::poolExhausted() const noexcept DATA_TAMER_NONBLOCKING
 {
   // startLogging() creates the pool before it sets logging_started and never replaces
   // it afterwards; before that no snapshot can have found it exhausted.
@@ -934,22 +938,22 @@ ChannelDefaults::Sizes ChannelDefaults::resolve() const
   return sizes;
 }
 
-uint64_t LogChannel::payloadReallocations() const
+uint64_t LogChannel::payloadReallocations() const noexcept DATA_TAMER_NONBLOCKING
 {
   return _p->payload_reallocations.load(std::memory_order_relaxed);
 }
 
-uint64_t LogChannel::droppedOversize() const
+uint64_t LogChannel::droppedOversize() const noexcept DATA_TAMER_NONBLOCKING
 {
   return _p->dropped_oversize.load(std::memory_order_relaxed);
 }
 
-uint64_t LogChannel::snapshotAttempts() const
+uint64_t LogChannel::snapshotAttempts() const noexcept DATA_TAMER_NONBLOCKING
 {
   return _p->attempts.load(std::memory_order_relaxed);
 }
 
-uint64_t LogChannel::snapshotsAccepted() const
+uint64_t LogChannel::snapshotsAccepted() const noexcept DATA_TAMER_NONBLOCKING
 {
   return _p->accepted.load(std::memory_order_acquire);
 }
@@ -1104,6 +1108,9 @@ void LogChannel::startLogging()
 
 SnapshotResult LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
 {
+  // Not real-time safe, also when it neither waits nor allocates: RTSan reports it in a
+  // [[clang::nonblocking]] caller.
+  details::notifyBlockingCall("DataTamer2::LogChannel::takeSnapshot");
   _p->attempts.fetch_add(1, std::memory_order_relaxed);
   if(!_p->logging_started.load(std::memory_order_acquire))
   {
@@ -1116,7 +1123,14 @@ SnapshotResult LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
   return takeSnapshotImpl(timestamp, false);
 }
 
-SnapshotResult LogChannel::tryTakeSnapshot(std::chrono::nanoseconds timestamp)
+// Not noexcept: a serializer that breaks the contract and throws still unwinds
+// through it cleanly (ChannelCapacity.ExceptionsReleaseSingleSlotAndEpochOnBothPaths).
+#if defined(DATA_TAMER_HAS_NONBLOCKING)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wperf-constraint-implies-noexcept"
+#endif
+SnapshotResult
+LogChannel::tryTakeSnapshot(std::chrono::nanoseconds timestamp) DATA_TAMER_NONBLOCKING
 {
   _p->attempts.fetch_add(1, std::memory_order_relaxed);
   if(!_p->logging_started.load(std::memory_order_acquire))
@@ -1125,6 +1139,9 @@ SnapshotResult LogChannel::tryTakeSnapshot(std::chrono::nanoseconds timestamp)
   }
   return takeSnapshotImpl(timestamp, true);
 }
+#if defined(DATA_TAMER_HAS_NONBLOCKING)
+#pragma clang diagnostic pop
+#endif
 
 SnapshotResult LogChannel::takeSnapshotImpl(std::chrono::nanoseconds timestamp,
                                             bool real_time)

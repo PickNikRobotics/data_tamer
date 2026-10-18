@@ -56,6 +56,16 @@
         "CMAKE_SHARED_LINKER_FLAGS": "-fsanitize=thread",
         "DATA_TAMER_TEST_WRAPPER": "${sourceDir}/tests/run_under_tsan.sh"
       }
+    },
+    {
+      "name": "rtsan",
+      "inherits": "base",
+      "displayName":
+          "Clang 21: RealtimeSanitizer and -Wfunction-effects on the real-time API",
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "clang++-21",
+        "DATA_TAMER_BUILD_EXAMPLES": "OFF"
+      }
     }
   ],
   "buildPresets": [
@@ -78,6 +88,15 @@
       "name": "tsan",
       "configurePreset": "tsan",
       "jobs": 0
+    },
+    {
+      "name": "rtsan",
+      "configurePreset": "rtsan",
+      "jobs": 0,
+      "targets": [
+        "rtsan_test",
+        "nonblocking_caller_control"
+      ]
     }
   ],
   "testPresets": [
@@ -114,6 +133,21 @@
       },
       "environment": {
         "TSAN_OPTIONS": "halt_on_error=1:second_deadlock_stack=1:history_size=4"
+      }
+    },
+    {
+      "name": "rtsan",
+      "configurePreset": "rtsan",
+      "output": {
+        "outputOnFailure": true
+      },
+      "filter": {
+        "include": {
+          "name": "RealtimeSanitizer|nonblocking_caller"
+        }
+      },
+      "execution": {
+        "noTestsAction": "error"
       }
     }
   ]

@@ -180,6 +180,28 @@ write mutex, and `tryTakeSnapshot()` returns `blocked` while another snapshot ho
 `tryTakeSnapshot()` doesn't allocate when data_tamer is loaded with `dlopen()` either, in
 a plugin for example.
 
+With Clang 20 or later the compiler and RealtimeSanitizer can check your loop. The
+real-time calls of data_tamer are marked `[[clang::nonblocking]]`; mark your cycle the
+same way:
+
+```cpp
+void controlCycle() noexcept [[clang::nonblocking]]
+{
+  velocity->set(v);
+  (void)channel->tryTakeSnapshot();
+}
+```
+
+- `-Wfunction-effects` reports, at compile time, a call in it that is not nonblocking:
+  `takeSnapshot()`, a registration, a non-scalar `LoggedValue::set()`.
+- `-fsanitize=realtime` (RTSan) reports, at run time, every allocation, lock and system
+  call made inside it, data_tamer's included, also with a prebuilt data_tamer, and
+  `takeSnapshot()`. On Linux (ELF) only, the few that data_tamer makes on purpose are
+  not reported: releasing the write mutex to a writer that waits for it, and waking a
+  sleeping sink worker, or a control operation or `stop()` that waits for the
+  snapshot. Elsewhere (macOS) RTSan reports the release of the write mutex in the
+  first `tryTakeSnapshot()`. A custom serializer that allocates is always reported.
+
 The pool is sized for you: as many slots as fit in 8 MiB, at least 64 and at most 1024.
 With a payload under 8 KB (1000 doubles) that is 1024 slots, one second at 1 kHz, longer
 than a disk flush (up to 200 ms). If a sink stalls longer, new snapshots are dropped with

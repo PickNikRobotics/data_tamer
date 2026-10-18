@@ -1,5 +1,7 @@
 #pragma once
 
+#include "realtime_sanitizer.hpp"
+
 #include <atomic>
 #include <cstdint>
 
@@ -35,12 +37,14 @@ public:
     std::atomic<uint32_t>& count_;
   };
 
-  /// Call after the change of `changed` that the waiters wait for.
+  /// Call after the change of `changed` that the waiters wait for. The notification,
+  /// a futex call, is one the real-time path is allowed to make.
   template <typename T>
   void notifyIfWaiting(std::atomic<T>& changed) const
   {
     if(count_.load(std::memory_order_seq_cst) != 0)
     {
+      const AllowedRealTimeCall allowed;
       changed.notify_all();
     }
   }

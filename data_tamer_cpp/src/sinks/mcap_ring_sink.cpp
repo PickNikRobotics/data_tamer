@@ -511,6 +511,7 @@ MCAPRingSink::~MCAPRingSink()
 }
 
 bool MCAPRingSink::requestDump(std::chrono::nanoseconds post_trigger) noexcept
+    DATA_TAMER_NONBLOCKING
 {
   const auto delay =
       static_cast<uint64_t>(std::max<nanoseconds::rep>(post_trigger.count(), 0));

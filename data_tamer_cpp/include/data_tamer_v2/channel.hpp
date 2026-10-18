@@ -29,9 +29,17 @@ namespace DataTamer2
 {
 
 /// System-clock time since the epoch: the default timestamp of a snapshot.
-inline std::chrono::nanoseconds NsecSinceEpoch()
+inline std::chrono::nanoseconds NsecSinceEpoch() noexcept DATA_TAMER_NONBLOCKING
 {
+#if defined(DATA_TAMER_HAS_NONBLOCKING)
+#pragma clang diagnostic push
+  // A vDSO clock read, which the standard library does not mark nonblocking.
+#pragma clang diagnostic ignored "-Wfunction-effects"
+#endif
   auto since_epoch = std::chrono::system_clock::now().time_since_epoch();
+#if defined(DATA_TAMER_HAS_NONBLOCKING)
+#pragma clang diagnostic pop
+#endif
   return std::chrono::duration_cast<std::chrono::nanoseconds>(since_epoch);
 }
 
@@ -173,11 +181,13 @@ public:
 
   /// Like setEnabled(), but returns false instead of throwing for a stale or invalid
   /// id. noexcept, lock-free and allocation-free: safe on real-time threads.
-  [[nodiscard]] bool trySetEnabled(const RegistrationID& id, bool enable) noexcept;
+  [[nodiscard]] bool trySetEnabled(const RegistrationID& id,
+                                   bool enable) noexcept DATA_TAMER_NONBLOCKING;
 
   /// True if the value is registered and enabled; false after unregister() and for a
   /// stale or invalid id. Lock-free.
-  [[nodiscard]] bool isEnabled(const RegistrationID& id) const noexcept;
+  [[nodiscard]] bool
+  isEnabled(const RegistrationID& id) const noexcept DATA_TAMER_NONBLOCKING;
 
   /// Stops recording the value; the pointer may be freed once this returns. The value
   /// stays in the schema (as disabled), and its name can be registered again with the
@@ -228,7 +238,8 @@ public:
    * Several threads may take snapshots of one channel: they take turns on its write
    * mutex. The first call with a sink attached calls startLogging(), and throws what it
    * throws. It can block on a writer and allocate: on a real-time thread use
-   * tryTakeSnapshot().
+   * tryTakeSnapshot(). RealtimeSanitizer reports a call from a [[clang::nonblocking]]
+   * function, also when it does neither.
    * The result may be ignored: stats() counts every call (`attempts`) and the `ok` and
    * `partial` ones (`accepted`); `pool_exhausted`, `oversize` and `blocked` also have
    * counters of their own, and `attempts - accepted` covers the other results.
@@ -241,10 +252,11 @@ public:
    * allocates. Where takeSnapshot() would wait or allocate, it returns `blocked` (a
    * writer or another snapshot holds the mutex), `oversize` (the payload outgrew its
    * slot) or `not_started` (call startLogging() before the loop). Serializers run on
-   * this path: they must not throw, allocate or block.
+   * this path: they must not throw, allocate or block. Marked [[clang::nonblocking]]
+   * (DATA_TAMER_NONBLOCKING), like the rest of the real-time API.
    */
-  [[nodiscard]] SnapshotResult
-  tryTakeSnapshot(std::chrono::nanoseconds timestamp = NsecSinceEpoch());
+  [[nodiscard]] SnapshotResult tryTakeSnapshot(
+      std::chrono::nanoseconds timestamp = NsecSinceEpoch()) DATA_TAMER_NONBLOCKING;
 
   /// A copy of the channel's schema. Takes the control mutex: not real-time safe.
   [[nodiscard]] Schema getSchema() const;
@@ -270,13 +282,13 @@ public:
   /// Snapshots delayed by a writer past the spin budget (takeSnapshot() blocked,
   /// tryTakeSnapshot() returned `blocked`), and snapshots that returned `blocked`
   /// because the calling thread held the write mutex (scopedWrite() or a guard).
-  [[nodiscard]] uint64_t writeLockContended() const;
+  [[nodiscard]] uint64_t writeLockContended() const noexcept DATA_TAMER_NONBLOCKING;
 
   /// Longest time takeSnapshot() blocked on the write mutex, in nanoseconds.
-  [[nodiscard]] uint64_t writeLockWaitMaxNs() const;
+  [[nodiscard]] uint64_t writeLockWaitMaxNs() const noexcept DATA_TAMER_NONBLOCKING;
 
   /// Snapshot attempts that found no free pool slot.
-  [[nodiscard]] uint64_t poolExhausted() const;
+  [[nodiscard]] uint64_t poolExhausted() const noexcept DATA_TAMER_NONBLOCKING;
 
   /// Sets the minimum payload bytes reserved by each pool slot. Zero (the default)
   /// sizes the slots from the registered values at startLogging(); raise it if
@@ -300,19 +312,19 @@ public:
                        std::chrono::nanoseconds snapshot_period);
 
   /// Slots that takeSnapshot() grew because the payload outgrew them.
-  [[nodiscard]] uint64_t payloadReallocations() const;
+  [[nodiscard]] uint64_t payloadReallocations() const noexcept DATA_TAMER_NONBLOCKING;
 
   /// tryTakeSnapshot() calls that returned `oversize`.
-  [[nodiscard]] uint64_t droppedOversize() const;
+  [[nodiscard]] uint64_t droppedOversize() const noexcept DATA_TAMER_NONBLOCKING;
 
   /// Calls of takeSnapshot() and tryTakeSnapshot() so far, whatever the result
   /// (calls that threw count too).
-  [[nodiscard]] uint64_t snapshotAttempts() const;
+  [[nodiscard]] uint64_t snapshotAttempts() const noexcept DATA_TAMER_NONBLOCKING;
 
   /// Snapshots that at least one sink took: the results `ok` and `partial`. Queued is
   /// not delivered: SinkWorker::delivered() counts deliveries. Read it before
   /// snapshotAttempts() so that it never exceeds them (stats() does).
-  [[nodiscard]] uint64_t snapshotsAccepted() const;
+  [[nodiscard]] uint64_t snapshotsAccepted() const noexcept DATA_TAMER_NONBLOCKING;
 
   /// The most sinks a channel holds.
   static constexpr size_t kMaxSinks = 8;

@@ -1,5 +1,6 @@
 #include "data_tamer_v2/data_sink.hpp"
 #include "data_tamer_v2/details/snapshot_pool.hpp"
+#include "realtime_sanitizer.hpp"
 #include "spin_pause.hpp"
 #include "waiter_count.hpp"
 
@@ -637,6 +638,7 @@ SinkWorker::Push SinkWorker::tryPush(Attachment& attachment, SnapshotRef&& snaps
 
 void SinkWorker::wake(Pimpl& target) noexcept
 {
+  const details::AllowedRealTimeCall allowed;  // the futex wake of a sleeping worker
   target.wake.release();
 }
 
@@ -687,17 +689,17 @@ void SinkWorker::drain()
   p.drainQueues();
 }
 
-uint64_t SinkWorker::delivered() const noexcept
+uint64_t SinkWorker::delivered() const noexcept DATA_TAMER_NONBLOCKING
 {
   return _p->delivered.load(std::memory_order_relaxed);
 }
 
-uint64_t SinkWorker::queueHighWater() const noexcept
+uint64_t SinkWorker::queueHighWater() const noexcept DATA_TAMER_NONBLOCKING
 {
   return _p->queue_high_water.load(std::memory_order_relaxed);
 }
 
-uint64_t SinkWorker::errors() const noexcept
+uint64_t SinkWorker::errors() const noexcept DATA_TAMER_NONBLOCKING
 {
   return _p->errors.load(std::memory_order_relaxed);
 }

@@ -46,12 +46,15 @@ under "Unreleased" in `data_tamer_cpp/CHANGELOG.rst`.
     dependency on the library.
   - `src/`: implementation; `src/sinks/` for MCAPSink, MCAPRingSink, ROS2PublisherSink.
     Library-private headers: `shared_state.hpp` (ChannelSharedState, AtomicWordTable),
-    `write_mutex.hpp`, `spin_pause.hpp`, `waiter_count.hpp`. Not installed; tests and
-    benchmarks have `src/` on their include path.
+    `write_mutex.hpp`, `spin_pause.hpp`, `waiter_count.hpp`, `realtime_sanitizer.hpp`
+    (`details::AllowedRealTimeCall`). Not installed; tests and benchmarks have `src/` on
+    their include path.
   - `tests/`: the gtest binary `datatamer_test`; `serialize_me_big_endian_test`,
     SerializeMe built as for a big endian host; compile-only targets; compile-fail
     probes in `tests/compile_fail/`; in Linux shared builds, `dlopen_tls_test`, which
-    loads libdata_tamer with a plugin through `dlopen()` and counts `malloc()` calls.
+    loads libdata_tamer with a plugin through `dlopen()` and counts `malloc()` calls;
+    with Clang 20 or later, the `-Wfunction-effects` probe `nonblocking_caller.cpp` and,
+    on Linux, `rtsan_test` (`rtsan_tests.cpp`, built with `-fsanitize=realtime`).
     The gtest programs come from `data_tamer_add_gtest()`.
   - `examples/`: T01 to T08, the progressive joint-controller tutorial (see its
     `README.md`); `mcap_1m_per_sec` and `ros2_publisher` (ROS only) are separate demos.
@@ -89,8 +92,8 @@ under "Unreleased" in `data_tamer_cpp/CHANGELOG.rst`.
 - `.github/workflows/`: plain CMake through conan plus `conan create`, the `install` job
   (static and shared installs, `test_package/` built against each, Ubuntu 22.04 and
   24.04), one ROS 2 job per distribution (industrial_ci; its `AFTER_SCRIPT` runs
-  `tools/check_ros_install.sh` on the install space), asan and tsan presets, Python
-  tests and PyPI release, and the `abi` job (libabigail).
+  `tools/check_ros_install.sh` on the install space), asan, tsan and rtsan presets,
+  Python tests and PyPI release, and the `abi` job (libabigail).
 
 ## Build and test
 
@@ -138,8 +141,13 @@ ctest --preset debug -R 'WireFormat'
 ```
 
 Other presets: `release` (adds benchmarks), `asan`, `tsan` (runs the tests through
-`tests/run_under_tsan.sh`). Every preset builds the examples and runs the tutorials T01
-to T08 as tests. CI runs `asan` and `tsan`.
+`tests/run_under_tsan.sh`), `rtsan` (`clang++-21`: builds only `rtsan_test` and the
+`-Wfunction-effects` probe, and runs them; it fails when the compiler has neither).
+The other presets build the examples and run the tutorials T01 to T08 as tests. CI
+runs `asan`, `tsan` and `rtsan`. Any Clang 20 or later build without another sanitizer
+builds the RTSan (Linux only) and function-effects tests too. RTSan prints its report
+through llvm-symbolizer, which hangs on an offline machine where `DEBUGINFOD_URLS` is
+set (Ubuntu's default): `rtsan_tests.cpp` unsets it, unset it for your own runs.
 
 Install check, as the CI `install` job does it (repeat with `-DBUILD_SHARED_LIBS=ON`):
 
@@ -205,6 +213,15 @@ DATA_TAMER_UPDATE_GOLDEN=1 \
   keep them out of line (inline code would put the variable in every consumer as
   dynamic TLS), and keep it the library's only thread-local: a `dlopen()`ed library
   takes its initial-exec TLS from glibc's small static TLS surplus.
+- The real-time API (the "yes" rows of the Threading table in `docs/llm_user_manual.md`
+  and `NsecSinceEpoch()`) is `noexcept` and `DATA_TAMER_NONBLOCKING` (`details/abi.hpp`:
+  `[[clang::nonblocking]]` on Clang 20 or later) on the declaration and the out-of-line
+  definition. Exceptions: `tryTakeSnapshot()` is not `noexcept` (a throwing serializer
+  unwinds through it), and Clang infers the attribute for the scalar
+  `LoggedValue::set()`/`get()`. A new real-time function gets the macro, a call in
+  `tests/compile_fail/nonblocking_caller.cpp` and one in `cycle()` of
+  `tests/rtsan_tests.cpp`. The futex calls the bullet above allows run inside
+  `details::AllowedRealTimeCall` (`src/realtime_sanitizer.hpp`), and nothing else does.
 - `onSchema()`/`onSnapshot()`/`onStop()`/`onStart()` are serialized by the SinkWorker,
   and control operations (registration, sinks, `startLogging()`) wait for them. Never call a
   control operation from a serializer; inside `scopedWrite()` they are safe. Lock order:
@@ -350,7 +367,9 @@ that major. That is frozen inside 2.x:
 Adding a function, an overload, a class or an appended enumerator is compatible. Header
 defaults (member initializers, default arguments) take effect only in rebuilt
 consumers; defaults inside a Pimpl take effect for old binaries too. Say which in the
-CHANGELOG.
+CHANGELOG. Adding `DATA_TAMER_NONBLOCKING` or `noexcept` to a non-template function
+changes no symbol (Itanium mangling has neither; `nm -D` is identical); removing the
+attribute is a source break for callers built with `-Wfunction-effects -Werror`.
 
 Changing anything frozen is a break: bump the major version in all the files above
 (so `SOVERSION` changes), rename the namespaces (`DataTamer2` to `DataTamer3`, the inline
