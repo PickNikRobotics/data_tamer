@@ -9,6 +9,7 @@ function(CompileBenchmark TARGET)
 endfunction()
 
 CompileBenchmark(data_tamer_benchmark benchmark::benchmark)
+CompileBenchmark(parser_benchmark benchmark::benchmark)
 CompileBenchmark(sink_latency)
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
