@@ -66,9 +66,9 @@ public:
   /// Attaches the sink to every channel of the registry: those that exist (a started
   /// channel sends its schema to the sink at once, see LogChannel::addDataSink()) and
   /// those getChannel() creates later. If a channel refuses it (eight sinks already,
-  /// or onSchema() throws), the call is undone, the sink is not a default sink and
-  /// the exception propagates. At most eight default sinks: another throws
-  /// std::runtime_error.
+  /// onSchema() throws, or a callback of this sink calls it: see DataSink),
+  /// the call is undone, the sink is not a default sink and the exception propagates.
+  /// At most eight default sinks: another throws std::runtime_error.
   void addDefaultSink(std::shared_ptr<SinkWorker> sink);
 
   /// Sets the defaults for the channels getChannel() creates after this call; existing

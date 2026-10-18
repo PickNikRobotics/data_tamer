@@ -290,6 +290,10 @@ busy for every sink. For slow work, copy the snapshot (`DataTamer2::Snapshot cop
 *snapshot;`) and hand the copy to your own thread. Override `onStop()` and `onStart()` if
 the sink has files to close and reopen.
 
+Keep control calls out of the callbacks: a call that would wait for the sink's own worker
+throws `std::logic_error` there instead of hanging (the list is in the `DataSink`
+documentation, `data_sink.hpp`).
+
 ### Shutdown
 
 `stop()` ends a recording: it delivers what is queued, then lets the sink finish:
@@ -504,7 +508,8 @@ Yes. Attach the same worker to each channel, and every channel's schema reaches 
 
 ### Can I add or remove sinks while logging?
 
-Yes, but not from a sink callback or a custom serializer.
+Yes, but not from a custom serializer, and better not from a sink callback (see
+[Writing your own sink](#writing-your-own-sink)): change sinks on another thread.
 
 ### Is there a more detailed reference?
 

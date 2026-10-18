@@ -81,6 +81,9 @@ reads 1.x files.
   new registration).
 * A snapshot taken by a thread that holds the write mutex (``scopedWrite()``, a
   ``LoggedValue`` guard) returns ``blocked``; in 1.x it deadlocked.
+* From a sink callback, a control call that would wait for that callback's own worker
+  throws ``std::logic_error`` and changes nothing instead of deadlocking (see ``DataSink``
+  in ``data_sink.hpp``).
 * Value names, custom type names and field names must be non-empty and free of whitespace
   and control characters (1.x refused only spaces); a channel name can't be empty or hold
   a control character. Two C++ types with one custom type name in a channel make

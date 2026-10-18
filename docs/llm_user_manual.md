@@ -547,7 +547,8 @@ methods with `worker->as<T>()`, which throws `std::bad_cast` for the wrong type.
   delivers everything still queued and then finishes the sink (`DataSink::onStop()`):
   see [Shutdown](#shutdown). It is idempotent, and calls from several threads are
   serialized. From a callback of the worker's own sink, `stop()`, `start()` and
-  `drain()` throw `std::logic_error` and change nothing.
+  `drain()` throw `std::logic_error` and change nothing (see
+  [Writing a custom sink](#writing-a-custom-sink) for the other calls that do).
   `start()` resumes, and first lets the sink reopen (`DataSink::onStart()`). `drain()`
   delivers the queues on the calling thread.
 - Each channel's snapshots reach `onSnapshot()` in the order they were taken. The worker
@@ -835,10 +836,30 @@ Derive from `DataTamer2::DataSink` and implement the two protected callbacks, pl
   of the channel lose samples (`pool_exhausted`).
 - For slow work (network, disk, batching), copy with `Snapshot copy = *ref;`, hand the
   copy to your own thread and return.
-- Callbacks may call the channel's const queries (`getSchema()`, `stats()`), never
-  anything that changes it (registration, sinks, `startLogging()`): those wait for callbacks
-  and deadlock. `stop()`, `start()` and `drain()` of the sink's own worker throw
-  `std::logic_error`.
+- Callbacks may call the channel's const queries (`getSchema()`, `stats()`). A control
+  operation that would wait for a callback of the sink's own worker throws
+  `std::logic_error` from that callback and changes nothing, instead of deadlocking:
+  - `stop()`, `start()` and `drain()` of that worker;
+  - `addDataSink()` of that worker to a channel whose schema `startLogging()` has frozen
+    (also while that start runs, or after its queue allocation failed): it would call
+    `onSchema()`. Also while another thread's `addDataSink()` of the worker to the same
+    channel announces the schema, up to that call's return, even after its `onSchema()`
+    ran;
+  - `ChannelsRegistry::addDefaultSink()` of that worker when that `addDataSink()` throws
+    for one of the registry's channels (the call is undone);
+  - `startLogging()`, and so the first `takeSnapshot()`, of a channel that worker is
+    attached to, also after a failed start that announced the schema to it (retry
+    from another thread).
+
+  The rest works from a callback, because it waits only for other workers or for a
+  snapshot in progress: registration, `unregister()`, `removeDataSink()`,
+  `takeSnapshot()` of a started channel (also one this worker is attached to),
+  `addDataSink()` of the worker to a channel whose schema is still open, and sinks,
+  starts and `drain()` of other workers. It still blocks. Two deadlocks go undetected: a
+  cycle (worker A's callback waits for worker B while B's waits for A), and a callback's
+  `startLogging()` racing a start on another thread that announces to the worker,
+  attached to the channel only after the callback's call checked it. Keep control
+  operations out of callbacks where you can.
 
 ```cpp
 class SlowSink : public DataTamer2::DataSink
@@ -1016,7 +1037,9 @@ The two extra counters cost the snapshot path two atomic increments (`attempts` 
 | `SinkWorker::stats()`, `lastError()` | no | Take a mutex and copy a string (allocates). |
 | `SinkWorker::stop()`, `drain()`, `flushPendingDump()`, `ChannelsRegistry::stopAll()` | no | Block until delivery or writing ends; `stop()` runs `onStop()`. |
 
-Control operations must stay out of sink callbacks and custom serializers; inside
+Control operations must stay out of custom serializers, and out of sink callbacks
+where you can (those that would wait for the callback's own worker throw
+`std::logic_error`, see [Writing a custom sink](#writing-a-custom-sink)); inside
 `scopedWrite()` scopes and pointer guards they are safe.
 
 Threads involved:

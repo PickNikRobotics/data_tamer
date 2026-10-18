@@ -70,7 +70,8 @@ enum class SnapshotResult : uint8_t
  * which the first takeSnapshot() with a sink attached calls. Several threads may take
  * snapshots; they take turns on the write mutex. Registration, unregister(), sink
  * changes and startLogging() are control operations that can block, some until a
- * snapshot in progress ends: never call them from a serializer or a sink callback.
+ * snapshot in progress ends: never call them from a serializer (from a sink callback,
+ * see DataSink).
  */
 class LogChannel : public std::enable_shared_from_this<LogChannel>
 {
@@ -191,6 +192,7 @@ public:
    * A channel holds at most kMaxSinks sinks: one more throws std::runtime_error.
    * If logging started, this allocates the sink's queue and calls its onSchema() on
    * the calling thread: not real-time safe. Otherwise startLogging() does both.
+   * From a callback of `sink` it throws std::logic_error instead (see DataSink).
    * @return false if the sink was attached already, true otherwise.
    */
   bool addDataSink(std::shared_ptr<SinkWorker> sink);
@@ -212,7 +214,8 @@ public:
    * Call it once after registering all values and before the snapshot loop. It
    * allocates and runs sink callbacks: not real-time safe. Does nothing if logging
    * started already. Throws if a sink's onSchema() throws or an allocation fails;
-   * calling it again retries.
+   * calling it again retries. From a callback of an attached sink it throws
+   * std::logic_error and changes nothing (see DataSink).
    */
   void startLogging();
 
@@ -223,8 +226,9 @@ public:
    * @brief Serializes the enabled values and queues the snapshot on every sink.
    *
    * Several threads may take snapshots of one channel: they take turns on its write
-   * mutex. The first call with a sink attached calls startLogging(). It can block on a
-   * writer and allocate: on a real-time thread use tryTakeSnapshot().
+   * mutex. The first call with a sink attached calls startLogging(), and throws what it
+   * throws. It can block on a writer and allocate: on a real-time thread use
+   * tryTakeSnapshot().
    * The result may be ignored: stats() counts every call (`attempts`) and the `ok` and
    * `partial` ones (`accepted`); `pool_exhausted`, `oversize` and `blocked` also have
    * counters of their own, and `attempts - accepted` covers the other results.
