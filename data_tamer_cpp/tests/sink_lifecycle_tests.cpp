@@ -1,10 +1,10 @@
 // DataSink::onStop() and onStart(), ChannelsRegistry::stopAll(),
 // addDefaultSink() on existing channels and ChannelsRegistry::setChannelDefaults(), and
 // the typed access of a SinkWorker and the bookkeeping of a DummySink next to them.
-#include "data_tamer/channel.hpp"
-#include "data_tamer/data_tamer.hpp"
-#include "data_tamer/sinks/dummy_sink.hpp"
-#include "data_tamer/sinks/mcap_sink.hpp"
+#include "data_tamer_v2/channel.hpp"
+#include "data_tamer_v2/data_tamer.hpp"
+#include "data_tamer_v2/sinks/dummy_sink.hpp"
+#include "data_tamer_v2/sinks/mcap_sink.hpp"
 #include "mcap_test_utils.hpp"
 #include "test_sinks.hpp"
 

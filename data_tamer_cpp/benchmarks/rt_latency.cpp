@@ -5,10 +5,10 @@
 // usage: rt_latency [--values N] [--sinks K] [--writers W] [--seconds S]
 //                   [--rate HZ] [--mcap PATH] [--fifo] [--transactions]
 //                   [--vector-writer]
-#include "data_tamer/channel.hpp"
-#include "data_tamer/data_sink.hpp"
-#include "data_tamer/data_tamer.hpp"
-#include "data_tamer/sinks/mcap_sink.hpp"
+#include "data_tamer_v2/channel.hpp"
+#include "data_tamer_v2/data_sink.hpp"
+#include "data_tamer_v2/data_tamer.hpp"
+#include "data_tamer_v2/sinks/mcap_sink.hpp"
 #include "alloc_counter.hpp"
 #include "null_sink.hpp"
 
@@ -68,23 +68,41 @@ static Options parse(int argc, char** argv)
       }
     };
     if(!std::strcmp(argv[i], "--values"))
+    {
       nextInteger(o.values);
+    }
     else if(!std::strcmp(argv[i], "--sinks"))
+    {
       nextInteger(o.sinks);
+    }
     else if(!std::strcmp(argv[i], "--writers"))
+    {
       nextInteger(o.writers);
+    }
     else if(!std::strcmp(argv[i], "--seconds"))
+    {
       nextInteger(o.seconds);
+    }
     else if(!std::strcmp(argv[i], "--rate"))
+    {
       nextInteger(o.rate_hz);
+    }
     else if(!std::strcmp(argv[i], "--mcap"))
+    {
       o.mcap = nextArgument();
+    }
     else if(!std::strcmp(argv[i], "--fifo"))
+    {
       o.fifo = true;
+    }
     else if(!std::strcmp(argv[i], "--transactions"))
+    {
       o.transactions = true;
+    }
     else if(!std::strcmp(argv[i], "--vector-writer"))
+    {
       o.vector_writer = true;
+    }
     else
     {
       std::fprintf(stderr, "unknown option %s\n", argv[i]);
@@ -271,7 +289,9 @@ int main(int argc, char** argv)
               (unsigned long long)stats.write_lock_wait_max_ns);
   uint64_t attachment_drops = 0;
   for(const auto& entry : stats.dropped_by_sink)
+  {
     attachment_drops += entry.dropped;
+  }
   std::printf("pool_exhausted=%llu payload_reallocations=%llu dropped_oversize=%llu "
               "attachment_drops=%llu\n",
               (unsigned long long)stats.pool_exhausted,

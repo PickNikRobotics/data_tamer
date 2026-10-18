@@ -7,8 +7,8 @@
 
 // The umbrella header: ChannelsRegistry plus LogChannel, LoggedValue and the sink
 // interface (channel.hpp includes data_sink.hpp). A header that only names these types
-// can include data_tamer/fwd.hpp instead.
-#include "data_tamer/channel.hpp"
+// can include data_tamer_v2/fwd.hpp instead.
+#include "data_tamer_v2/channel.hpp"
 
 namespace DataTamer
 {

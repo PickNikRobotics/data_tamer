@@ -1,7 +1,7 @@
 // How the schema reaches sinks that attach while startLogging() runs, or while
 // another thread attaches the same sink.
-#include "data_tamer/channel.hpp"
-#include "data_tamer/data_sink.hpp"
+#include "data_tamer_v2/channel.hpp"
+#include "data_tamer_v2/data_sink.hpp"
 #include "gate.hpp"
 #include "observed_thread.hpp"
 #include "test_sinks.hpp"

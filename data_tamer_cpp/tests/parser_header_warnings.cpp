@@ -1,7 +1,7 @@
 // The standalone parser is copied into other projects. Compiled as strict C++17 with
 // the warnings of this library as errors (see CMakeLists.txt), and with its templates
 // instantiated, it must not produce a single warning.
-#include "data_tamer_parser/data_tamer_parser.hpp"
+#include "data_tamer_v2/data_tamer_parser.hpp"
 
 #include <cstdint>
 #include <string>

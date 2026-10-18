@@ -4,6 +4,10 @@ Changelog for package data_tamer
 
 Unreleased
 ----------
+* **Breaking, headers**: the public headers move from ``data_tamer/`` to ``data_tamer_v2/``
+  (``#include "data_tamer_v2/channel.hpp"``), and the standalone parser from
+  ``data_tamer_parser/data_tamer_parser.hpp`` to ``data_tamer_v2/data_tamer_parser.hpp``,
+  so that 2.x installs side by side with 1.x, whose headers keep their paths.
 * **ABI**: ``ChannelSharedState``, its ``WriteMutex`` and the series flag words are
   library-private (``src/``): the headers ``details/shared_state.hpp``,
   ``details/write_mutex.hpp`` and ``details/spin_pause.hpp`` are no longer installed, and
@@ -39,9 +43,9 @@ Unreleased
   the thread-local chain. The chain is no longer an inline protocol, so later 2.x
   releases can change it; only the size of ``WriteTransaction`` is pinned. Rebuild consumers
   built against earlier headers.
-* **API**: ``data_tamer/data_tamer.hpp`` includes ``channel.hpp`` again, as in 1.x, so
+* **API**: ``data_tamer_v2/data_tamer.hpp`` includes ``channel.hpp`` again, as in 1.x, so
   one include gives ``ChannelsRegistry``, ``LogChannel``, ``LoggedValue`` and the sink
-  interface. ``data_tamer/fwd.hpp`` stays for headers that only name the types.
+  interface. ``data_tamer_v2/fwd.hpp`` stays for headers that only name the types.
 * **API**: ``takeSnapshot()`` is no longer ``[[nodiscard]]``: ``stats()`` counts every
   outcome, and most loops don't act on each call. ``tryTakeSnapshot()`` still is.
 * **API**: no ``LogChannel::droppedSnapshots()``, which no release had: read
@@ -197,7 +201,7 @@ Unreleased
   the exported getters, one per field, so a field added later never changes what
   the library returns across the ABI. They are declared
   ``DATA_TAMER_INLINE_LOCAL`` (hidden visibility, from the new
-  ``data_tamer/details/abi.hpp``) so that every binary uses the copy built
+  ``data_tamer_v2/details/abi.hpp``) so that every binary uses the copy built
   against its own header: an exported weak copy would let the first loaded
   shared object's older ``stats()`` build the struct in a newer caller's buffer.
   ``Stats`` itself is not exported.
@@ -267,13 +271,13 @@ Unreleased
   line, the object is one pointer) and ``LogChannel`` its types registry
   (``sizeof`` drops by one ``TypesRegistry``). ``tests/abi_tests.cpp`` pins
   both sizes. Downstream binaries must be rebuilt.
-* New ``data_tamer/fwd.hpp``, a forward-declaration header like ``<iosfwd>``: it
+* New ``data_tamer_v2/fwd.hpp``, a forward-declaration header like ``<iosfwd>``: it
   declares ``ChannelsRegistry``, ``DataSink``, ``LogChannel``, ``RegistrationID``,
   ``SinkWorker``, ``SnapshotRef``, ``Schema``, ``Snapshot`` and
   ``LoggedValue<T>``, so that headers that only name these types need not
   declare them by hand. It has no includes and can be combined with the full
   headers in any order; compile tests cover it alone and in both orders.
-* New ``MCAPRingSink`` (``data_tamer/sinks/mcap_ring_sink.hpp``, #95), a flight
+* New ``MCAPRingSink`` (``data_tamer_v2/sinks/mcap_ring_sink.hpp``, #95), a flight
   recorder: it keeps the last ``window`` of every attached channel in a
   preallocated RAM ring (evicted by age and by ``capacity_bytes``) and writes
   an MCAP file only on ``requestDump(post_trigger)``, which is lock-free and
@@ -364,7 +368,7 @@ Unreleased
   ``constexpr``. ``SerializeMe::DeserializeFromBuffer`` now compiles for custom
   types (it passed const field pointers and could not write the fields).
 * Value names (#97): new header-only ``DataTamer::JoinNames(parts...)``
-  (``data_tamer/names.hpp``, included by ``channel.hpp``) joins components with
+  (``data_tamer_v2/names.hpp``, included by ``channel.hpp``) joins components with
   a single ``/`` and drops empty ones, so namespaces may carry trailing slashes:
   ``JoinNames("/loco/", "LF/", "x") == "loco/LF/x"``. Names with empty
   ``/``-separated components (e.g. ``"/loco//torso/x"``) are still accepted,
@@ -409,7 +413,7 @@ Unreleased
     ``tryTakeSnapshot()`` is untouched.
 * MCAP messages carry a per-channel ``sequence`` number (1, 2, 3, ... per MCAP
   channel and file) instead of always 1, so readers can detect gaps (#98).
-* New ``data_tamer/sinks/mcap_encoding.hpp`` (#96): inline helpers
+* New ``data_tamer_v2/sinks/mcap_encoding.hpp`` (#96): inline helpers
   ``mcap_encoding::AddChannel()``, ``WriteSnapshot()`` (for a ``Snapshot``),
   ``WriteMessage()`` (from a timestamp and mask and payload spans, e.g.
   for stored data) and ``EncodeMessageBody()`` that write the MCAP records of

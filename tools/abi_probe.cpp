@@ -10,14 +10,14 @@
 // whose layout is in question, so that abidiff reaches them.
 //
 // The probe uses the stable public surface only. Never link it: it is not a library.
-#include "data_tamer/channel.hpp"
-#include "data_tamer/custom_types.hpp"
-#include "data_tamer/data_sink.hpp"
-#include "data_tamer/data_tamer.hpp"
-#include "data_tamer/logged_value.hpp"
-#include "data_tamer/sinks/mcap_ring_sink.hpp"
-#include "data_tamer/sinks/mcap_sink.hpp"
-#include "data_tamer/values.hpp"
+#include "data_tamer_v2/channel.hpp"
+#include "data_tamer_v2/custom_types.hpp"
+#include "data_tamer_v2/data_sink.hpp"
+#include "data_tamer_v2/data_tamer.hpp"
+#include "data_tamer_v2/logged_value.hpp"
+#include "data_tamer_v2/sinks/mcap_ring_sink.hpp"
+#include "data_tamer_v2/sinks/mcap_sink.hpp"
+#include "data_tamer_v2/values.hpp"
 
 #include <array>
 #include <memory>

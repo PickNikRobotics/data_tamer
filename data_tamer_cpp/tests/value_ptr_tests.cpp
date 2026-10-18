@@ -1,5 +1,5 @@
-#include "data_tamer/values.hpp"
-#include "data_tamer/custom_types.hpp"
+#include "data_tamer_v2/values.hpp"
+#include "data_tamer_v2/custom_types.hpp"
 #include "../examples/geometry_types.hpp"
 
 #include <gtest/gtest.h>
@@ -26,7 +26,9 @@ TEST(ValuePtrGolden, Double)
   ValuePtr ptr(&v);
   ASSERT_EQ(ptr.type(), BasicType::FLOAT64);
   ASSERT_FALSE(ptr.isVector());
-  const std::vector<uint8_t> expected = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF8, 0x3F };
+  const std::vector<uint8_t> expected = {
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF8, 0x3F
+  };
   ASSERT_EQ(serialize(ptr), expected);
 }
 
@@ -41,7 +43,12 @@ TEST(ValuePtrGolden, Int16AndBoolAndEnum)
   ASSERT_EQ(pb.type(), BasicType::BOOL);
   ASSERT_EQ(serialize(pb), (std::vector<uint8_t>{ 0x01 }));
 
-  enum Color : uint8_t { RED = 0, GREEN = 1, BLUE = 2 };
+  enum Color : uint8_t
+  {
+    RED = 0,
+    GREEN = 1,
+    BLUE = 2
+  };
   const Color c = BLUE;
   ValuePtr pc(&c);
   ASSERT_EQ(pc.type(), BasicType::UINT8);
@@ -54,7 +61,7 @@ TEST(ValuePtrGolden, VectorOfFloat)
   ValuePtr ptr(&v);
   ASSERT_EQ(ptr.type(), BasicType::FLOAT32);
   ASSERT_TRUE(ptr.isVector());
-  ASSERT_EQ(ptr.vectorSize(), 0);  // dynamic
+  ASSERT_EQ(ptr.vectorSize(), 0);                                  // dynamic
   const std::vector<uint8_t> expected = { 0x02, 0x00, 0x00, 0x00,  //
                                           0x00, 0x00, 0x80, 0x3F,  //
                                           0x00, 0x00, 0x00, 0x40 };
@@ -95,8 +102,9 @@ TEST(ValuePtrGolden, VectorOfCustomType)
   ValuePtr ptr(&v, serializer);
   ASSERT_TRUE(ptr.isVector());
   std::vector<uint8_t> expected = { 0x01, 0x00, 0x00, 0x00 };  // count
-  const uint8_t one_point[] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF8, 0x3F, 0, 0, 0, 0,
-                                0,    0,    0,    0,    0,    0,    0,    0,    0, 0, 0, 0 };
+  const uint8_t one_point[] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF8, 0x3F,
+                                0,    0,    0,    0,    0,    0,    0,    0,
+                                0,    0,    0,    0,    0,    0,    0,    0 };
   expected.insert(expected.end(), std::begin(one_point), std::end(one_point));
   ASSERT_EQ(serialize(ptr), expected);
 }
@@ -116,7 +124,10 @@ TEST(ValuePtrAtomic, ScalarSerializesLikePlainValue)
 
 TEST(ValuePtrAtomic, EnumAndInt)
 {
-  enum Mode : int32_t { A = 7 };
+  enum Mode : int32_t
+  {
+    A = 7
+  };
   const std::atomic<Mode> m{ A };
   ValuePtr pm(&m);
   ASSERT_EQ(pm.type(), BasicType::INT32);
@@ -163,7 +174,7 @@ TEST(ValuePtr, DefaultConstructedIsInertNotUB)
   ASSERT_EQ(empty.getSerializedSize(), 0u);
   uint8_t buffer[8];
   SerializeMe::SpanBytes span(buffer, 8);
-  empty.serialize(span);            // must not crash and must not consume bytes
+  empty.serialize(span);  // must not crash and must not consume bytes
   ASSERT_EQ(span.size(), 8u);
   ASSERT_EQ(empty.type(), BasicType::OTHER);
 }

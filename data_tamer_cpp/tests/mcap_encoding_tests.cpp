@@ -1,10 +1,10 @@
 // The public MCAP encoding helpers (#96): a writer of stored snapshots produces
 // the same records as MCAPSink, readable with the reference parser.
-#include "data_tamer/channel.hpp"
-#include "data_tamer/data_tamer.hpp"
-#include "data_tamer/sinks/dummy_sink.hpp"
-#include "data_tamer/sinks/mcap_encoding.hpp"
-#include "data_tamer_parser/data_tamer_parser.hpp"
+#include "data_tamer_v2/channel.hpp"
+#include "data_tamer_v2/data_tamer.hpp"
+#include "data_tamer_v2/sinks/dummy_sink.hpp"
+#include "data_tamer_v2/sinks/mcap_encoding.hpp"
+#include "data_tamer_v2/data_tamer_parser.hpp"
 #include "alloc_counter.hpp"
 #include "mcap_test_utils.hpp"
 #include "test_sinks.hpp"

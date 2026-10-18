@@ -1,6 +1,6 @@
 // System calls made by the real-time snapshot path.
-#include "data_tamer/channel.hpp"
-#include "data_tamer/sinks/dummy_sink.hpp"
+#include "data_tamer_v2/channel.hpp"
+#include "data_tamer_v2/sinks/dummy_sink.hpp"
 #include "observed_thread.hpp"
 #include "test_sinks.hpp"
 

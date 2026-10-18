@@ -1,7 +1,7 @@
 // Compile-fail probe (see data_tamer_compile_fail_test in tests/CMakeLists.txt).
 // As written every result is cast to void and the file compiles. Each DT_IGNORE_*
 // macro drops one cast, which must then be an error.
-#include "data_tamer_parser/data_tamer_parser.hpp"
+#include "data_tamer_v2/data_tamer_parser.hpp"
 
 #include <cstdint>
 #include <string>

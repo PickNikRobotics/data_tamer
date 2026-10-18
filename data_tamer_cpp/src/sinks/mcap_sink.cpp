@@ -1,4 +1,4 @@
-#include "data_tamer/sinks/mcap_sink.hpp"
+#include "data_tamer_v2/sinks/mcap_sink.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -12,7 +12,7 @@
 #endif
 
 // After MCAP_IMPLEMENTATION: this includes <mcap/writer.hpp>.
-#include "data_tamer/sinks/mcap_encoding.hpp"
+#include "data_tamer_v2/sinks/mcap_encoding.hpp"
 #include <mcap/reader.hpp>  // its implementation is compiled here, as before
 
 namespace DataTamer

@@ -1,6 +1,6 @@
 // LogChannel::Stats (attempts, accepted, dropped_by_sink) and SinkWorker::Stats.
-#include "data_tamer/channel.hpp"
-#include "data_tamer/data_sink.hpp"
+#include "data_tamer_v2/channel.hpp"
+#include "data_tamer_v2/data_sink.hpp"
 #include "alloc_counter.hpp"
 #include "test_sinks.hpp"
 

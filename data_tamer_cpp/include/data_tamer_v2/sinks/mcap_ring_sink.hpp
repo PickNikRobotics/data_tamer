@@ -1,7 +1,7 @@
 #pragma once
 
-#include "data_tamer/data_sink.hpp"
-#include "data_tamer/details/abi.hpp"
+#include "data_tamer_v2/data_sink.hpp"
+#include "data_tamer_v2/details/abi.hpp"
 
 #include <chrono>
 #include <cstddef>

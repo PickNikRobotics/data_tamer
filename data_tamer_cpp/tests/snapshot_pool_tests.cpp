@@ -1,4 +1,4 @@
-#include "data_tamer/details/snapshot_pool.hpp"
+#include "data_tamer_v2/details/snapshot_pool.hpp"
 #include "alloc_counter.hpp"
 
 #include <gtest/gtest.h>
@@ -159,9 +159,13 @@ TEST(SnapshotPool, ProducerAndConsumersUnderContention)
             return;
           }
           if(done)
+          {
             final_sweep = true;
+          }
           else
+          {
             std::this_thread::yield();
+          }
           continue;
         }
         for(auto& ref : batch)

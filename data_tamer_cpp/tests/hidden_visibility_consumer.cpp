@@ -1,6 +1,6 @@
 // A consumer compiled with -fvisibility=hidden, as packages that set
 // CMAKE_CXX_VISIBILITY_PRESET to hidden are; visibility_tests.cpp loads it with dlopen().
-#include "data_tamer/channel.hpp"
+#include "data_tamer_v2/channel.hpp"
 
 #include <vector>
 

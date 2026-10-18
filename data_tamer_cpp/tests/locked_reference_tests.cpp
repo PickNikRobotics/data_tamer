@@ -1,4 +1,4 @@
-#include "data_tamer/details/locked_reference.hpp"
+#include "data_tamer_v2/details/locked_reference.hpp"
 #include "shared_state.hpp"
 
 #include <gtest/gtest.h>

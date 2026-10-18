@@ -1,4 +1,4 @@
-#include "data_tamer/sinks/ros2_publisher_sink.hpp"
+#include "data_tamer_v2/sinks/ros2_publisher_sink.hpp"
 #include "data_tamer_msgs/msg/schemas.hpp"
 #include "data_tamer_msgs/msg/snapshot.hpp"
 #include "data_tamer_msgs/msg/snapshot_batch.hpp"

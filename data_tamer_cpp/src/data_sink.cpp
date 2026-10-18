@@ -1,5 +1,5 @@
-#include "data_tamer/data_sink.hpp"
-#include "data_tamer/details/snapshot_pool.hpp"
+#include "data_tamer_v2/data_sink.hpp"
+#include "data_tamer_v2/details/snapshot_pool.hpp"
 #include "spin_pause.hpp"
 #include "waiter_count.hpp"
 

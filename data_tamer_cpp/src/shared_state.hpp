@@ -6,7 +6,7 @@
 // mutex, details::setSeriesEnabled() and isSeriesEnabled() for a LoggedValue's flag. So
 // its layout, the flag word encoding and WriteMutex can change in a minor release.
 #include "write_mutex.hpp"
-#include "data_tamer/types.hpp"
+#include "data_tamer_v2/types.hpp"
 
 #include <array>
 #include <atomic>

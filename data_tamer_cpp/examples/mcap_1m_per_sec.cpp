@@ -1,6 +1,6 @@
-#include "data_tamer/channel.hpp"
-#include "data_tamer/data_tamer.hpp"
-#include "data_tamer/sinks/mcap_sink.hpp"
+#include "data_tamer_v2/channel.hpp"
+#include "data_tamer_v2/data_tamer.hpp"
+#include "data_tamer_v2/sinks/mcap_sink.hpp"
 #include <iostream>
 #include <cmath>
 #include <thread>

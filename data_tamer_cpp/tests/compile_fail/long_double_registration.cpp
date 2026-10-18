@@ -2,7 +2,7 @@
 // long double has no wire type, so registering one must be refused with a clear
 // message. As written the probe registers doubles; each DT_LONG_DOUBLE_* macro turns
 // one registration into a long double.
-#include "data_tamer/channel.hpp"
+#include "data_tamer_v2/channel.hpp"
 
 #include <string_view>
 #include <vector>

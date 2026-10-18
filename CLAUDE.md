@@ -28,14 +28,14 @@ under "Unreleased" in `data_tamer_cpp/CHANGELOG.rst`.
 ## Repository layout
 
 - `data_tamer_cpp/`: the library. ROS 2 package `data_tamer_cpp`, CMake target `data_tamer`.
-  - `include/data_tamer/`: public headers. `channel.hpp` (LogChannel, SnapshotResult),
+  - `include/data_tamer_v2/`: public headers. `channel.hpp` (LogChannel, SnapshotResult),
     `data_tamer.hpp` (ChannelsRegistry), `data_sink.hpp` (DataSink, SinkWorker, Snapshot,
     SnapshotRef), `logged_value.hpp`, `names.hpp`, `types.hpp` (Schema, BasicType),
     `custom_types.hpp`, `values.hpp`, `fwd.hpp`, `contrib/SerializeMe.hpp`
     (TypeDefinitionTrait, serialization), `details/` (pool, `WriteTransaction` and the
     guards in `locked_reference.hpp`, `abi.hpp`: public because inline code uses them),
     `sinks/`.
-  - `include/data_tamer_parser/data_tamer_parser.hpp`: standalone C++ decoder, no
+  - `include/data_tamer_v2/data_tamer_parser.hpp`: standalone C++ decoder, no
     dependency on the library.
   - `src/`: implementation; `src/sinks/` for MCAPSink, MCAPRingSink, ROS2PublisherSink.
     Library-private headers: `shared_state.hpp` (ChannelSharedState, AtomicWordTable),
@@ -310,7 +310,8 @@ sink is not covered: its ABI also follows the rclcpp release, and its pins are i
 `--allow-break` locally and the `abi-break` label on the pull request (never for the
 frozen vtables); once a 2.x tag exists the label no longer works and only a major
 version bump passes. The check also runs on pushes to `main`, against the previous
-commit.
+commit; there it reads the label from the pull request that made the commit, since a push
+event carries no labels.
 
 ## Conventions
 

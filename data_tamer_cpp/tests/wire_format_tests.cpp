@@ -5,11 +5,11 @@
 // Regenerate the fixtures with DATA_TAMER_UPDATE_GOLDEN=1, then review the diff
 // and update expected.json by hand. vectors/v4/ was recorded by data_tamer 1.0.4 and is
 // never regenerated.
-#include "data_tamer/channel.hpp"
-#include "data_tamer/data_tamer.hpp"
-#include "data_tamer/sinks/dummy_sink.hpp"
-#include "data_tamer/sinks/mcap_sink.hpp"
-#include "data_tamer_parser/data_tamer_parser.hpp"
+#include "data_tamer_v2/channel.hpp"
+#include "data_tamer_v2/data_tamer.hpp"
+#include "data_tamer_v2/sinks/dummy_sink.hpp"
+#include "data_tamer_v2/sinks/mcap_sink.hpp"
+#include "data_tamer_v2/data_tamer_parser.hpp"
 #include "test_sinks.hpp"
 #include "../examples/geometry_types.hpp"
 

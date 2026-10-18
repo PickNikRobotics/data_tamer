@@ -21,7 +21,7 @@ sources. Two artifacts keep it honest:
   decodes the same fixtures and checks them against `expected.json`.
 
 A change to any byte described here is a format revision: bump `SCHEMA_VERSION`
-in `data_tamer/types.hpp`, `data_tamer_parser/data_tamer_parser.hpp` and
+in `data_tamer_v2/types.hpp`, `data_tamer_v2/data_tamer_parser.hpp` and
 `python/data_tamer_parser.py` (and the version history below), regenerate the vectors with
 `DATA_TAMER_UPDATE_GOLDEN=1 datatamer_test --gtest_filter='WireFormat.*'`,
 update `expected.json` by hand (it is the oracle, never generated), update the
@@ -328,7 +328,7 @@ their own clock.
 ### 4.1 MCAP (`MCAPSink`)
 
 `MCAPSink` writes these records with the inline helpers in
-`data_tamer/sinks/mcap_encoding.hpp` (`AddChannel`, `WriteSnapshot`,
+`data_tamer_v2/sinks/mcap_encoding.hpp` (`AddChannel`, `WriteSnapshot`,
 `WriteMessage`, `EncodeMessageBody`); any other C++ writer, for example one that
 stores snapshots and writes them later, should use them too. They still need
 the data_tamer library (and, under ROS 2, `mcap_vendor`); the header explains

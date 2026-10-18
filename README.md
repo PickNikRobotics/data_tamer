@@ -55,8 +55,8 @@ visualize your logs offline or in real-time.
 ## Basic example
 
 ```cpp
-#include "data_tamer/data_tamer.hpp"
-#include "data_tamer/sinks/mcap_sink.hpp"
+#include "data_tamer_v2/data_tamer.hpp"
+#include "data_tamer_v2/sinks/mcap_sink.hpp"
 
 int main()
 {
@@ -100,8 +100,8 @@ Containers such as `std::vector` and `std::array` are supported out of the box.
 You can also register a custom type, as shown in the example below.
 
 ```cpp
-#include "data_tamer/data_tamer.hpp"
-#include "data_tamer/sinks/mcap_sink.hpp"
+#include "data_tamer_v2/data_tamer.hpp"
+#include "data_tamer_v2/sinks/mcap_sink.hpp"
 
 namespace MyNamespace
 {
@@ -191,7 +191,7 @@ cmake --build build/Debug --parallel
 The format is specified in [docs/wire_format.md](docs/wire_format.md), and there are two
 reference decoders:
 
-- C++: [data_tamer_parser.hpp](data_tamer_cpp/include/data_tamer_parser/data_tamer_parser.hpp),
+- C++: [data_tamer_parser.hpp](data_tamer_cpp/include/data_tamer_v2/data_tamer_parser.hpp),
   a single header without external dependencies that you can copy into your project.
   See how it is used in [mcap_reader](data_tamer_cpp/examples/mcap_reader.cpp).
 - Python: [python/data_tamer_parser.py](python/data_tamer_parser.py), standard library only,

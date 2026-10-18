@@ -1,8 +1,8 @@
 #pragma once
 
-#include "data_tamer/channel.hpp"
-#include "data_tamer/data_sink.hpp"
-#include "data_tamer/sinks/dummy_sink.hpp"
+#include "data_tamer_v2/channel.hpp"
+#include "data_tamer_v2/data_sink.hpp"
+#include "data_tamer_v2/sinks/dummy_sink.hpp"
 
 #include <gtest/gtest.h>
 

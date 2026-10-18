@@ -3,25 +3,25 @@
 #if __cplusplus > 201703L
 #error "this translation unit must be compiled as C++17"
 #endif
-#include "data_tamer/data_tamer.hpp"
-#include "data_tamer/channel.hpp"
-#include "data_tamer/custom_types.hpp"
-#include "data_tamer/data_sink.hpp"
-#include "data_tamer/logged_value.hpp"
-#include "data_tamer/names.hpp"
-#include "data_tamer/types.hpp"
-#include "data_tamer/values.hpp"
-#include "data_tamer/contrib/SerializeMe.hpp"
-#include "data_tamer/details/abi.hpp"
-#include "data_tamer/details/locked_reference.hpp"
-#include "data_tamer/details/snapshot_pool.hpp"
-#include "data_tamer/sinks/dummy_sink.hpp"
-#include "data_tamer/sinks/mcap_sink.hpp"
-#include "data_tamer/sinks/mcap_encoding.hpp"
-#include "data_tamer/sinks/mcap_ring_sink.hpp"
+#include "data_tamer_v2/data_tamer.hpp"
+#include "data_tamer_v2/channel.hpp"
+#include "data_tamer_v2/custom_types.hpp"
+#include "data_tamer_v2/data_sink.hpp"
+#include "data_tamer_v2/logged_value.hpp"
+#include "data_tamer_v2/names.hpp"
+#include "data_tamer_v2/types.hpp"
+#include "data_tamer_v2/values.hpp"
+#include "data_tamer_v2/contrib/SerializeMe.hpp"
+#include "data_tamer_v2/details/abi.hpp"
+#include "data_tamer_v2/details/locked_reference.hpp"
+#include "data_tamer_v2/details/snapshot_pool.hpp"
+#include "data_tamer_v2/sinks/dummy_sink.hpp"
+#include "data_tamer_v2/sinks/mcap_sink.hpp"
+#include "data_tamer_v2/sinks/mcap_encoding.hpp"
+#include "data_tamer_v2/sinks/mcap_ring_sink.hpp"
 // sinks/ros2_publisher_sink.hpp is not checked: rclcpp itself requires C++20 on
 // recent ROS 2 distributions, so that header follows rclcpp's standard.
-#include "data_tamer_parser/data_tamer_parser.hpp"
+#include "data_tamer_v2/data_tamer_parser.hpp"
 
 namespace probe_lib
 {

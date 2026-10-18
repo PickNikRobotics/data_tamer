@@ -1,6 +1,6 @@
 #pragma once
 
-#include "data_tamer/custom_types.hpp"
+#include "data_tamer_v2/custom_types.hpp"
 #include "gate.hpp"
 
 #include <cstdint>

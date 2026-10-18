@@ -1,7 +1,7 @@
 #pragma once
 
-#include "data_tamer/channel.hpp"
-#include "data_tamer/sinks/mcap_ring_sink.hpp"
+#include "data_tamer_v2/channel.hpp"
+#include "data_tamer_v2/sinks/mcap_ring_sink.hpp"
 
 #include <mcap/reader.hpp>
 

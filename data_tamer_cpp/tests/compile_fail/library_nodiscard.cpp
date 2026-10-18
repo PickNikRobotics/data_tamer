@@ -2,10 +2,10 @@
 // The results of these library functions are there to be used. As written every result
 // is cast to void and the file compiles; each DT_IGNORE_* macro drops one cast, which
 // must then be an error.
-#include "data_tamer/channel.hpp"
-#include "data_tamer/details/snapshot_pool.hpp"
-#include "data_tamer/sinks/mcap_ring_sink.hpp"
-#include "data_tamer/types.hpp"
+#include "data_tamer_v2/channel.hpp"
+#include "data_tamer_v2/details/snapshot_pool.hpp"
+#include "data_tamer_v2/sinks/mcap_ring_sink.hpp"
+#include "data_tamer_v2/types.hpp"
 
 #include <memory>
 

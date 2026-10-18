@@ -2,7 +2,7 @@
 // A type name is not a serializer: CustomSerializerT must be built from it explicitly.
 // As written the serializer is built with the name directly; DT_IMPLICIT_NAME converts
 // a std::string into one.
-#include "data_tamer/custom_types.hpp"
+#include "data_tamer_v2/custom_types.hpp"
 #include "described_type.hpp"
 
 #include <memory>

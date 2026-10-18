@@ -1,5 +1,5 @@
-#include "data_tamer/channel.hpp"
-#include "data_tamer/details/snapshot_pool.hpp"
+#include "data_tamer_v2/channel.hpp"
+#include "data_tamer_v2/details/snapshot_pool.hpp"
 
 #include "alloc_counter.hpp"
 #include "gate.hpp"

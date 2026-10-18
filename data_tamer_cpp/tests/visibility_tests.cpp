@@ -1,6 +1,6 @@
 // The library's inline code compiled into a consumer built with -fvisibility=hidden.
-#include "data_tamer/channel.hpp"
-#include "data_tamer/sinks/dummy_sink.hpp"
+#include "data_tamer_v2/channel.hpp"
+#include "data_tamer_v2/sinks/dummy_sink.hpp"
 #include "hang_watchdog.hpp"
 #include "test_sinks.hpp"
 

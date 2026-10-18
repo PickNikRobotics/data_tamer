@@ -1,11 +1,11 @@
-#include "data_tamer/channel.hpp"
-#include "data_tamer/data_tamer.hpp"
-#include "data_tamer/sinks/dummy_sink.hpp"
-#include "data_tamer/sinks/ros2_publisher_sink.hpp"
+#include "data_tamer_v2/channel.hpp"
+#include "data_tamer_v2/data_tamer.hpp"
+#include "data_tamer_v2/sinks/dummy_sink.hpp"
+#include "data_tamer_v2/sinks/ros2_publisher_sink.hpp"
 
 #include "data_tamer_msgs/msg/schemas.hpp"
 #include "data_tamer_msgs/msg/snapshot_batch.hpp"
-#include "data_tamer_parser/data_tamer_parser.hpp"
+#include "data_tamer_v2/data_tamer_parser.hpp"
 
 #include <gtest/gtest.h>
 
