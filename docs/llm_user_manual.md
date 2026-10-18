@@ -1045,7 +1045,13 @@ for timestamp_nsec, topic, values in dt.iter_mcap("control.mcap"):
 `topic` is the channel name, and disabled fields are absent from `values`. `iter_mcap()`
 reads one file, so read numbered rollover files one after the other. For ROS 2 messages,
 use `dt.SchemaRegistry`, `dt.parse_snapshot_msg()` and `dt.iter_snapshot_batch()` (see
-`python/README.md`).
+`python/README.md`). `dt.parse_snapshot()` compiles each schema and active mask once
+and keeps the result on the `Schema`: parse a schema once per channel and reuse it (it
+may be shared by threads), and do not modify it after decoding. For columns (pandas,
+numpy), `dt.parse_snapshot_values(schema, mask, payload)` returns `(names, values)`, two
+tuples in payload order equal to `tuple(d)` and `tuple(d.values())` of the dict;
+consecutive snapshots of one layout (mask and vector lengths) return the same `names`
+object, but compare names with `==`. `python/README.md` builds pandas tables with it.
 
 In C++, `data_tamer_v2/data_tamer_parser.hpp` is a single header with no dependency
 on the library. `DataTamerParser::BuildSchemaFromText()` reads both schema renderings.

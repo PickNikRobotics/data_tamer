@@ -1,11 +1,23 @@
 """Reference decoder for the Data Tamer wire format.
 
-Pure standard library. The format is specified in docs/wire_format.md; this
-module is kept deliberately literal so it can be ported to another language
-line by line. Usage:
+Pure standard library. The format is specified in docs/wire_format.md. The
+schema parser and _parse_snapshot_reference(), which walks a schema value by
+value, are kept deliberately literal so they can be ported to another language
+line by line. parse_snapshot() gives the same result and raises the same errors,
+5 to 15 times faster: it compiles each schema and active mask once into
+struct formats, kept on the Schema (python/benchmark_decode.py in the repository
+measures it), so do not modify a Schema after decoding with it. Usage:
 
     schema = parse_schema(schema_text)
     values = parse_snapshot(schema, active_mask, payload)   # {"pose/position/x": 1.0, ...}
+
+To build columns (pandas, numpy), parse_snapshot_values() returns the names and
+the values as two tuples in payload order, tuple(d) and tuple(d.values()) of
+d = parse_snapshot(...), and is faster still. Consecutive snapshots of one layout
+(the active mask and the length of every dynamic vector) return the same names
+tuple object:
+
+    names, values = parse_snapshot_values(schema, active_mask, payload)
 
 For an MCAP message body written by MCAPSink use split_mcap_message() first.
 parse_schema() reads both schema renderings: the line format (versions 4 and 5) and
@@ -31,7 +43,11 @@ from __future__ import annotations
 __version__ = "2.0.0"
 
 import struct
+from bisect import bisect_right
 from dataclasses import dataclass, field
+from functools import lru_cache
+from itertools import chain, groupby
+from operator import itemgetter
 
 SCHEMA_VERSION = 5
 SCHEMA_YAML_VERSION = 6  # the YAML rendering of the same schema (spec section 2.1)
@@ -74,10 +90,21 @@ class Schema:
     custom_types: dict[str, list[Field]] = field(default_factory=dict)
     # opaque custom encodings: type name -> (encoding, schema text)
     custom_schemas: dict[str, tuple[str, str]] = field(default_factory=dict)
-    # fewest payload bytes one element of a custom type takes, by type name: filled by
-    # parse_snapshot(), so it is only right while custom_types is left alone
-    _min_sizes: dict[str, int] = field(default_factory=dict, init=False, repr=False,
-                                       compare=False)
+
+    def __post_init__(self):
+        # Caches of the decoders, only right while the schema is left alone. They are not
+        # fields, so ==, repr() and asdict() skip them, and __getstate__() leaves them out
+        # of a copy or a pickle (a plan holds struct.Struct objects, which do neither).
+        self._min_sizes: dict = {}  # custom type -> (fewest bytes, nesting height)
+        self._plans: dict = {}  # normalized active mask -> _Plan, at most _MAX_PLANS
+        self._masks: dict = {}  # active mask as received -> _Plan, see _plan()
+
+    def __getstate__(self):
+        return {k: v for k, v in self.__dict__.items() if not k.startswith("_")}
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self.__post_init__()
 
     def field_names(self) -> list[str]:
         """The flattened names parse_snapshot() can produce, in payload order,
@@ -478,18 +505,30 @@ class _Reader:
 
 def _min_element_size(f: Field, schema: Schema, depth: int) -> int:
     """Fewest payload bytes one element of `f` takes: the size of a basic type, or the
-    sum of the fewest bytes of each field of the custom type (kept on the schema)."""
+    sum of the fewest bytes of each field of the custom type.
+
+    The schema keeps the size of each custom type with its nesting height (how many
+    custom types deep its fixed-size fields go), so that a type met again deeper raises as
+    it would have the first time: the depth limit does not depend on earlier calls.
+    """
     if f.is_basic:
         return _STRUCT[f.type_name].size
     memo = schema._min_sizes
-    if f.type_name not in memo:
+    known = memo.get(f.type_name)
+    if known is None:
         subs = schema.custom_types.get(f.type_name)
         if subs is None:
             raise _undecodable_error(schema, f.type_name)
         if depth > MAX_SCHEMA_DEPTH:
             raise _nesting_error()
-        memo[f.type_name] = sum(_min_field_size(sub, schema, depth + 1) for sub in subs)
-    return memo[f.type_name]
+        size = sum(_min_field_size(sub, schema, depth + 1) for sub in subs)
+        height = max((memo[sub.type_name][1] + 1 for sub in subs  # filled by the sum
+                      if not sub.is_basic and (sub.array_size or not sub.is_vector)),
+                     default=0)
+        known = memo[f.type_name] = (size, height)
+    elif depth + known[1] > MAX_SCHEMA_DEPTH:
+        raise _nesting_error()
+    return known[0]
 
 
 def _min_field_size(f: Field, schema: Schema, depth: int) -> int:
@@ -590,8 +629,14 @@ def _field_names(f: Field, schema: Schema, prefix: str, out: list[str]) -> None:
                 _field_names(sub, schema, n, out)
 
 
-def parse_snapshot(schema: Schema, active_mask: bytes, payload: bytes) -> dict[str, object]:
-    """Decode one snapshot into {"field/path[i]": value}. Disabled fields are absent."""
+def _parse_snapshot_reference(schema: Schema, active_mask: bytes,
+                              payload: bytes) -> dict[str, object]:
+    """The specification of parse_snapshot(): the schema walked value by value.
+
+    parse_snapshot() must return the same dict and raise the same errors, which the tests
+    check (test_fast_path.py). Keep this walker literal and change it only with the
+    format; make parse_snapshot() fast instead.
+    """
     out: dict[str, object] = {}
     reader = _Reader(payload)
     for index, f in enumerate(schema.fields):
@@ -600,6 +645,370 @@ def parse_snapshot(schema: Schema, active_mask: bytes, payload: bytes) -> dict[s
     if reader.pos != len(payload):
         raise ValueError(f"{len(payload) - reader.pos} trailing bytes in payload")
     return out
+
+
+# ---- Compiled plans: the fast path ---------------------------------------------
+# parse_snapshot() compiles (schema, active mask) once into a plan, which reads the bytes
+# the reference walker reads, in the same order, and raises the same errors:
+# - a run of fixed-size values, across fields and nested types, is one struct.Struct,
+#   unpacked in one call, with its names computed once;
+# - a dynamic vector of a basic type, or of a custom type made of fixed-size values,
+#   reads its count, checks it against the bytes left, then unpacks every element at once
+#   (_Vector);
+# - a fixed array of a custom type that holds vectors first checks that the payload holds
+#   its fewest bytes, as the reference does (_CHECK);
+# - anything else (an undefined or opaque type, a vector of elements that hold vectors)
+#   is decoded by the reference walker, _parse_field(), from the node where the reference
+#   would be (_WALK), so its errors are the reference's. So is a whole top-level field
+#   nested too deeply or larger than the budget left (_Unplannable).
+# A Schema keeps at most _MAX_PLANS plans; the reference walker decodes the snapshots of
+# any further mask, so no mask is compiled twice. A plan holds at most _PLAN_BUDGET
+# values and keeps at most _MAX_CACHED_NAMES names for its vectors, and as many for its
+# last layout. Threads may share a Schema: caches get whole objects in single stores,
+# read once into a local, so a thread sees a whole plan or none.
+
+# The ops: (_FIXED, Struct, names, char positions), (_VECTOR, _Vector),
+# (_CHECK, fewest bytes), (_WALK, field, prefix, depth).
+_FIXED, _VECTOR, _CHECK, _WALK = range(4)
+_CODE = {name: s.format[1] for name, s in _STRUCT.items()}  # "float64" -> "d"
+_U32 = _STRUCT["uint32"]
+_MAX_PLANS = 16  # per schema: one per active mask, and masks are few
+_PLAN_BUDGET = 1 << 16  # fields visited plus values compiled into one plan
+_MAX_CACHED_NAMES = 1 << 16  # per plan: the names its vectors keep, and its last layout's
+_ELEMENT = "#"  # the prefix an element of a dynamic vector is compiled with
+
+
+class _Unplannable(Exception):
+    """A top-level field that the reference walker decodes whole."""
+
+
+def _compile(schema: Schema, mask: bytes) -> _Plan:
+    # items: (code, name) for each value, or an op (a tuple whose first item is an int)
+    items: list = []
+    budget = [_PLAN_BUDGET]
+    wasted = 0  # budget used by fields that did not fit, and given back
+    covered = min(len(schema.fields), len(mask) * 8)  # past the mask the reference raises
+    for index in range(covered):
+        if not get_bit(mask, index):
+            continue
+        f = schema.fields[index]
+        start, left = len(items), budget[0]
+        if wasted <= _PLAN_BUDGET:  # bounds the time spent on fields that do not fit
+            try:
+                _compile_field(f, schema, "", 0, items, budget)
+                continue
+            except _Unplannable:
+                del items[start:]
+                wasted += left - budget[0]
+                budget[0] = left
+        items.append((_WALK, f, "", 0))
+    return _Plan(items, covered < len(schema.fields))
+
+
+def _compile_field(f: Field, schema: Schema, prefix: str, depth: int, items: list,
+                   budget: list) -> None:
+    """Append what _parse_field(f, schema, reader, prefix, out, depth) reads, in order."""
+    budget[0] -= 1
+    if budget[0] < 0 or depth > MAX_SCHEMA_DEPTH:
+        raise _Unplannable
+    name = f.field_name if not prefix else f"{prefix}/{f.field_name}"
+    if f.is_vector and not f.array_size:
+        items.append(_compile_vector(f, schema, prefix, name, depth, budget))
+        return
+    if f.is_vector:
+        try:
+            least = _min_element_size(f, schema, depth)
+        except ValueError:  # undefined, opaque or too deep: the reference raises it here
+            items.append((_WALK, f, prefix, depth))
+            return
+        if least == 0:
+            return
+        names = (f"{name}[{i}]" for i in range(f.array_size))
+    else:
+        names = (name,)
+    if f.is_basic:
+        if (f.array_size or 1) > budget[0]:
+            raise _Unplannable
+        budget[0] -= f.array_size or 1
+        code = _CODE[f.type_name]
+        items.extend((code, n) for n in names)
+        return
+    subs = schema.custom_types.get(f.type_name)
+    if subs is None:
+        items.append((_WALK, f, prefix, depth))
+        return
+    first, left = len(items), budget[0]
+    for i, n in enumerate(names):
+        for sub in subs:
+            _compile_field(sub, schema, n, depth + 1, items, budget)
+        if i == 0 and f.is_vector and (left - budget[0]) * (f.array_size - 1) > budget[0]:
+            raise _Unplannable  # every element costs what the first one did
+    if f.is_vector and any(type(item[0]) is int for item in items[first:]):
+        # elements that read a count or are walked: the reference first checks that the
+        # payload holds their fewest bytes
+        items.insert(first, (_CHECK, f.array_size * least))
+
+
+def _compile_vector(f: Field, schema: Schema, prefix: str, name: str, depth: int,
+                    budget: list) -> tuple:
+    """A _Vector op if the elements are fixed-size values, else a _WALK op."""
+    if f.is_basic:
+        return (_VECTOR, _Vector(name, [_CODE[f.type_name]], [""]))
+    subs = schema.custom_types.get(f.type_name)
+    if subs is not None:
+        element: list = []
+        for sub in subs:
+            _compile_field(sub, schema, _ELEMENT, depth + 1, element, budget)
+        if element and all(type(item[0]) is str for item in element):
+            return (_VECTOR, _Vector(name, [code for code, _ in element],
+                                     [n[len(_ELEMENT):] for _, n in element]))
+    return (_WALK, f, prefix, depth)
+
+
+def _decode_chars(values, positions) -> tuple:
+    """struct's "c" gives a bytes object; the decoder gives a str, as _Reader does."""
+    values = list(values)
+    for i in positions:
+        values[i] = values[i].decode("latin-1")
+    return tuple(values)
+
+
+@lru_cache(maxsize=256)
+def _array_struct(code: str, count: int) -> struct.Struct:
+    """"<3000d": as cheap to unpack as "<3d" per value."""
+    return struct.Struct(f"<{count}{code}")
+
+
+class _Vector:
+    """A dynamic vector whose elements are fixed-size values."""
+    __slots__ = ("name", "suffixes", "size", "code", "element", "chars", "names", "cap")
+
+    def __init__(self, name: str, codes: list[str], suffixes: list[str]):
+        self.name = name
+        self.suffixes = tuple(suffixes)  # of the values of one element: "", or "/x", ...
+        fmt = "<" + "".join(codes)
+        self.size = struct.calcsize(fmt)
+        # elements of one type of value are unpacked by one _array_struct()
+        self.code = codes[0] if all(c == codes[0] for c in codes) else None
+        self.element = None if self.code else struct.Struct(fmt)
+        self.chars = tuple(i for i, c in enumerate(codes) if c == "c")
+        self.names: tuple[str, ...] = ()  # those of the longest vector read, up to cap
+        self.cap = _MAX_CACHED_NAMES  # _Plan shares _MAX_CACHED_NAMES among its vectors
+
+    def read(self, payload, pos: int) -> tuple:
+        """((names, values), end); names may be longer than values: zip() stops."""
+        if pos + 4 > len(payload):
+            raise ValueError("payload truncated")
+        (count,) = _U32.unpack_from(payload, pos)
+        pos += 4
+        end = pos + count * self.size
+        if end > len(payload):  # before building anything as long as the untrusted count
+            raise ValueError("payload truncated")
+        k = len(self.suffixes)
+        if self.code is not None:
+            values = _array_struct(self.code, count * k).unpack_from(payload, pos)
+        else:
+            values = tuple(chain.from_iterable(self.element.iter_unpack(payload[pos:end])))
+        if self.chars:
+            values = _decode_chars(values, [e + i for e in range(0, len(values), k)
+                                            for i in self.chars])
+        names = self.names
+        if len(names) < len(values):
+            names = tuple(f"{self.name}[{i}]{suffix}" for i in range(count)
+                          for suffix in self.suffixes)
+            if len(names) <= self.cap:
+                self.names = names
+        return (names, values), end
+
+
+def _unique_names(ops: list) -> bool:
+    """Whether no snapshot of these ops can repeat a name.
+
+    A name repeats only where field names hold "/" or "[" or repeat (a field "a/b" next
+    to a field "a" whose type has a member "b"): a fixed name that repeats, one element
+    of a vector that repeats a name, or a name that starts with the name of a vector or
+    of a walked field, which make more names that start with theirs.
+    """
+    names: list[str] = []
+    more: set[str] = set()  # the names of vectors and walked fields
+    for op in ops:
+        if op[0] == _FIXED:
+            names += op[2]
+        elif op[0] == _VECTOR:
+            if len(set(op[1].suffixes)) < len(op[1].suffixes):
+                return False
+            names.append(op[1].name)
+            more.add(op[1].name)
+        elif op[0] == _WALK:
+            name = op[1].field_name if not op[2] else f"{op[2]}/{op[1].field_name}"
+            names.append(name)
+            more.add(name)
+    if len(set(names)) < len(names):
+        return False
+    if more:
+        names.sort()  # the names that start with one of them come right after it
+    return not any(names[i].startswith(name) for name in more
+                   if (i := bisect_right(names, name)) < len(names))
+
+
+class _Plan:
+    """The ops that decode the snapshots of one schema and active mask."""
+    __slots__ = ("ops", "mask_short", "variable", "unique", "simple", "last")
+
+    def __init__(self, items: list, mask_short: bool):
+        self.ops: list = []
+        values: list = []  # the (code, name) items of the current fixed run
+        for item in items + [None]:
+            if item is not None and type(item[0]) is str:
+                values.append(item)
+                continue
+            if values or (item is None and not self.ops):  # no op at all: one empty run
+                codes = [code for code, _ in values]
+                fmt = "".join(f"{len(list(g))}{c}" for c, g in groupby(codes))
+                self.ops.append((_FIXED, struct.Struct("<" + fmt), tuple(n for _, n in values),
+                                 tuple(i for i, c in enumerate(codes) if c == "c")))
+                values = []
+            if item is not None:
+                self.ops.append(item)
+        self.mask_short = mask_short  # raise when the ops are done, as the reference does
+        # every op but _CHECK adds one part to run(); the layout depends on these ones
+        kinds = [op[0] for op in self.ops if op[0] != _CHECK]
+        self.variable = tuple((i, kind == _VECTOR) for i, kind in enumerate(kinds)
+                              if kind != _FIXED)
+        vectors = [op[1] for op in self.ops if op[0] == _VECTOR]
+        for vector in vectors:
+            vector.cap = _MAX_CACHED_NAMES // len(vectors)
+        self.unique = _unique_names(self.ops)
+        # a single run of distinct names and no char: the payload is unpacked with it
+        op = self.ops[0]
+        self.simple = ((op[1].unpack, op[2]) if len(self.ops) == 1 and op[0] == _FIXED
+                       and not op[3] and not mask_short and self.unique else None)
+        self.last = None  # (layout key, layout) of the last snapshot, set by layout()
+
+    def run(self, schema: Schema, payload) -> list:
+        """(names, values) for each op but _CHECK, in payload order; the names of a vector
+        may be longer than its values."""
+        parts: list = []
+        pos = 0
+        size = len(payload)
+        for op in self.ops:
+            kind = op[0]
+            if kind == _FIXED:
+                end = pos + op[1].size
+                if end > size:
+                    raise ValueError("payload truncated")
+                values = op[1].unpack_from(payload, pos)
+                parts.append((op[2], _decode_chars(values, op[3]) if op[3] else values))
+                pos = end
+            elif kind == _VECTOR:
+                part, pos = op[1].read(payload, pos)
+                parts.append(part)
+            elif kind == _CHECK:
+                if op[1] > size - pos:
+                    raise ValueError("payload truncated")
+            else:
+                reader = _Reader(payload)
+                reader.pos = pos
+                walked: dict = {}
+                _parse_field(op[1], schema, reader, op[2], walked, op[3])
+                pos = reader.pos
+                parts.append((tuple(walked), tuple(walked.values())))
+        if self.mask_short:
+            raise ValueError("active mask shorter than the schema")
+        if pos != size:
+            raise ValueError(f"{size - pos} trailing bytes in payload")
+        return parts
+
+    def layout(self, parts: list, key: tuple) -> tuple:
+        """(names, all names) of the snapshot of `parts`, whose layout is `key`: all names
+        is None unless a name repeats. Kept for the next snapshot if not too long."""
+        joined: list = []  # a quarter faster than chain()
+        for names, values in parts:
+            joined += names[:len(values)]
+        every = tuple(joined)
+        layout = (every, None)
+        if not self.unique:
+            names = tuple(dict.fromkeys(every))
+            if len(names) < len(every):
+                layout = (names, every)
+        if len(every) <= _MAX_CACHED_NAMES:
+            self.last = (key, layout)
+        return layout
+
+
+def _plan(schema: Schema, active_mask: bytes) -> _Plan | None:
+    """The plan of a mask that schema._masks does not hold, compiled if new; None once
+    the schema has _MAX_PLANS plans: the reference walker decodes the snapshot then."""
+    mask = bytes(active_mask)
+    # the bits past the schema do not count: masks that differ only there share a plan
+    n = len(schema.fields)
+    key = mask[:(n + 7) >> 3]
+    if len(key) * 8 > n:
+        key = key[:-1] + bytes([key[-1] & ((1 << (n & 7)) - 1)])
+    plan = schema._plans.get(key)
+    if plan is None:
+        if len(schema._plans) >= _MAX_PLANS:
+            return None
+        plan = schema._plans[key] = _compile(schema, key)
+    if len(mask) == len(key):  # a longer mask is normalized on every call instead
+        if len(schema._masks) >= _MAX_PLANS:
+            schema._masks.clear()
+        schema._masks[mask] = plan
+    return plan
+
+
+def parse_snapshot(schema: Schema, active_mask: bytes, payload: bytes) -> dict[str, object]:
+    """Decode one snapshot into {"field/path[i]": value}. Disabled fields are absent.
+
+    Malformed input raises ValueError. The schema keeps a decoding plan per active mask:
+    do not modify a schema after decoding with it.
+    """
+    plan = schema._masks.get(bytes(active_mask)) or _plan(schema, active_mask)
+    if plan is None:
+        return _parse_snapshot_reference(schema, active_mask, payload)
+    if plan.simple:
+        unpack, names = plan.simple
+        try:
+            return dict(zip(names, unpack(payload)))
+        except struct.error:  # another size: run() raises the error of the reference
+            pass
+    out: dict[str, object] = {}
+    for names, values in plan.run(schema, payload):
+        out.update(zip(names, values))
+    return out
+
+
+def parse_snapshot_values(schema: Schema, active_mask: bytes,
+                          payload: bytes) -> tuple[tuple[str, ...], tuple]:
+    """Decode one snapshot into (names, values), two tuples in payload order.
+
+    The same as `d = parse_snapshot(...)` then `(tuple(d), tuple(d.values()))`, faster.
+    Consecutive snapshots of one layout (the active mask and the length of every dynamic
+    vector) return the same `names` tuple object, so `names is previous` is a cheap test
+    that the columns did not change. A layout seen before another one, or of more than
+    _MAX_CACHED_NAMES (65536) names, comes back as another tuple: compare with == to be
+    sure.
+    """
+    plan = schema._masks.get(bytes(active_mask)) or _plan(schema, active_mask)
+    if plan is None:
+        d = _parse_snapshot_reference(schema, active_mask, payload)
+        return tuple(d), tuple(d.values())
+    if plan.simple:
+        unpack, names = plan.simple
+        try:
+            return names, unpack(payload)
+        except struct.error:  # another size: run() raises the error of the reference
+            pass
+    parts = plan.run(schema, payload)
+    key = tuple([len(parts[i][1]) if is_vector else parts[i][0]
+                 for i, is_vector in plan.variable])
+    last = plan.last
+    names, every = last[1] if last is not None and last[0] == key else plan.layout(parts, key)
+    values = parts[0][1] if len(parts) == 1 else tuple(
+        chain.from_iterable(map(itemgetter(1), parts)))
+    if every is not None:  # a name repeats: its last value, at its first place, as a dict
+        values = tuple(dict(zip(every, values)).values())
+    return names, values
 
 
 def split_mcap_message(data: bytes) -> tuple[bytes, bytes]:

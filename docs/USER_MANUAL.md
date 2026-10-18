@@ -343,7 +343,10 @@ for timestamp_nsec, channel, values in dt.iter_mcap("run.mcap"):
 
 Disabled values are absent from `values`. `iter_mcap()` reads one file, so read numbered
 files one after the other. Both decoders also read the files of data_tamer 1.x; files of
-releases before 0.7.0 (2023) are not readable.
+releases before 0.7.0 (2023) are not readable. To build columns, for pandas for example,
+`dt.parse_snapshot_values()` returns the names and the values of a snapshot as two
+tuples instead of a dict, and is faster still:
+[python/README.md](../python/README.md) shows how.
 
 In C++, copy the single header
 [data_tamer_parser.hpp](../data_tamer_cpp/include/data_tamer_v2/data_tamer_parser.hpp)

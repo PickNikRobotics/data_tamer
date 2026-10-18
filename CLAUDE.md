@@ -70,7 +70,16 @@ under "Unreleased" in `data_tamer_cpp/CHANGELOG.rst`.
     by the CI install job.
 - `data_tamer_msgs/`: ROS 2 messages `Schema`, `Schemas`, `Snapshot`, `SnapshotBatch`.
 - `python/`: `data_tamer_parser.py`, the reference decoder (standard library only),
-  packaged as `data-tamer-parser`; its tests; `ros2_subscriber.py`.
+  packaged as `data-tamer-parser`; its tests; `ros2_subscriber.py`. In the decoder,
+  `_parse_snapshot_reference()` walks the schema value by value and is the
+  specification; `parse_snapshot()` and `parse_snapshot_values()` decode through plans
+  compiled per schema and active mask (`struct` formats, cached on the `Schema`), which
+  fall back to the walker for what they do not compile. The caches are bounded: at most
+  `_MAX_PLANS` masks per schema (the walker decodes further ones), `_PLAN_BUDGET` values
+  per plan, and `_MAX_CACHED_NAMES` names per plan for its vectors and its last layout.
+  `test_fast_path.py` checks them against it, values and error messages: random schemas,
+  the golden vectors, the 1.0.4 recording and every decode of the other tests.
+  `benchmark_decode.py` times the three.
 - `docs/`: `USER_MANUAL.md` (for people), `llm_user_manual.md` (for coding agents),
   `MIGRATION.md` (1.x to 2.0), `wire_format.md` and its golden vectors in
   `wire_format/vectors/` (`v4/`: a 1.0.4 recording).
@@ -226,7 +235,8 @@ DATA_TAMER_UPDATE_GOLDEN=1 \
   `logging_started` and never replaced.
 - A change to the schema text, the payload encoding, the schema hash or the MCAP and ROS
   message layout is a format revision. Update `docs/wire_format.md`, regenerate the
-  vectors, update `python/data_tamer_parser.py` and `data_tamer_parser.hpp`, and bump
+  vectors, update `python/data_tamer_parser.py` (the reference walker, then the compiled
+  plans until `test_fast_path.py` passes) and `data_tamer_parser.hpp`, and bump
   `SCHEMA_VERSION` or `SCHEMA_YAML_VERSION` in `types.hpp` when the text changes. The
   `WireFormat.*` tests and the Python tests fail until all of them agree.
 - LogChannel, ChannelsRegistry, SinkWorker, TypesRegistry, MCAPSink, MCAPRingSink and

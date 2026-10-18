@@ -233,6 +233,7 @@ reference decoders:
   a single header without external dependencies that you can copy into your project.
   See how it is used in [T08_mcap_reader](data_tamer_cpp/examples/T08_mcap_reader.cpp).
 - Python: [python/data_tamer_parser.py](python/data_tamer_parser.py), standard library only,
-  packaged as `data-tamer-parser` (see [python/README.md](python/README.md)).
+  packaged as `data-tamer-parser` (see [python/README.md](python/README.md)), with
+  `parse_snapshot_values()` to build columns for pandas or numpy.
 
 Both read the files of data_tamer 1.x and 2.x, but not those of releases before 0.7.0.
