@@ -199,3 +199,28 @@ test('MCAP framing handles maximal lengths and offset subarray views', () => {
   assert.equal(result.payload.buffer, backing.buffer);
   assert.deepEqual(result.payload, bytes('snapshot_full.payload'));
 });
+
+test('schemaHash equals FNV-1a-64 computed with BigInt', () => {
+  const reference = t => {
+    const lines = t.split('\n'), at = lines.findIndex(l => l.startsWith('### hash:'));
+    if(at >= 0)
+      lines.splice(at, 1);
+    let h = 0xcbf29ce484222325n;
+    for(const b of new TextEncoder().encode(lines.join('\n')))
+      h = BigInt.asUintN(64, (h ^ BigInt(b)) * 0x100000001b3n);
+    return h;
+  };
+  const pieces = [
+    'a', 'Z', '0', ' ', '\t', '\n', '\n### hash: 1', '### hash: 2\n', 'é', '€', '😀',
+    '\u0085'
+  ];
+  let seed = 7;
+  const next = () => (seed = (seed * 1103515245 + 12345) % 2147483648);
+  for(let n = 0; n < 2000; n++)
+  {
+    let t = n % 3 === 0 ? '### hash: 9\n' : '';
+    for(let k = next() % 64; k > 0; k--)
+      t += pieces[next() % pieces.length];
+    assert.equal(schemaHash(t), reference(t), JSON.stringify(t));
+  }
+});
