@@ -1084,6 +1084,10 @@ Threads involved:
 PlotJuggler (4 or later) opens the MCAP files of `MCAPSink` and `MCAPRingSink` and
 can subscribe to the `ROS2PublisherSink` topics.
 
+[Foxglove with the extension](../data_tamer_foxglove/extension/README.md) reads ROS 2 topics and rosbag2 recordings.
+Plot using default one-Snapshot messages (`aggregate = false`); batches are for inspection.
+Direct `MCAPSink`/`MCAPRingSink` files are **not readable in Foxglove**: use PlotJuggler 4 or Python.
+
 The Python decoder uses the standard library only. Install it with
 `pip install data-tamer-parser`, `pip install "data-tamer-parser[mcap]"` to read MCAP
 files, or `pip install ./python` from a checkout:

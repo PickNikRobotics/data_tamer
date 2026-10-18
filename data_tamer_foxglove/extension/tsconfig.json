@@ -1,0 +1,18 @@
+{
+  "extends": "create-foxglove-extension/tsconfig/tsconfig.json",
+  "include": [
+    "src/**/*.ts",
+    "../src/**/*.ts"
+  ],
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": [
+      "ES2022",
+      "DOM"
+    ],
+    "rootDir": "..",
+    "outDir": "dist",
+    "composite": false,
+    "declaration": false
+  }
+}

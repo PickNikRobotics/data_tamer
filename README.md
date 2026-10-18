@@ -12,6 +12,8 @@ takes periodic "snapshots" of their values, to later visualize them as **timeser
 
 It works great with [PlotJuggler](https://github.com/facontidavide/PlotJuggler),
 the timeseries visualization tool (note: you will need PlotJuggler **4** or later).
+For ROS 2 topics and rosbag2 recordings, use [Foxglove with the data_tamer
+extension](data_tamer_foxglove/extension/README.md) (desktop or web).
 
 **DataTamer** is "fearless data logger" because you can record hundreds or **thousands of variables**:
 even 1 million points per second should have a fairly small CPU overhead.

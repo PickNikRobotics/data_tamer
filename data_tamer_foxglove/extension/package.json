@@ -1,0 +1,30 @@
+{
+  "name": "data-tamer-foxglove",
+  "displayName": "data_tamer",
+  "description":
+      "Decodes data_tamer snapshots (data_tamer_msgs) so that Foxglove panels can plot them",
+  "publisher": "data_tamer",
+  "homepage": "https://github.com/facontidavide/data_tamer",
+  "version": "2.0.0",
+  "license": "MIT",
+  "main": "./dist/extension.js",
+  "keywords": [
+    "data_tamer",
+    "ros2",
+    "plot"
+  ],
+  "scripts": {
+    "build": "foxglove-extension build",
+    "typecheck": "tsc --noEmit",
+    "test":
+        "tsc --module CommonJS --moduleResolution Node --outDir .test-dist && node --test --experimental-test-isolation=none test/*.test.mjs",
+    "foxglove:prepublish": "foxglove-extension build --mode production",
+    "local-install": "foxglove-extension install",
+    "package": "foxglove-extension package"
+  },
+  "devDependencies": {
+    "@foxglove/extension": "3.4.0",
+    "create-foxglove-extension": "1.3.2",
+    "typescript": "5.9.3"
+  }
+}

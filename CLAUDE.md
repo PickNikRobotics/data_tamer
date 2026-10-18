@@ -88,6 +88,10 @@ under "Unreleased" in `data_tamer_cpp/CHANGELOG.rst`.
   schema versions 4/5/6, bounded mask/layout plans and ROS 2 message helpers. Its
   `test/` checks golden vectors, the 1.0.4 recording and generated Python differential
   cases; `bench/benchmark.mjs` times flat and nested output.
+  - `extension/`: Foxglove desktop/web schema converters (Node 22), bundling
+    `../src/` directly. `src/converters.ts` shares the catalog and converts
+    snapshots/header stamps and inspectable batches; `src/index.ts` registers
+    them. `test/` checks golden bytes with fake MessageEvents, without the app.
 - `docs/`: `USER_MANUAL.md` (for people), `llm_user_manual.md` (for coding agents),
   `MIGRATION.md` (1.x to 2.0), `wire_format.md` and its golden vectors in
   `wire_format/vectors/` (`v4/`: a 1.0.4 recording).
@@ -194,6 +198,22 @@ npm run bench                 # decodeFlat/decodeMessage, ns per snapshot
 The recording test uses the development dependency `@mcap/core`. The Python generator
 runs with `python3 -I`, imports the repository reference explicitly, and needs only the
 standard library.
+
+Foxglove extension (Node 22; no decoder install or build required), from the
+repository root:
+
+```bash
+cd data_tamer_foxglove/extension
+npm ci                        # offline: add --offline --no-audit --no-fund (cached packages)
+npm test                      # type-check/compile to .test-dist, then node --test
+npm run package               # production build + data_tamer.data-tamer-foxglove-2.0.0.foxe
+npm run local-install         # optional desktop install on a development machine
+```
+
+`config.ts` must remain valid CommonJS JavaScript: the CLI loads that filename
+without transpiling it. Its webpack alias resolves the decoder's `.js` imports
+to `.ts` sources; no parser `dist/` is needed. The package is created in the
+extension directory.
 
 Regenerate the golden vectors after a deliberate format change, then review the diff
 and update `docs/wire_format/vectors/expected.json` by hand (`vectors/v4/` is a file
@@ -332,8 +352,8 @@ DATA_TAMER_UPDATE_GOLDEN=1 \
 
 ## Versioning and ABI policy
 
-One version number covers the C++ library, the ROS packages, Python and TypeScript decoders
-(2.0.0 until the 2.0.0 tag). It lives in:
+One version number covers the C++ library, the ROS packages, Python and TypeScript
+decoders and Foxglove extension (2.0.0 until the 2.0.0 tag). It lives in:
 
 - `data_tamer_cpp/CMakeLists.txt`, `project(... VERSION x.y.z)`. The shared library gets
   `VERSION x.y.z` and `SOVERSION x` (the major), so it installs as
@@ -345,6 +365,7 @@ One version number covers the C++ library, the ROS packages, Python and TypeScri
 - `data_tamer_cpp/conanfile.py`, `version`;
 - `python/data_tamer_parser.py`, `__version__`;
 - `data_tamer_foxglove/package.json`, `version` (keep `package-lock.json` consistent);
+- `data_tamer_foxglove/extension/package.json`, `version` (2.0.0; keep its lockfile consistent);
 - `data_tamer_cpp/CHANGELOG.rst`: the head section is "Unreleased" until the release
   commit renames it to `x.y.z (date)`.
 
@@ -363,8 +384,8 @@ The tag starts two workflows: `python.yml` publishes the Python package to PyPI,
 section for it, then creates the GitHub release named after the tag, with that section
 as its notes (`tools/release_notes.py --version x.y.z` prints it locally). Running
 `release.yml` by hand (workflow_dispatch) is a dry run on the chosen branch: the same
-checks and notes, no release. Artifacts for the release page (the Foxglove extension
-`.foxe`, planned) get a job in `release.yml`, where a comment marks the place.
+checks, notes and extension tests/packaging, no release. Releases include the
+Foxglove `.foxe` archive.
 
 The SOVERSION is the ABI generation. Within one major version a newer
 `libdata_tamer.so` must keep working with consumers built against any older header of

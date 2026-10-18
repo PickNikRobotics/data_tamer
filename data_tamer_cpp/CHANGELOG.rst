@@ -102,6 +102,9 @@ reads 1.x files.
 
 **New**
 
+* Foxglove extension in ``data_tamer_foxglove/extension/`` for ROS 2 topics and
+  rosbag2 recordings: decoded snapshots with header timestamps, schema catalogs,
+  batch inspection, and packaged ``.foxe`` release artifacts.
 * TypeScript snapshot decoder in ``data_tamer_foxglove/``, with schema versions
   4/5/6, bounded compiled layouts, nested objects and ROS 2 message helpers.
 

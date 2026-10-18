@@ -2,7 +2,8 @@
 
 Synchronous TypeScript ESM decoder for data_tamer snapshots, version 2.0.0.
 Node 22 or an ES2022 browser; no runtime dependencies. The Foxglove extension
-itself is outside this package.
+is in [`extension/`](extension/README.md): it bundles these sources for ROS 2
+topics and rosbag2 recordings, with its own build, tests and `.foxe` packaging.
 
 ```ts
 import {
@@ -58,7 +59,8 @@ Oversized layouts decode without retention. The caller owns the schema catalog.
 Malformed input throws `DataTamerError` with `code`: `bad_schema`,
 `missing_version`, `unsupported_version`, `hash_mismatch`, `bad_hash`,
 `truncated`, `trailing_bytes`, `short_mask`, `opaque_type`, `unknown_type`,
-`too_deep`, `bad_count` (invalid ROS bytes), or `name_conflict`.
+`too_deep`, `bad_count` (invalid ROS bytes), or `name_conflict`. The extension
+also uses `bad_timestamp` for invalid snapshot timestamps.
 
 ```sh
 npm ci

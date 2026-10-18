@@ -4,12 +4,13 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_call:
 
 permissions:
   contents: read
 
 jobs:
-  foxglove:
+  decoder:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -28,3 +29,25 @@ jobs:
     - run: npm run typecheck
     - run: npm test
     - run: python3 ../tools/check_versions.py
+
+  extension:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: data_tamer_foxglove/extension
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        cache: npm
+        cache-dependency-path: data_tamer_foxglove/extension/package-lock.json
+    - run: npm ci
+    - run: npm test
+    - run: npm run package
+    - uses: actions/upload-artifact@v4
+      with:
+        name: foxglove-extension
+        path: data_tamer_foxglove/extension/*.foxe
+        retention-days: 7
+        if-no-files-found: error
