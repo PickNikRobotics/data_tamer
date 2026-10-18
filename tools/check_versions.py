@@ -31,7 +31,7 @@ def main():
     versions = {
         "data_tamer_cpp/CMakeLists.txt": first_match(
             "data_tamer_cpp/CMakeLists.txt",
-            r"^\s*project\(\s*data_tamer_cpp\s+VERSION\s+(\d+\.\d+\.\d+)", re.M),
+            r"^\s*project\(\s*data_tamer_v2\s+VERSION\s+(\d+\.\d+\.\d+)", re.M),
         "data_tamer_cpp/package.xml": first_match(
             "data_tamer_cpp/package.xml", r"<version>([^<]+)</version>"),
         "data_tamer_msgs/package.xml": first_match(

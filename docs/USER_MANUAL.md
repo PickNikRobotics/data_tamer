@@ -348,11 +348,33 @@ format is specified in [wire_format.md](wire_format.md).
 
 ## Building and linking
 
-The library is built as C++20, and its public headers need only C++17.
+The library is built as C++20, and its public headers need only C++17. Link it with
 
-The shared library has the SONAME `libdata_tamer.so.2`, so a program built against any 2.x
-release runs with any later 2.x library, and `find_package(data_tamer 2 REQUIRED)` accepts
-any 2.x. Defaults that live in headers change only when you rebuild.
+```cmake
+find_package(data_tamer 2 REQUIRED)
+target_link_libraries(my_app PRIVATE data_tamer::data_tamer)
+```
+
+after a CMake install, a conan install or, under ROS 2, a colcon build. The ROS 2
+package is `data_tamer_v2` (`<depend>data_tamer_v2</depend>`; `find_package(data_tamer_v2)`
+with `data_tamer_v2::data_tamer` works too). It installs side by side with
+`data_tamer_cpp`, the 1.x package. With
+`add_subdirectory()` or FetchContent, link `data_tamer::data_tamer` directly: as a
+subproject the library builds without ROS 2, tests or examples, and installs nothing
+unless you set `DATA_TAMER_INSTALL=ON`. The README lists the build options.
+
+`data_tamer_v2/sinks/mcap_encoding.hpp` includes the MCAP headers, which come with the
+target: MCAP 2.1.3, downloaded when the library is built and installed in
+`include/data_tamer_v2_mcap`,
+`mcap_vendor` under ROS 2, or the `mcap` package with conan. Outside ROS 2 the MCAP
+implementation is part of libdata_tamer, so don't define `MCAP_IMPLEMENTATION` and don't
+link another MCAP library. A static install also needs zstd and lz4 where you build; its
+CMake package finds them.
+
+The shared library has the SONAME `libdata_tamer.so.2` (`libdata_tamer_v2.so.2` under
+ROS 2), so a program built against any 2.x release runs with any later 2.x library, and
+`find_package(data_tamer 2 REQUIRED)` accepts any 2.x. Defaults that live in headers
+change only when you rebuild.
 
 A header that only names DataTamer types, such as a `LogChannel&` parameter or a
 `std::shared_ptr<SinkWorker>` member, can include `data_tamer_v2/fwd.hpp` instead of the full

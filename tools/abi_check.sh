@@ -27,7 +27,8 @@
 # A baseline equal to HEAD (a push to the base branch itself) is replaced by HEAD^1.
 #
 # Needs: cmake, a C++20 compiler, git (unless --baseline-dir), libabigail
-# (apt install abigail-tools: abidiff), libzstd-dev and liblz4-dev (bundled MCAP).
+# (apt install abigail-tools: abidiff), libzstd-dev and liblz4-dev (MCAP), and network access: the
+# build downloads MCAP.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -59,8 +60,8 @@ for tool in cmake abidiff readelf nm; do
   command -v "$tool" >/dev/null || { echo "missing tool: $tool" >&2; exit 2; }
 done
 
-project_version() {  # $1: source tree
-  sed -n 's/^[[:space:]]*project(data_tamer_cpp[[:space:]]*VERSION[[:space:]]*\([0-9][0-9.]*\).*/\1/p' \
+project_version() {  # $1: source tree (the project was data_tamer_cpp before data_tamer_v2)
+  sed -n 's/^[[:space:]]*project(data_tamer_\(cpp\|v2\)[[:space:]]*VERSION[[:space:]]*\([0-9][0-9.]*\).*/\2/p' \
     "$1/data_tamer_cpp/CMakeLists.txt" | head -n1
 }
 
@@ -109,8 +110,10 @@ fi
 
 # ---- build both sides ------------------------------------------------------------
 build() {  # $1: source tree, $2: build dir, $3: extra compiler flags
-  # -w for the baseline: its sources build with -Werror, and a newer compiler on
-  # the runner must not fail the check on a warning in code that already merged.
+  # -w for the baseline: a baseline older than DATA_TAMER_WERROR builds with -Werror,
+  # and a newer compiler on the runner must not fail the check on a warning in code
+  # that already merged. The current side builds with the default (no -Werror): the
+  # presets and the other CI jobs check warnings.
   cmake -S "$1/data_tamer_cpp" -B "$2" -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="${3:-}" \
     -DBUILD_SHARED_LIBS=ON -DDATA_TAMER_BUILD_ROS=OFF -DDATA_TAMER_BUILD_TESTS=OFF \
     -DDATA_TAMER_BUILD_EXAMPLES=OFF -DDATA_TAMER_BUILD_BENCHMARKS=OFF >"$2.log" 2>&1 ||
@@ -141,15 +144,22 @@ echo "SONAME: baseline $soname_old, current $soname_new"
 # that sinks/mcap_encoding.hpp includes (abidiff takes one header directory per
 # side, so they are merged into one). Types defined elsewhere (the Pimpl structs,
 # libstdc++) are private to abidiff.
-merged_headers() {  # $1: source tree, $2: destination
-  mkdir -p "$2"
-  cp -r "$1/data_tamer_cpp/include/." "$2"
-  [[ -d "$1/data_tamer_cpp/3rdparty/mcap/include" ]] &&
-    cp -r "$1/data_tamer_cpp/3rdparty/mcap/include/." "$2"
-  return 0
+mcap_headers() {  # $1: source tree, $2: its build dir
+  # Vendored in 3rdparty/ before 2.0.0, downloaded by FetchContent since.
+  if [[ -d "$1/data_tamer_cpp/3rdparty/mcap/include" ]]; then
+    echo "$1/data_tamer_cpp/3rdparty/mcap/include"
+  else
+    echo "$2/_deps/data_tamer_mcap-src/cpp/mcap/include"
+  fi
 }
-merged_headers "$baseline_dir" "$work/headers_baseline"
-merged_headers "$repo" "$work/headers_current"
+mcap_baseline="$(mcap_headers "$baseline_dir" "$work/build_baseline")"
+mcap_current="$(mcap_headers "$repo" "$work/build_current")"
+merged_headers() {  # $1: source tree, $2: destination, $3: MCAP headers
+  mkdir -p "$2"
+  cp -r "$1/data_tamer_cpp/include/." "$3/." "$2"
+}
+merged_headers "$baseline_dir" "$work/headers_baseline" "$mcap_baseline"
+merged_headers "$repo" "$work/headers_current" "$mcap_current"
 
 # Symbols the baseline library defines strongly (functions: T; data, vtables and
 # typeinfo of classes with a key function: D, B, R). The library also exports a weak
@@ -204,8 +214,10 @@ compare library "$lib_old" "$lib_new" 1
 # The consumer side: what is compiled into user binaries (tools/abi_probe.cpp).
 # A probe that no longer compiles against the current headers is a source break.
 probe() {  # $1: source file, $2: source tree whose headers to use, $3: output
+  local mcap="$mcap_baseline"
+  [[ "$2" == "$repo" ]] && mcap="$mcap_current"
   ${CXX:-c++} -std=c++17 -shared -fPIC -g -O0 \
-    -I "$2/data_tamer_cpp/include" -I "$2/data_tamer_cpp/3rdparty/mcap/include" \
+    -I "$2/data_tamer_cpp/include" -I "$mcap" \
     "$1" -o "$3" 2>"$3.log"
 }
 probe_file="$here/abi_probe.cpp"

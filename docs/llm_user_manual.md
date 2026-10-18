@@ -9,32 +9,44 @@ port code written for 1.x, start with `docs/MIGRATION.md`.
 
 ## Linking
 
-Consumers need C++17. Under ROS 2, add `<depend>data_tamer_cpp</depend>` to
-`package.xml` and:
+Consumers need C++17. Every install (CMake, conan, ROS 2) provides:
 
 ```cmake
-find_package(data_tamer_cpp REQUIRED)
-target_link_libraries(my_node PRIVATE data_tamer_cpp::data_tamer)
-```
-
-Without ROS, after installing the library:
-
-```cmake
-find_package(data_tamer REQUIRED)
+find_package(data_tamer 2 REQUIRED)
 target_link_libraries(my_app PRIVATE data_tamer::data_tamer)
 ```
 
+Under ROS 2, add `<depend>data_tamer_v2</depend>` to `package.xml`. The ament package
+is `data_tamer_v2`, so `find_package(data_tamer_v2 REQUIRED)` with
+`data_tamer_v2::data_tamer` works as well; `data_tamer::data_tamer` forwards to it.
+`data_tamer_cpp` is the 1.x package: it installs side by side (2.x headers are in
+`include/data_tamer_v2`, the library is `libdata_tamer_v2.so`), but never link both into
+one program. `ros2 run data_tamer_v2 ros2_publisher` runs the example publisher.
+
+As a subproject (`add_subdirectory()`, FetchContent), link `data_tamer::data_tamer`. The
+subproject builds no ROS 2 sink, no tests or examples and has no install rules, unless
+`DATA_TAMER_BUILD_ROS`, `DATA_TAMER_BUILD_TESTS`, `DATA_TAMER_BUILD_EXAMPLES` or
+`DATA_TAMER_INSTALL` is set ON.
+
 `ROS2PublisherSink` exists only in the ROS 2 build (the build defines `USING_ROS2`).
+
+`data_tamer_v2/sinks/mcap_encoding.hpp` includes `<mcap/writer.hpp>`. The target carries
+those headers: MCAP 2.1.3, which the build downloads (installed in
+`include/data_tamer_v2_mcap`),
+`mcap_vendor::mcap` under ROS 2, or conan's `mcap`. Outside ROS 2, libdata_tamer contains
+the MCAP implementation: never define `MCAP_IMPLEMENTATION` and never link another MCAP
+build into the same program. Under ROS 2 the implementation is `mcap_vendor`'s
+`libmcap`, linked through the target. A static install also links zstd and lz4: its CMake
+package finds them on the machine that builds the consumer.
 
 ### Versions and binary compatibility
 
 - `DATA_TAMER_VERSION` (defined by the target) is the library version, `X.Y.Z`. The shared
   library installs as `libdata_tamer.so.X.Y.Z` with the SONAME `libdata_tamer.so.X`
-  (`libdata_tamer.so.2` for every 2.x release). A binary linked
-  against it loads any later `2.x` library, so a minor or patch update can replace the
-  `.so` without rebuilding. A new major version has a new SONAME: rebuild.
-- Without ROS, `find_package(data_tamer 2 REQUIRED)` accepts any `2.x` and rejects other
-  majors.
+  (`libdata_tamer.so.2` for every 2.x release; under ROS 2 `libdata_tamer_v2.so.2`). A
+  binary linked against it loads any later `2.x` library, so a minor or patch update can
+  replace the `.so` without rebuilding. A new major version has a new SONAME: rebuild.
+- `find_package(data_tamer 2 REQUIRED)` accepts any `2.x` and rejects other majors.
 - Code you compile into your binary does not change when the library is updated in place:
   the header-only parts (`LoggedValue::set`, the `registerValue` templates, default
   arguments, member initializers of option structs such as `ROS2PublisherOptions`) keep

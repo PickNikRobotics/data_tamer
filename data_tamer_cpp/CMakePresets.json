@@ -1,6 +1,10 @@
 {
   "version": 3,
-  "cmakeMinimumRequired": { "major": 3, "minor": 21, "patch": 0 },
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 21,
+    "patch": 0
+  },
   "configurePresets": [
     {
       "name": "base",
@@ -13,6 +17,7 @@
         "DATA_TAMER_BUILD_TESTS": "ON",
         "DATA_TAMER_BUILD_EXAMPLES": "OFF",
         "DATA_TAMER_BUILD_BENCHMARKS": "OFF",
+        "DATA_TAMER_WERROR": "ON",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
       }
     },
@@ -36,7 +41,8 @@
       "inherits": "base",
       "displayName": "AddressSanitizer + UndefinedBehaviorSanitizer",
       "cacheVariables": {
-        "CMAKE_CXX_FLAGS": "-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all -g -O1",
+        "CMAKE_CXX_FLAGS":
+            "-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all -g -O1",
         "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address,undefined",
         "CMAKE_SHARED_LINKER_FLAGS": "-fsanitize=address,undefined"
       }
@@ -54,26 +60,48 @@
     }
   ],
   "buildPresets": [
-    { "name": "debug",   "configurePreset": "debug",   "jobs": 0 },
-    { "name": "release", "configurePreset": "release", "jobs": 0 },
-    { "name": "asan",    "configurePreset": "asan",    "jobs": 0 },
-    { "name": "tsan",    "configurePreset": "tsan",    "jobs": 0 }
+    {
+      "name": "debug",
+      "configurePreset": "debug",
+      "jobs": 0
+    },
+    {
+      "name": "release",
+      "configurePreset": "release",
+      "jobs": 0
+    },
+    {
+      "name": "asan",
+      "configurePreset": "asan",
+      "jobs": 0
+    },
+    {
+      "name": "tsan",
+      "configurePreset": "tsan",
+      "jobs": 0
+    }
   ],
   "testPresets": [
     {
       "name": "debug",
       "configurePreset": "debug",
-      "output": { "outputOnFailure": true }
+      "output": {
+        "outputOnFailure": true
+      }
     },
     {
       "name": "release",
       "configurePreset": "release",
-      "output": { "outputOnFailure": true }
+      "output": {
+        "outputOnFailure": true
+      }
     },
     {
       "name": "asan",
       "configurePreset": "asan",
-      "output": { "outputOnFailure": true },
+      "output": {
+        "outputOnFailure": true
+      },
       "environment": {
         "ASAN_OPTIONS": "detect_leaks=1:halt_on_error=1:strict_string_checks=1",
         "UBSAN_OPTIONS": "print_stacktrace=1:halt_on_error=1"
@@ -82,7 +110,9 @@
     {
       "name": "tsan",
       "configurePreset": "tsan",
-      "output": { "outputOnFailure": true },
+      "output": {
+        "outputOnFailure": true
+      },
       "environment": {
         "TSAN_OPTIONS": "halt_on_error=1:second_deadlock_stack=1:history_size=4"
       }
