@@ -499,8 +499,12 @@ or set `GLIBC_TUNABLES=glibc.rtld.optional_static_tls=2048` (glibc 2.32 or later
 | Use from a real-time thread | no | yes |
 
 Both return a `SnapshotResult`. The result of `takeSnapshot()` may be ignored: `stats()`
-counts every outcome. The result of `tryTakeSnapshot()` is `[[nodiscard]]`: before
-`startLogging()` it fails on every call with `not_started`.
+counts the calls and the `ok` and `partial` results, `pool_exhausted`, `oversize` and
+`blocked` have counters of their own, and `attempts - accepted` covers `rejected`,
+`no_sinks` and `not_started` (see
+[Monitoring](#monitoring-one-struct-per-channel-one-per-sink)). The result of
+`tryTakeSnapshot()` is `[[nodiscard]]`: before `startLogging()` it fails on every call
+with `not_started`.
 
 | Result | Meaning | What to do |
 |---|---|---|

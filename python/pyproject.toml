@@ -28,8 +28,8 @@ classifiers = [
 mcap = ["mcap>=1.0"]  # for iter_mcap()
 
 [project.urls]
-Homepage = "https://github.com/PlotJuggler/data_tamer"
-"Wire format" = "https://github.com/PlotJuggler/data_tamer/blob/V2/docs/wire_format.md"
+Homepage = "https://github.com/facontidavide/data_tamer"
+"Wire format" = "https://github.com/facontidavide/data_tamer/blob/main/docs/wire_format.md"
 
 [tool.setuptools]
 # Only the decoder module: the ROS example and the tests next to it are not installed.

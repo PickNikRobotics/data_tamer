@@ -1,9 +1,8 @@
 # data-tamer-parser
 
-Reference decoder for the [Data Tamer](https://github.com/PlotJuggler/data_tamer)
+Reference decoder for the [Data Tamer](https://github.com/facontidavide/data_tamer)
 wire format, specified in
-[docs/wire_format.md](https://github.com/PlotJuggler/data_tamer/blob/V2/docs/wire_format.md)
-(the V2 branch, until it is merged).
+[docs/wire_format.md](https://github.com/facontidavide/data_tamer/blob/main/docs/wire_format.md).
 A single module, `data_tamer_parser`, using the Python standard library only.
 
 ```

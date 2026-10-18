@@ -225,7 +225,9 @@ public:
    * Several threads may take snapshots of one channel: they take turns on its write
    * mutex. The first call with a sink attached calls startLogging(). It can block on a
    * writer and allocate: on a real-time thread use tryTakeSnapshot().
-   * The result may be ignored: every outcome is also counted in stats().
+   * The result may be ignored: stats() counts every call (`attempts`) and the `ok` and
+   * `partial` ones (`accepted`); `pool_exhausted`, `oversize` and `blocked` also have
+   * counters of their own, and `attempts - accepted` covers the other results.
    * @param timestamp time of the snapshot; by default the system clock.
    */
   SnapshotResult takeSnapshot(std::chrono::nanoseconds timestamp = NsecSinceEpoch());

@@ -27,8 +27,11 @@ included.
 3. Create sinks with their `create()` function, and port custom sinks to `DataSink`.
 4. Replace `if(!channel->takeSnapshot())` with a check of the `SnapshotResult`.
 5. In other threads, replace `writeMutex()` with `scopedWrite()`.
-6. Stop the sinks before the program exits: `ChannelsRegistry::Global().stopAll()` or
-   `worker->stop()`.
+6. Replace `finishQueueAndStop()` and the `*AcceptingSnapshots()` calls with
+   `worker->stop()` and `start()`, or `ChannelsRegistry::Global().stopAll()`. A worker
+   also stops when its last reference goes away (`~SinkWorker` calls `stop()`), as a 1.x
+   sink finished its file in its destructor: call `stop()` where the recording must be
+   complete at a known point.
 7. Check the [behaviour changes](#behaviour-changes): MCAP files now roll over, the
    pool now drops snapshots, and the ROS 2 QoS changed.
 8. Update every reader of the recorded data: 1.x parsers can't read 2.0 files.
@@ -47,7 +50,7 @@ included.
 | `MCAPSink::finishQueueAndStop()` | `worker->stop()`, which also closes the file |
 | `class MySink : public DataSinkBase` | `class MySink : public DataSink`, see [custom sinks](#custom-sinks) |
 | `if(!channel->takeSnapshot())` | `if(channel->takeSnapshot() != SnapshotResult::ok)` |
-| `channel->getActiveFlags()` | removed: read `active_mask` of a delivered snapshot |
+| `channel->getActiveFlags()` | removed: `channel->isEnabled(id)` or `value->isEnabled()` per value; a sink reads `Snapshot::active_mask` |
 | `std::lock_guard lock(channel->writeMutex())` | `auto tx = channel->scopedWrite()` |
 | `Mutex`, `DataTamer::Mutex` | removed |
 | `scalar->getMutablePtr()`, `getConstPtr()` | `scalar->set(v)`, `scalar->get()` |
@@ -60,7 +63,9 @@ included.
 | `DataSnapshot` | removed |
 | `DummySink::latest_snapshot`, `schemas`, ... | `latestSnapshot()`, `schema(hash)`, ... |
 | a name converted implicitly to `CustomSerializerT<T>` | `CustomSerializerT<T>("name")`: the constructor is `explicit` |
-| `AddFieldToHash()` | `SchemaTextHash()`, `ComputeSchemaHash()` |
+| `DataTamer::AddFieldToHash()` (`types.hpp`) | `SchemaTextHash()`, `ComputeSchemaHash()`; the parser's `DataTamerParser::AddFieldToHash()` remains, for version 4 texts |
+| `channel->addDataSink(sink)` returned `void` | it returns `bool`: `false` if the sink was attached already |
+| `SerializeMe::enable_if_same_t` | removed: `std::enable_if_t<std::is_same_v<A, B>>` |
 | `DataTamerParser::BuilSchemaFromText()` | `BuildSchemaFromText()` (the old name is deprecated) |
 | `ParseSnapshot(schema, view, on_number, on_custom)` | `ParseSnapshot(schema, view, on_number)` |
 
@@ -159,8 +164,9 @@ auto worker = DataTamer2::SinkWorker::create<CsvSink>();
 | `bool storeSnapshot(const Snapshot&)` | `void onSnapshot(const SnapshotRef&)`; throw to report a failure |
 | return `false` from `storeSnapshot()` | throw: `worker->errors()` and `lastError()` count and keep it |
 | override `pushSnapshot()` | removed: the channel pushes into the worker's queue |
+| call `addChannel()` and `pushSnapshot()` on a sink yourself | removed: only a channel feeds a worker; see [writing MCAP files yourself](#writing-mcap-files-yourself) |
 | `stopThread()` in the destructor | delete it: the worker stops before it destroys the sink |
-| `stopAcceptingSnapshots()`, `processQueuedSnapshots()`, `startAcceptingSnapshots()` | `worker->stop()`, `worker->drain()`, `worker->start()` |
+| `stopAcceptingSnapshots()`, `processQueuedSnapshots()`, `startAcceptingSnapshots()` | `worker->stop()`, `worker->drain()`, `worker->start()`; `stop()` also calls the sink's `onStop()` and `start()` its `onStart()`, so a sink that closes its file there splits the recording (`MCAPSink` continues in its next numbered file) |
 | close files in the destructor | override `onStop()`, and `onStart()` to reopen them |
 | `Snapshot::schema_hash` was `size_t` | it is `uint64_t` |
 
@@ -176,22 +182,64 @@ from a callback: it deadlocks.
 `schema(hash).channel_name`. In tests, call `worker->drain()` before reading them,
 instead of sleeping.
 
+### Writing MCAP files yourself
+
+In 1.x, `addChannel()` and `pushSnapshot()` were public, so code could feed an `MCAPSink`
+by hand, for instance to write stored snapshots. In 2.0 the sink callbacks are protected
+and only a channel feeds a worker. To write a data_tamer MCAP file from your own data, use
+the encoding that `MCAPSink` uses, `data_tamer_v2/sinks/mcap_encoding.hpp`:
+
+```cpp
+#include "data_tamer_v2/sinks/mcap_encoding.hpp"
+namespace enc = DataTamer2::mcap_encoding;
+
+mcap::McapWriter writer;
+if(!writer.open("stored.mcap", mcap::McapWriterOptions(enc::kEncoding)).ok())
+{
+  // handle the error
+}
+const auto id = enc::AddChannel(writer, schema);  // once per schema and file
+std::vector<uint8_t> scratch;                     // reused across messages
+uint32_t sequence = 1;
+for(const DataTamer2::Snapshot& snapshot : stored)
+{
+  if(!enc::WriteSnapshot(writer, id, sequence++, snapshot, scratch).ok())
+  {
+    // handle the error
+  }
+}
+writer.close();
+```
+
+`WriteMessage()` takes a timestamp, a mask and a payload instead of a `Snapshot`. Link
+`data_tamer::data_tamer`, which provides the MCAP headers, and don't define
+`MCAP_IMPLEMENTATION` (see [Building and linking](#building-and-linking)).
+
 ## Taking snapshots
 
-`takeSnapshot()` returns a `SnapshotResult` instead of a `bool`. `ok` means every sink got
-the snapshot; the [user manual](USER_MANUAL.md#snapshots-are-missing-from-the-recording)
-lists the other values. A plain `channel->takeSnapshot();` still compiles, and
-`channel->stats()` counts every outcome, but `if(!channel->takeSnapshot())` doesn't:
+`takeSnapshot()` returns a `SnapshotResult` instead of a `bool`. `ok` means every sink
+queued the snapshot (delivery comes later, on the worker thread:
+`SinkWorker::delivered()` counts it); the
+[user manual](USER_MANUAL.md#snapshots-are-missing-from-the-recording) lists the other
+values. A plain `channel->takeSnapshot();` still compiles, but
+`if(!channel->takeSnapshot())` doesn't:
 
 ```cpp
 if(channel->takeSnapshot() != DataTamer2::SnapshotResult::ok)
 {
-  // count it; channel->stats() has the totals
+  // count it, or read the totals from channel->stats()
 }
 ```
 
+`channel->stats()` counts the calls (`attempts`) and the snapshots a sink took
+(`accepted`: `ok` and `partial`). `pool_exhausted` and `oversize` have counters of their
+own (`pool_exhausted`, `dropped_oversize`), and `blocked` is in `write_lock_contended`,
+with the `takeSnapshot()` calls that waited. `rejected`, `no_sinks` and `not_started`
+have none: `attempts - accepted` covers them with the others.
+
 `getActiveFlags()` is removed. A sink reads the mask of each snapshot from
-`Snapshot::active_mask`.
+`Snapshot::active_mask`; the application asks `channel->isEnabled(id)`, or
+`value->isEnabled()` for a `LoggedValue`.
 
 2.0 adds `startLogging()`, which freezes the schema, allocates the snapshot pool and sends
 the schema to the sinks. The first `takeSnapshot()` calls it for you, so 1.x code needs no
@@ -224,13 +272,17 @@ writes registered variables inside a transaction:
 `scopedWrite()` nests, and a `LoggedValue` set inside it doesn't lock again. A snapshot
 taken by a thread that holds a transaction, or a `LoggedValue` guard, returns `blocked`.
 
-`LoggedValue` changed in four ways:
+`LoggedValue` changed in five ways:
 
 - Scalars (numbers, `bool`, `char`, enums) are `std::atomic`. Use `set()` and `get()`:
   `getMutablePtr()` and `getConstPtr()` on a scalar fail with "scalar LoggedValues are
   atomic: use set()/get()".
 - For structs and vectors, `getMutablePtr()` and `getConstPtr()` remain. The guards are not
   movable and have no `operator bool`. `getLockedPtr()` is removed.
+- For structs and vectors, `set()` and `get()` lock the channel's write mutex, as
+  `scopedWrite()` does, so they wait while a snapshot serializes. In 1.x they locked only
+  a mutex of the value, which the snapshot did not take. Don't call them on a real-time
+  thread that must not block.
 - `set(value)` lost its `auto_enable` parameter and never re-enables a disabled value.
   Call `setEnabled(true)`.
 - A `LoggedValue` can't be moved or default-constructed. Keep the `std::shared_ptr` that
@@ -273,13 +325,15 @@ These changes compile without a warning.
 | Area | 1.x | 2.0 | To get the 1.x behaviour |
 |---|---|---|---|
 | MCAP reset every 600 s | truncated the file, losing everything recorded before | continues in a new numbered file; disk use is unbounded | `setCreateNewFileOnReset(false)` |
-| Rollover file names | `run.mcap_1` | `run_1.mcap`; existing files are skipped, not overwritten | none |
-| `worker->stop()` | (did not exist) | closes the MCAP file | none |
+| Rollover file names | `run.mcap_1` | `run_1.mcap`; numbered names that exist already are skipped, not overwritten (the path given to `create()` is overwritten, as in 1.x) | none |
+| `worker->stop()`, `start()` | (did not exist) | `stop()` closes the MCAP file, `start()` continues in the next numbered file | none |
 | Slow sink | its queue grew without bound | the channel's pool holds by default 8 MiB of snapshots, from 64 to 1024 (1 s at 1 kHz for a payload under 8 KB); after that, snapshots are lost with `pool_exhausted` | none; `setPoolCapacity()` raises the bound |
 | ROS 2 data topic QoS | reliable `KeepAll` | reliable `KeepLast(100)` | `options.data_qos = rclcpp::QoS(rclcpp::KeepAll()).reliable()` |
 | ROS 2 schemas topic | reliable, transient-local `KeepAll`, published with the next snapshot | reliable, transient-local `KeepLast(1)`, published by `startLogging()`; each message holds every schema, as before | none |
 | `LoggedValue::set()` | re-enabled a disabled value | stores only | call `setEnabled(true)` |
-| Snapshot inside `scopedWrite()` on the same thread | (no `scopedWrite()`) | returns `blocked` | take the snapshot outside the transaction |
+| `set()`, `get()` of a struct or vector `LoggedValue` | locked a mutex of the value only | lock the channel's write mutex: they wait for a snapshot in progress | none |
+| An id kept across `unregister()` and a new registration of its name | acted on the new registration | stale: `setEnabled()` and `unregister()` throw `std::invalid_argument`, `trySetEnabled()` and `isEnabled()` return false | use the id the new registration returns |
+| Snapshot on a thread that holds the write mutex (`scopedWrite()`, a `LoggedValue` guard) | deadlocked, with `writeMutex()` locked or a guard alive | returns `blocked` | take the snapshot outside the transaction |
 | MCAP message `sequence` | always 1 | 1, 2, 3, ... per channel and file | none |
 | Negative snapshot timestamp | written, as a huge unsigned log time | not written by the MCAP sinks; counted in `errors()` | none |
 
@@ -293,6 +347,12 @@ channel->setPoolCapacity(2s, 1ms);  // 2000 slots: a 2 s stall at 1 kHz
 
 `ChannelsRegistry::setChannelDefaults()` applies the same setting to every new channel.
 Watch `channel->stats().pool_exhausted` to see whether the pool is large enough.
+
+The pool belongs to one channel and is allocated by `startLogging()`, so memory grows with
+the number of channels: about 8 MiB each by default, less for a small payload (1024 slots
+of about 128 bytes plus the payload reservation) and more above 128 KB (64 slots). Ten
+channels with payloads of 8 KB reserve about 80 MiB. Lower the count with
+`setPoolCapacity()` or `setChannelDefaults()` where memory is tight.
 
 ## Reading the data
 
