@@ -4,661 +4,175 @@ Changelog for package data_tamer
 
 Unreleased
 ----------
-* Examples: replace the introductory demos with eight progressive robot-arm tutorials,
-  cover custom types, real-time logging, threads and sinks; ctest runs them, under
-  ASan/UBSan and TSan in CI.
-* **Behaviour change, pool**: by default a channel's pool has as many slots as fit in
-  8 MiB, at least 64 and at most 1024 (``SnapshotPool::defaultCapacity()``, from the
-  slot's payload reservation): one second at 1 kHz for a payload under 8 KB, longer
-  than a disk flush. It had 64 slots, 64 ms at 1 kHz, so a 200 ms flush dropped
-  snapshots unless the program sized the pool. ``SnapshotPool::kDefaultCapacity`` is
-  gone. The default is in the library, so it also applies to binaries built against
-  earlier headers. The cap keeps a refused ``tryTakeSnapshot()`` short: it reads every
-  slot, about 7 us for 1024 with cold caches.
-* **Breaking, namespace**: the library's namespace is ``DataTamer2`` (it was
-  ``DataTamer``): ``DataTamer2::LogChannel``, ``using namespace DataTamer2;``,
-  ``DataTamer2::TypeDefinitionTrait``. ``SerializeMe`` and ``DataTamerParser`` keep their
-  names, inside an inline namespace ``v2``. No 2.x symbol has the mangled name of a 1.x
-  one, so a process can load plugins built against 1.x and against 2.x: before, the
-  dynamic linker merged their same-named symbols and the process crashed.
-* **Breaking, headers**: the public headers move from ``data_tamer/`` to ``data_tamer_v2/``
-  (``#include "data_tamer_v2/channel.hpp"``), and the standalone parser from
-  ``data_tamer_parser/data_tamer_parser.hpp`` to ``data_tamer_v2/data_tamer_parser.hpp``,
-  so that 2.x installs side by side with 1.x, whose headers keep their paths.
-* **Packaging, ROS 2**: 2.x is released as a new package, ``data_tamer_v2``, which
-  installs side by side with ``data_tamer_cpp`` 1.x in one prefix: the headers are in
-  ``include/data_tamer_v2``, the library is ``libdata_tamer_v2.so.2``, the example runs
-  as ``ros2 run data_tamer_v2 ros2_publisher``.
-  Depend on ``data_tamer_v2`` and link ``data_tamer_v2::data_tamer``, or use
-  ``find_package(data_tamer 2)`` and ``data_tamer::data_tamer``, which a ROS 2 install now
-  provides too (``share/data_tamer/cmake``). ``data_tamer_msgs`` keeps its name.
-* **Packaging, ROS 2**: ``mcap_vendor::mcap`` is linked PUBLIC, so code that includes
-  ``sinks/mcap_encoding.hpp`` no longer links it by hand. ``-DBUILD_TESTING=OFF`` builds
-  no test; the gtest packages are ``<test_depend>``, ``lz4`` and ``libzstd-dev`` are no
-  longer dependencies. ``data_tamer_msgs`` drops ``builtin_interfaces`` and
-  ``ament_lint_common``. Both manifests have a description and urls.
-* **ABI, MCAP**: outside ROS 2, MCAP is 2.1.3 (1.x bundled 1.3.0, which does not compile
-  with GCC 15). It is no longer in the repository (``3rdparty/`` is gone): CMake downloads
-  the release archive, pinned by hash, with FetchContent; offline builds pass
-  ``FETCHCONTENT_SOURCE_DIR_DATA_TAMER_MCAP``. Under ROS 2 it is still ``mcap_vendor``.
-  libdata_tamer compiles the MCAP implementation and exports its ``mcap::`` symbols,
-  which change with it; from 2.0.0 the MCAP version is part of the 2.x ABI. An installed
-  MCAP package is no longer used silently instead: ``DATA_TAMER_USE_SYSTEM_MCAP=ON`` opts
-  in (conan does, with ``mcap/2.1.3`` and conan 2.4 or later).
-* **Packaging**: the MCAP headers and licence install in ``include/data_tamer_v2_mcap/mcap``,
-  an include directory of ``data_tamer::data_tamer`` that holds nothing else. The
-  ``mcap_lib`` target is gone (1.x installed ``libmcap_lib.a``). zstd and lz4 are
-  linked privately, preferring the shared libraries of their own CMake packages, with a
-  plain search as fallback (``cmake/Findzstd.cmake``, ``Findlz4.cmake``). A shared
-  install exports no dependency besides Threads and no zstd or lz4 symbol
-  (``--exclude-libs,ALL``); a static one finds zstd and lz4 again in its CMake package,
-  and no install contains an absolute path of the build machine.
-* **Build**: ``-Werror`` is opt-in, ``DATA_TAMER_WERROR`` (OFF), so a release builds with
-  newer compilers; the presets and CI turn it on. Added to a parent project
-  (``add_subdirectory()``, FetchContent) data_tamer builds no ROS 2 package, tests or
-  examples, installs nothing (``DATA_TAMER_INSTALL``, default: top level) and prints no
-  warning about ament.
-* CI: the ``install`` job builds ``data_tamer_cpp/test_package``, a
-  ``find_package(data_tamer 2)`` consumer, against a static and a shared install, and
-  the conan job runs ``conan create``, which builds it as the conan test package.
-* **ABI**: ``ChannelSharedState``, its ``WriteMutex`` and the series flag words are
-  library-private (``src/``): the headers ``details/shared_state.hpp``,
-  ``details/write_mutex.hpp`` and ``details/spin_pause.hpp`` are no longer installed, and
-  consumers see ``ChannelSharedState`` only as an incomplete type. ``LoggedValue``
-  reaches its enabled flag through the exported ``details::setSeriesEnabled()`` and
-  ``isSeriesEnabled()``, so the flag encoding and these layouts can change in a 2.x
-  minor release. ``WriteTransaction`` is a class at namespace scope (it was the alias
-  ``ChannelSharedState::Transaction``), declared in ``details/locked_reference.hpp``
-  and still returned by ``scopedWrite()``. Rebuild consumers built against earlier
-  headers.
-* **Behaviour change, parser and Python decoder**: a schema text in the line format
-  needs its ``### version:`` line before the fields; without one both throw, naming the
-  supported versions (4 and 5, 6 in YAML). The C++ parser read such a text as an
-  upper-case "name TYPE" format that no release wrote, or as version 5, and the Python
-  decoder as version 5. Texts of the releases before 0.7.0 (late 2023) fail with that
-  message, among them the header-less ``<type> <name>`` lines of the 0.3 to 0.5 ROS 2
-  publisher, which both used to read (``docs/wire_format.md``, section 2).
-* **Fixed, Python decoder**: ``verify_hash=True`` (``parse_schema()``,
-  ``SchemaRegistry``, ``iter_mcap()``) rejected every data_tamer 1.x file (schema
-  version 4). Its hash came from the writer's ``std::hash`` and cannot be recomputed, so
-  it is accepted as declared. The C++ ``check_hash`` still recomputes it, which agrees
-  only with the writer's standard library (``docs/wire_format.md``, section 5).
-* Docs: ``docs/MIGRATION.md`` lists what code written for 1.x must change for 2.0,
-  with the behaviour changes that compile silently.
-* **Real-time**: the first access of the transaction state on a thread no longer
-  allocates when libdata_tamer is loaded with ``dlopen()`` (a plugin, pluginlib,
-  ros2_control), so a ``scopedWrite()`` on each real-time thread during setup is no
-  longer needed. The library's one thread-local is initial-exec TLS (glibc):
-  ``dlopen()`` takes one pointer of glibc's static TLS surplus.
-* **ABI**: the ``WriteTransaction`` constructor and destructor (behind
-  ``scopedWrite()``, the guards and non-scalar ``LoggedValue``s) and
-  ``ChannelSharedState::inTransactionOnThisThread()`` are defined in the library, with
-  the thread-local chain. The chain is no longer an inline protocol, so later 2.x
-  releases can change it; only the size of ``WriteTransaction`` is pinned. Rebuild consumers
-  built against earlier headers.
-* **API**: ``data_tamer_v2/data_tamer.hpp`` includes ``channel.hpp`` again, as in 1.x, so
-  one include gives ``ChannelsRegistry``, ``LogChannel``, ``LoggedValue`` and the sink
-  interface. ``data_tamer_v2/fwd.hpp`` stays for headers that only name the types.
-* **API**: ``takeSnapshot()`` is no longer ``[[nodiscard]]``: ``stats()`` counts every
-  outcome, and most loops don't act on each call. ``tryTakeSnapshot()`` still is.
-* **API**: no ``LogChannel::droppedSnapshots()``, which no release had: read
-  ``stats().dropped_by_sink``. ``LogChannel::sinkDropped()`` and
-  ``ChannelDefaults::resolve()`` (with ``ChannelDefaults::Sizes``) are private: they are
-  the building blocks of ``stats()`` and ``setChannelDefaults()``. Their symbols stay
-  exported (the inline ``stats()`` calls ``sinkDropped()``).
-* **Fixed, deadlocks**: ``unregister()``, ``removeDataSink()`` or a ``LoggedValue``
-  destructor inside ``scopedWrite()`` while a snapshot waited; a const query inside
-  ``scopedWrite()`` while another thread ran one of those, or ``startLogging()``;
-  ``startLogging()`` inside ``scopedWrite()``. The snapshot path takes the write mutex
-  before its epoch, and ``startLogging()`` before the control mutex.
-* **Behaviour change**: a snapshot taken by a thread that holds the channel's
-  transaction or a ``LoggedValue`` guard returns ``blocked`` (it hung).
-* **New**: several threads may take snapshots of one channel; they take turns on the
-  write mutex. ``blocked`` now takes precedence over ``pool_exhausted``.
-* **Fixed**: a consumer built with ``-fvisibility=hidden`` against a shared
-  libdata_tamer hung in ``LoggedValue::set()`` inside ``scopedWrite()``; the
-  transaction code is defined in the library only.
-* **Behaviour change**: ``SinkWorker::stop()``, ``start()`` and ``drain()`` throw
-  ``std::logic_error`` from a callback of their own sink (they deadlocked, or ``stop()``
-  closed the worker silently). Concurrent ``stop()`` and ``start()``, two ``stopAll()``
-  included, are serialized (they hung). A callback that releases the last reference to
-  its own worker no longer calls ``std::terminate``.
-* **Fixed**: a sink attached during a failing ``startLogging()`` could miss the final
-  schema, and a concurrent ``addDataSink()`` of one worker announced it twice.
-* **Real-time**: no ``notify_all()`` per snapshot or refused push unless a thread waits;
-  each one could be a futex call.
-* **Behaviour change**: names must be non-empty and free of whitespace and control
-  characters (only the space was refused); ``IsCanonicalName()`` agrees. A ninth default
-  sink throws in ``addDefaultSink()`` (it made every later ``getChannel()`` throw).
-* **Behaviour change**: custom type names, their field names, the ``typeName()`` of a
-  ``registerCustomValue()`` serializer and channel names are checked too: a line break
-  in any of them split the schema text, and a space in a type or field name broke its
-  field line. Type and field names follow the value name rules, and the registration
-  throws ``std::runtime_error``. A channel name can contain spaces, but
-  ``LogChannel::create()`` and ``getChannel()`` throw for an empty one or one with a
-  control character.
-* **Fixed**: a registration that throws leaves the channel unchanged (custom types, an
-  allocation failure, ``createLoggedValue()``). Two C++ types that return one custom type
-  name in a channel make ``registerValue()`` throw (the second used the first one's
-  serializer and read past its object). ``ToStr(Schema)`` rethrows allocation failures.
-* **Fixed**: ``long long``, ``unsigned long long``, ``wchar_t``, ``char16_t``,
-  ``char32_t`` and enums over them are recorded by size and signedness; they were
-  recorded as ``other``, which no decoder reads. ``long double`` is a compile error. A
-  class template with two or more type parameters can have a ``TypeDefinition``.
-* **Fixed**: a vector of structs was sized with padding, so ``tryTakeSnapshot()`` could
-  return ``oversize`` for a payload that fit. ``ValuePtr`` checks the room before writing
-  a number and writes little-endian on any host; a custom type without a serializer
-  throws ``std::invalid_argument``.
-* **Fixed, wire**: a ``std::string``, registered or inside a custom type, is written as
-  ``char[]`` (a ``uint32`` count and the characters), as its schema says. It carried a
-  16-bit length that no decoder could read, and a string over 65535 bytes made the
-  snapshot throw.
-* **Fixed**: ``MCAPSink`` reset without rollover and ``restartRecording()`` of the file in
-  use wrote the old footer into the new file; the old writer is now closed first, and a
-  failed reopen of that file stops the sink. A rollover that cannot open its next file
-  is counted once and retried after another reset time.
-* **Fixed**: ``MCAPRingSink::flushPendingDump()`` and ``stop()`` on an untriggered request
-  use the newest timestamp of the current run, so a simulation reset no longer dumps the
-  previous run. ``dumps_written`` and ``dumps_failed`` count a dump before its callback.
-* **Fixed**: ``MCAPRingSink`` starts a new run only when a channel's clock steps back by
-  more than ``window``. Snapshots of one channel taken by several threads can arrive
-  slightly out of order, and each step back started a run, so a flush right after
-  ended its dump before the newest snapshot.
-* **Behaviour change**: MCAP sinks reject a negative snapshot timestamp (counted in
-  ``errors()``, not written), and ``mcap_encoding::WriteMessage()`` throws for one.
-* **Parser and Python decoder**: the work of a decode is bounded by the payload (a
-  zero-size element type looped for minutes); a bool is true for any non-zero byte;
-  empty schema text is rejected; ``### key:value`` headers are read; version and hash are
-  strict unsigned decimals; a separator is a whole line of at least 30 ``=``;
-  ``ENCODING:`` sections are opaque types and must follow ``MSG:``. New
-  ``SplitMcapMessage()`` and ``split_mcap_message()``, used by ``T08_mcap_reader``.
-* **Breaking, parser**: ``ParseSnapshot()`` loses its unused ``callback_custom``
-  parameter; ``SizeOf``, ``kMaxSchemaDepth`` and ``ParseSnapshotRecursive`` move to
-  ``DataTamerParser::detail`` and ``NullCustomCallback`` is removed; the header needs a
-  little endian host and no longer includes ``<iostream>``.
-* **SerializeMe**: bounds checks for byte vectors and 1-byte arrays, exact
-  ``BufferSize()`` for arrays and padded structs, bool decoding, a container of 2^32
-  elements or more throws, an ADL ``TypeDefinition()`` may return ``const char*`` or
-  ``std::string``, ``Span<const T>`` from ``std::array``, and the big endian path
-  compiles for enums and ``std::byte``.
-* **API**: ``[[nodiscard]]`` on ``trySetEnabled()``, ``LogChannel::create()``,
-  ``getNumberOfSinks()``, ``MCAPRingSink::requestDump()``, ``SnapshotPool::tryAcquire()``
-  and ``adopt()``, ``ToStr(Schema)``, ``ToYaml()``, ``RenderSchema()``,
-  ``ParseSnapshot()``, ``BuildSchemaFromText()``, ``BuildSchemaFromYaml()``,
-  ``ToText()`` and ``GetBit()``; ``noexcept`` on ``isEnabled(id)``,
-  ``LoggedValue::setEnabled()`` and ``isEnabled()``, ``requestDump()``,
-  ``dumpRequested()``, ``SinkWorker::delivered()``, ``errors()``, ``queueHighWater()`` and
-  the ``WriteMutex`` try paths.
-  ``getConstPtr()`` is ``const``, ``SinkWorker::as<T>()`` has a ``const`` overload,
-  ``logged_value.hpp`` is self-sufficient and ``poolExhausted()`` is lock-free.
-  ``CustomSerializerT(std::string)`` is ``explicit``. Removed: ``getPointerType`` and
-  ``WriteMutex::kPriorityInheritance``. **Source change**: ``mcap_ring_sink.hpp`` no
-  longer includes ``mcap_sink.hpp``.
-* **Real-time**: a snapshot wakes sleeping sink workers after it releases the write
-  mutex, so writers wait less (with four sinks the mutex was held 13 us per snapshot,
-  2.5 us now). Serializing a number checks the buffer once.
-* **Fixed**: a ``ValuePtr`` container count of 2^32 or more throws instead of being
-  written truncated. ``SerializeMe::enable_if_same_t`` is removed. Some error texts
-  changed: a number that does not fit reports "Buffer overrun", and ``MCAPRingSink``
-  reports a negative timestamp with the text of ``mcap_encoding::CheckTimestamp()``.
-* **Decoders**: the C++ parser reads a schema about twice as fast and decodes
-  20-26% faster (a top-level field name is no longer copied, and the minimum sizes of
-  custom types are kept per decode without heap allocation); the Python decoder keeps
-  them on the ``Schema``. Python reports a type the schema does not define as
-  "unknown type 'X'", as C++ does.
-* **Clang**: ``discoverTypes()`` and ``TypesRegistry`` no longer trigger
-  ``-Wunused-lambda-capture`` and ``-Wpotentially-evaluated-expression``, which broke
-  ``-Werror`` builds of consumers that register a custom type.
-* **Fixed**: a snapshot's deferred wake of a sleeping worker read the ``SinkWorker``
-  after leaving its epoch, freed meanwhile if a ``drain()`` callback had dropped the
-  last reference (a crash, or heap-use-after-free under AddressSanitizer). The wake
-  goes through the worker's state, which lives until the worker thread is joined.
-* **Parser and Python decoder**: the C++ parser rejects a type spec without a type name
-  (``[3] x``) or with text after its ``]`` (``float64[3]x y``), as Python did. Both
-  reject a ``MSG:`` line that does not follow a separator (C++ read it as a field,
-  Python opened a section). Python trims only spaces and ``\r``, as the specification
-  says, so both reject ``### hash:<tab>7``. Both reject a field name that holds
-  whitespace or a control character, in either rendering. Python reads a text whose
-  first line starts with ``###`` as the line format, as C++ does, even when YAML
-  follows. An empty vector of a type the schema does not define is an error in C++
-  too, and an empty vector of an opaque type decodes as empty in Python too.
-* **Fixed**: one type name for a ``TypeDefinition`` type and a ``registerCustomValue()``
-  serializer of the same channel made the schema describe the serializer's values with
-  the type's fields, or hold two sections of that name. The registration that comes
-  second throws ``std::runtime_error`` and leaves the channel unchanged.
-* **ABI**: new private exported functions, ``LogChannel::registerValueWithTypes`` and
-  ``TypesRegistry::find``.
-* **Counters in one struct per channel and one per sink**:
-  ``LogChannel::Stats`` gains ``attempts`` (every ``takeSnapshot()`` and
-  ``tryTakeSnapshot()`` call), ``accepted`` (the calls whose snapshot at least
-  one sink took: ``ok`` and ``partial``) and ``dropped_by_sink`` (one
-  ``{sink, dropped}`` entry per sink attached at the read, the publications it
-  refused because its worker was stopped). The existing five fields keep their
-  meaning and position. Within one ``Stats``, ``accepted <= attempts``; a
-  window's ``attempts - accepted`` is approximate by the calls in flight, so
-  clamp it at zero. New ``SinkWorker::Stats`` returns ``delivered``
-  (``onSnapshot()`` calls that returned), ``errors``, ``last_error`` and
-  ``queue_high_water`` (per worker, across all its channels: a lower bound of
-  the most snapshots found waiting in one queue, kept on the delivery thread,
-  off the real-time path). New getters behind them:
-  ``LogChannel::snapshotAttempts()``, ``snapshotsAccepted()``,
-  ``LogChannel::kMaxSinks`` and ``SinkWorker::delivered()``,
-  ``queueHighWater()``. Real-time cost: two atomic increments per snapshot call
-  (``attempts`` on entry, relaxed; ``accepted`` when a sink took the snapshot,
-  release, the same instruction on x86); nothing else is added to the path.
-  **Behaviour change**: ``LogChannel::stats()`` now takes the control mutex
-  twice and allocates, and ``LogChannel::Stats`` is no longer trivially
-  copyable (it holds a vector).
-* **ABI**: ``LogChannel::stats()``, ``SinkWorker::stats()`` and
-  ``MCAPRingSink::stats()`` are inline in their headers and fill the struct from
-  the exported getters, one per field, so a field added later never changes what
-  the library returns across the ABI. They are declared
-  ``DATA_TAMER_INLINE_LOCAL`` (hidden visibility, from the new
-  ``data_tamer_v2/details/abi.hpp``) so that every binary uses the copy built
-  against its own header: an exported weak copy would let the first loaded
-  shared object's older ``stats()`` build the struct in a newer caller's buffer.
-  ``Stats`` itself is not exported.
-* **Sinks finish themselves**: new ``virtual void DataSink::onStop()`` and
-  ``onStart()``, empty by default. ``SinkWorker::stop()`` calls ``onStop()`` on
-  the stopping thread after the last delivery, serialized with the other
-  callbacks, once per stop (a second ``stop()`` without ``start()`` does not
-  call it again; the destructor of a running worker does). ``start()`` after
-  such a stop calls ``onStart()`` before accepting snapshots again. A throw
-  from either is counted in ``errors()``. ``MCAPSink`` closes its file in
-  ``onStop()`` (**behaviour change**: ``stop()`` now ends the file) and
-  ``start()`` continues in its next numbered file, unless
-  ``restartRecording()`` opened one; ``MCAPRingSink`` writes a pending dump
-  (``flushPendingDump()``), ``ROS2PublisherSink`` publishes its partial batch
-  (``flush()``). The "call ``stopRecording()`` / ``flushPendingDump()`` /
-  ``flush()`` after ``stop()``" rules are gone.
-* **ABI**: ``onStop()`` and ``onStart()`` append two slots to the ``DataSink``
-  vtable, so sinks compiled against an earlier build must be rebuilt. From 2.0 on, the
-  ``DataSink`` and ``CustomSerializer`` vtables are frozen for 2.x (noted in
-  their headers); ``tests/abi_tests.cpp`` pins ``sizeof(DataSink)`` and
-  ``sizeof(ChannelDefaults)``.
-* ``ChannelsRegistry::stopAll()`` stops, once each, every default sink and
-  every sink attached to a channel the registry created.
-* ``ChannelsRegistry::addDefaultSink()`` also attaches the sink to the
-  channels that exist already (a started one announces its schema at once,
-  without the registry lock held), so it no longer has to come before
-  ``getChannel()``. If a channel refuses the sink, the call is undone and the
-  exception propagates.
-* **Breaking, API**: ``LogChannel::addDataSink()`` returns ``bool``: ``true``
-  if the call attached the sink, ``false`` if the channel held it already.
-* ``ChannelsRegistry::setChannelDefaults(ChannelDefaults)``: pool capacity (as
-  a count or in time) and payload capacity applied by ``getChannel()`` to the
-  channels it creates afterwards, before the default sinks are attached.
-  Existing channels are not changed. ``clear()`` resets them. The values are
-  validated when set.
-* **Breaking, sinks**: the shared sink queue is gone, and with it
-  ``SinkWorker::kDefaultQueueCapacity`` and the ``queue_capacity`` constructor
-  argument: the constructor is ``SinkWorker(std::unique_ptr<DataSink>,
-  Delivery = Delivery::Threaded)``. Each channel attached to a worker publishes
-  into a single-producer single-consumer ring of its own, holding exactly as
-  many snapshots as the channel's pool and allocated with the pool
-  (``startLogging()``, or ``addDataSink()`` on a started channel). A queued
-  snapshot holds a pool slot, so the ring can't fill while the pool has a free
-  slot. Before, a channel's snapshots could be ``rejected`` with free slots once
-  the moodycamel blocks of the shared queue were taken by other channels; now
-  ``partial`` and ``rejected`` mean only a stopped worker. The worker serves its
-  channels in turn. When idle it polls about 20 us, then sleeps: a push wakes a
-  sleeping worker with one futex wake, pushes while it polls cost none.
-  Per-channel order now holds across ``removeDataSink()`` and
-  ``addDataSink()`` too: what the old attachment had queued is delivered
-  first, then its ring is freed. The
-  vendored moodycamel ConcurrentQueue and its ThreadSanitizer suppression are
-  removed, and no public header names a moodycamel type.
-* ``LogChannel::setPoolCapacity(stall_tolerance, snapshot_period)`` sizes the
-  pool in time: ``ceil(stall_tolerance / snapshot_period)`` slots, both
-  positive, overflow-checked.
-* ``startLogging()`` reserves per slot exactly the payload with every value enabled
-  when all registered values are fixed-size (scalars, ``std::array``,
-  fixed-size custom types; new ``ValuePtr::isFixedSize()``), instead of
-  ``max(2 x payload, 256)``, which still applies to schemas with a dynamic
-  value. ``setPayloadCapacity()`` stays a floor. This halves the payload
-  memory of a fixed schema larger than 128 bytes.
-* **Breaking, API**: ``LogChannel::getActiveFlags()`` is removed (read the
-  mask from a delivered snapshot), and ``SnapshotRef(pool, slot)`` is private;
-  ``SnapshotPool::adopt()`` (``details/``) builds one.
-* **ABI**: ``SinkWorker`` keeps its sink in the Pimpl (``sink()`` is out of
-  line, the object is one pointer) and ``LogChannel`` its types registry
-  (``sizeof`` drops by one ``TypesRegistry``). ``tests/abi_tests.cpp`` pins
-  both sizes. Downstream binaries must be rebuilt.
-* New ``data_tamer_v2/fwd.hpp``, a forward-declaration header like ``<iosfwd>``: it
-  declares ``ChannelsRegistry``, ``DataSink``, ``LogChannel``, ``RegistrationID``,
-  ``SinkWorker``, ``SnapshotRef``, ``Schema``, ``Snapshot`` and
-  ``LoggedValue<T>``, so that headers that only name these types need not
-  declare them by hand. It has no includes and can be combined with the full
-  headers in any order; compile tests cover it alone and in both orders.
-* New ``MCAPRingSink`` (``data_tamer_v2/sinks/mcap_ring_sink.hpp``, #95), a flight
-  recorder: it keeps the last ``window`` of every attached channel in a
-  preallocated RAM ring (evicted by age and by ``capacity_bytes``) and writes
-  an MCAP file only on ``requestDump(post_trigger)``, which is lock-free and
-  allocation-free for real-time threads. The dump covers ``[T - window,
-  T + post_trigger]`` in snapshot time, ``T`` being the first snapshot after
-  the request, with the schema and channel records of every channel in it; it
-  completes at the first snapshot stamped after ``T + post_trigger``.
-  A writer thread of the sink writes the file from a second buffer, so the
-  sink worker never waits for disk; a finished dump that finds the writer busy
-  is handed over at the next snapshot. ``flushPendingDump()`` writes the active
-  request at once and waits for the file, with the worker running (no need to
-  stop and restart it). ``SinkWorker::stop()`` calls it after the last delivery,
-  so a request made just before shutdown is written too. Dump ``N`` is written to
-  ``details::NumberedPath(filepath, N)``, skipping names that exist already.
-  The dump callback reports write errors (disk full) and ``truncated`` when
-  the ring was too small for the interval, including evictions while a
-  complete dump waits for a busy writer. ``stats()`` returns the counters and
-  ``oldest_timestamp``/``newest_timestamp`` of the ring content, so the
-  history the ring holds is one call away. ``stats()`` is inline and built
-  from one exported getter per field (``dumpsWritten()`` ...
-  ``newestTimestamp()``), so ``MCAPRingStats`` can gain fields without an ABI
-  change. Example ``T06_flight_recorder``.
-* ROS 2: export the ``Threads`` dependency, so that ``find_package(data_tamer_cpp)``
-  works from a fresh CMake cache (``Threads::Threads`` is in the public link
-  interface).
-* ``ROS2PublisherSink`` can aggregate snapshots: pass ``ROS2PublisherOptions``
-  with ``aggregate = true`` to publish ``data_tamer_msgs/SnapshotBatch`` on
-  ``<prefix>/data_batch`` instead of one ``Snapshot`` per sample on
-  ``<prefix>/data``. A batch is sent when it reaches ``max_batch_size``
-  snapshots, when a snapshot arrives ``max_batch_delay`` after the first one of
-  the batch, on ``flush()`` and when the sink is destroyed. ``embed_schemas``
-  (default on) puts the schemas of the batch's snapshots in the message, so it
-  decodes without the ``schemas`` topic. Schema texts are now serialized once,
-  in ``onSchema()``, instead of on every republish.
-* ``ROS2PublisherSink`` QoS (2.0 review item 18). The data topic (``data`` or
-  ``data_batch``) uses the new ``ROS2PublisherOptions::data_qos``. Its default
-  is ``rclcpp::QoS(rclcpp::KeepLast(100)).reliable()``: memory stays bounded and
-  a slow or stalled subscriber loses the oldest messages (see the entry on
-  safe defaults below).
-  ``schemas`` is reliable, transient-local ``KeepLast(1)``: every message is the
-  complete catalog, so a late subscriber still gets all schemas. The catalog is
-  published as soon as the sink learns a schema (``startLogging()``, or
-  ``addDataSink()`` on a started channel) instead of with the next snapshot, so
-  call ``startLogging()`` explicitly outside the control loop. A failed publication
-  does not fail ``startLogging()``: it is retried by the next snapshot (counted in
-  ``SinkWorker::errors()``) or by ``flush()``, which now publishes a pending
-  catalog even without aggregation and throws if that fails.
-* Parser helpers to decode the ROS messages without depending on ROS (templates
-  on the message type): ``DataTamerParser::SchemaRegistry`` (schemas by hash,
-  filled from ``Schemas`` or embedded batch schemas), ``ToSnapshotView()`` and
-  ``ForEachSnapshotInBatch()``. Python equivalents in ``data_tamer_parser.py``:
-  ``SchemaRegistry``, ``parse_snapshot_msg()`` and ``iter_snapshot_batch()``.
-* YAML schema rendering (wire format version 6, section 2.1): ``ToYaml(schema)``
-  writes the same schema as YAML, nesting fields whose names share a
-  ``/``-separated prefix, which is shorter for path-like names (the hash is
-  unchanged). ``RenderSchema(schema, SchemaFormat)`` picks either rendering;
-  opt in for ROS with ``ROS2PublisherOptions::schema_format =
-  SchemaFormat::Yaml``.
-  ``BuildSchemaFromText()`` and the Python ``parse_schema()`` detect and read
-  both renderings without dependencies, and verify a YAML schema's hash via
-  ``ToText()`` / ``to_text()``. The parser's ``Schema`` gains
-  ``custom_schemas`` (opaque types, filled from YAML).
-* Examples: ``ros2_publisher`` takes ``--aggregate`` and ``--yaml``;
-  ``python/ros2_subscriber.py`` decodes ``Snapshot`` and ``SnapshotBatch``
-  topics with the Python decoder.
-* The Python decoder is a package, ``data-tamer-parser`` (``python/pyproject.toml``,
-  still standard library only, importable as ``data_tamer_parser``; version
-  ``data_tamer_parser.__version__``): ``pip install ./python``. The ``python``
-  workflow tests and builds it and publishes it to PyPI on ``X.Y.Z`` tags; it
-  is versioned in lockstep with the library (release tag == ``package.xml``
-  version == ``data_tamer_parser.__version__``). New
-  ``Schema.field_names()`` lists the flattened names from the schema alone
-  (dynamic vector elements as the placeholder ``vec[]``; bounded by
-  ``MAX_SCHEMA_DEPTH`` and ``MAX_FIELD_NAMES``), and ``iter_mcap(path)`` yields
-  ``(timestamp, topic, values)`` for an MCAP file, with the optional ``mcap``
-  package (``data-tamer-parser[mcap]``).
-* New customization point ``DataTamer::TypeDefinitionTrait<T, Enable = void>``
-  (#94): describe a type with a ``static define(T&, AddField&)`` specialization
-  instead of a ``TypeDefinition`` overload in the type's own namespace, so
-  third-party types (Eigen, ...) no longer require reopening their namespace.
-  Partial specializations (including ``enable_if`` on the second parameter) are
-  supported. An optional ``static std::string name()`` builds the type name at
-  runtime (once per type, per shared library), e.g. for class templates; a
-  ``define()`` returning ``std::string`` is cached the same way. When both a
-  trait and an ADL ``TypeDefinition`` exist, the trait wins; a specialization
-  with an unusable ``define()`` is a compile error. Existing ``TypeDefinition``
-  overloads keep working. ``CustomTypeName<T>::get()`` is no longer
-  ``constexpr``. ``SerializeMe::DeserializeFromBuffer`` now compiles for custom
-  types (it passed const field pointers and could not write the fields).
-* Value names (#97): new header-only ``DataTamer::JoinNames(parts...)``
-  (``data_tamer_v2/names.hpp``, included by ``channel.hpp``) joins components with
-  a single ``/`` and drops empty ones, so namespaces may carry trailing slashes:
-  ``JoinNames("/loco/", "LF/", "x") == "loco/LF/x"``. Names with empty
-  ``/``-separated components (e.g. ``"/loco//torso/x"``) are still accepted,
-  but PlotJuggler shows them as empty path elements; the new
-  ``DataTamer::IsCanonicalName(name)`` (non-empty, no spaces, no empty
-  components) is an opt-in check to assert on. Registration rules are
-  unchanged (only spaces in value names are rejected). Registration errors now
-  name the channel and the value, e.g. ``channel 'controller/walk': value
-  'loco/LF/x' registered twice (unregister() it first)``; the no-spaces check
-  runs before any custom type is discovered, so a rejected name leaves the
+First release of the 2.x series, relative to 1.0.4. It breaks source and binary
+compatibility: rebuild every binary that links data_tamer, and read ``docs/MIGRATION.md``,
+which gives the replacement for each removed API and lists the behaviour changes that
+compile without a warning. Readers need the 2.0 parser for files recorded by 2.0; it still
+reads 1.x files.
+
+**Breaking changes**
+
+* The namespace is ``DataTamer2`` (was ``DataTamer``), the headers are in
+  ``data_tamer_v2/`` (were ``data_tamer/``) and the standalone parser is
+  ``data_tamer_v2/data_tamer_parser.hpp`` (was
+  ``data_tamer_parser/data_tamer_parser.hpp``). ``SerializeMe`` and ``DataTamerParser``
+  keep their names, inside an inline namespace ``v2``.
+* ``DataSinkBase`` is replaced by ``DataSink``, whose protected callbacks are
+  ``onSchema()``, ``onSnapshot(const SnapshotRef&)`` and the optional ``onStop()`` and
+  ``onStart()`` (throw to report a failure), owned by a ``SinkWorker`` that runs the
+  delivery thread. ``addChannel()``, ``pushSnapshot()``, ``storeSnapshot()``,
+  ``stopThread()``, ``stopAcceptingSnapshots()``, ``processQueuedSnapshots()`` and
+  ``startAcceptingSnapshots()`` are gone: use ``SinkWorker::stop()``, ``drain()`` and
+  ``start()``. To write data_tamer MCAP files from your own data, use
+  ``sinks/mcap_encoding.hpp``.
+* Sinks are created with ``MCAPSink::create()``, ``ROS2PublisherSink::create()``,
+  ``DummySink::create()`` or ``SinkWorker::create<T>()``, which return a
+  ``std::shared_ptr<SinkWorker>``; ``worker->as<T>()`` reaches the sink.
+  ``LogChannel::addDataSink()`` takes the worker and returns ``bool`` (``false`` if it was
+  attached already). ``MCAPSink::finishQueueAndStop()`` is removed (``worker->stop()``),
+  ``restartRecording()`` no longer resumes a stopped worker, and ``DummySink`` has
+  accessors (``latestSnapshot()``, ``schema(hash)``, ...) instead of public members.
+* ``Snapshot`` has no ``channel_name`` (use ``Schema::channel_name``, matched by
+  ``schema_hash``), and ``schema_hash`` is ``uint64_t``. ``DataSnapshot`` is removed.
+* ``takeSnapshot()`` returns a ``SnapshotResult`` instead of ``bool``.
+  ``getActiveFlags()`` is removed: ``isEnabled(id)`` in the application,
+  ``Snapshot::active_mask`` in a sink.
+* ``LogChannel::writeMutex()`` and the ``Mutex`` alias are removed: another thread writes
+  registered variables inside ``scopedWrite()``.
+* ``LoggedValue``: scalars are atomic and use ``set()`` and ``get()`` only. Structs and
+  vectors keep ``getMutablePtr()`` and ``getConstPtr()``, whose guards are not movable and
+  have no ``operator bool`` and no ``mutex()``. ``getLockedPtr()`` and the ``auto_enable``
+  parameter of ``set()`` are removed. A ``LoggedValue`` can't be moved or
+  default-constructed.
+* ``RegistrationID`` is opaque: no ``first_index``, ``fields_count`` or ``operator+=``.
+* ``CustomSerializerT(std::string)`` is ``explicit``, ``CustomTypeName<T>::get()`` is not
+  ``constexpr``, ``Schema::custom_types`` and ``custom_schemas`` are ``std::map`` (were
+  ``std::unordered_map``), and ``long double`` is a compile error. Removed:
+  ``getPointerType()``, ``SerializeMe::enable_if_same_t`` and the library's
+  ``AddFieldToHash()``, replaced by ``SchemaTextHash()`` and ``ComputeSchemaHash()`` (the
+  parser keeps its own, for version 4 texts).
+* Parser: ``ParseSnapshot()`` loses its unused ``callback_custom`` parameter and is
+  ``[[nodiscard]]``; ``ParseSnapshotRecursive`` moves to ``DataTamerParser::detail`` and
+  ``NullCustomCallback`` is removed; ``SnapshotView::schema_hash`` is ``uint64_t``;
+  ``BuilSchemaFromText()`` is a deprecated alias of ``BuildSchemaFromText()``. The header
+  needs a little-endian host and no longer includes ``<iostream>``.
+* ``sinks/ros2_publisher_sink.hpp`` no longer includes the ``data_tamer_msgs`` headers.
+
+**Behaviour changes**
+
+* ``MCAPSink`` continues in a new numbered file at every reset (600 s by default) instead
+  of truncating its file, so disk use is unbounded; ``setCreateNewFileOnReset(false)``
+  truncates as before. Rollover files are named ``run_1.mcap`` (1.x: ``run.mcap_1``) and
+  skip names that exist; the path passed to ``create()`` is still overwritten.
+* ``SinkWorker::stop()`` delivers what is queued, then finishes the sink: ``MCAPSink``
+  closes its file, and ``start()`` continues in the next numbered file. Destroying a
+  running worker stops it.
+* A channel's snapshot pool bounds the memory of its sinks: by default as many slots as
+  fit in 8 MiB, from 64 to 1024, per channel. A sink that falls behind loses snapshots
+  (``pool_exhausted``) instead of growing a queue.
+* ``ROS2PublisherSink``: the data topic is reliable ``KeepLast(100)`` (was ``KeepAll``;
+  ``ROS2PublisherOptions::data_qos``), and the ``schemas`` topic is transient-local
+  ``KeepLast(1)``, published by ``startLogging()``.
+* ``LoggedValue::set()`` never re-enables a disabled value. ``set()`` and ``get()`` of a
+  struct or vector lock the channel's write mutex, so they wait for a snapshot in
+  progress.
+* An id kept across ``unregister()`` and a new registration of the same name is stale:
+  ``setEnabled()`` and ``unregister()`` throw ``std::invalid_argument`` (1.x acted on the
+  new registration).
+* A snapshot taken by a thread that holds the write mutex (``scopedWrite()``, a
+  ``LoggedValue`` guard) returns ``blocked``; in 1.x it deadlocked.
+* Value names, custom type names and field names must be non-empty and free of whitespace
+  and control characters (1.x refused only spaces); a channel name can't be empty or hold
+  a control character. Two C++ types with one custom type name in a channel make
+  ``registerValue()`` throw.
+* A channel holds at most 8 sinks, and a registry at most 8 default sinks.
+  ``addDefaultSink()`` also attaches the sink to the channels that exist already.
+* MCAP messages carry a sequence number, 1, 2, 3, ... per channel and file (was always 1).
+  The MCAP sinks don't write a snapshot with a negative timestamp; they count it in
+  ``errors()``.
+* Wire format: the schema text is version 5 and its hash is FNV-1a 64 of the text, the
+  same on every platform. A ``std::string`` is written as ``char[]``, a ``uint32`` count
+  and the characters. 1.x readers reject 2.0 files: use PlotJuggler 4 or a 2.0 parser.
+* The parsers reject a schema text without a ``### version:`` line (releases before
+  0.7.0). ``ParseSnapshot()`` returns false when bytes are left after the last field, and
+  throws on malformed data.
+
+**New**
+
+* ``LogChannel::startLogging()`` freezes the schema, allocates the pool and announces the
+  schema; the first ``takeSnapshot()`` calls it. ``tryTakeSnapshot()``, for real-time
+  threads, never blocks or allocates, also when data_tamer is loaded with ``dlopen()``.
+  Several threads may take snapshots of one channel.
+* ``LogChannel::scopedWrite()`` groups writes from another thread into one snapshot.
+  ``registerValue()`` accepts a ``const std::atomic<T>*``.
+* ``setEnabled()`` is lock-free; new ``trySetEnabled()`` (``noexcept``) and
+  ``isEnabled(id)``.
+* ``setPoolCapacity()`` (a count, or a stall tolerance and a period),
+  ``setPayloadCapacity()`` and ``ChannelsRegistry::setChannelDefaults()``.
+* ``LogChannel::stats()`` and ``SinkWorker::stats()``: snapshot attempts and accepted
+  snapshots, pool, oversize and lock counters, refusals per sink, deliveries, errors and
+  queue high water.
+* ``MCAPRingSink``, a flight recorder: it keeps the last ``window`` of every channel in
+  RAM and writes an MCAP file on ``requestDump()``, which is real-time safe.
+* ``ROS2PublisherSink`` takes ``ROS2PublisherOptions``: QoS, aggregation into
+  ``data_tamer_msgs/SnapshotBatch`` (new message) and the schema format.
+* A YAML rendering of the schema (wire format version 6): ``ToYaml()``,
+  ``RenderSchema()``, ``SchemaFormat::Yaml``.
+* ``DataSink::onStop()`` and ``onStart()``, ``SinkWorker::Delivery::Manual`` (no thread:
+  the application calls ``drain()``) and ``ChannelsRegistry::stopAll()``.
+* ``TypeDefinitionTrait<T>`` describes a type without reopening its namespace (Eigen,
+  ...).
+* New headers: ``names.hpp`` (``JoinNames()`` and ``IsCanonicalName()`` build and check
+  hierarchical names), ``sinks/mcap_encoding.hpp`` (the MCAP encoding of ``MCAPSink``, for
+  code that writes data_tamer MCAP files itself) and ``fwd.hpp`` (forward declarations).
+* Parser: ``SchemaRegistry``, ``ToSnapshotView()`` and ``ForEachSnapshotInBatch()``
+  decode the ROS 2 messages without ROS; ``SplitMcapMessage()`` splits an MCAP message.
+* Python decoder, standard library only: ``pip install "data-tamer-parser[mcap]"``.
+* Tutorials ``T01`` to ``T08``, run by ctest; ``docs/USER_MANUAL.md``,
+  ``docs/llm_user_manual.md``, ``docs/MIGRATION.md`` and the wire format specification
+  ``docs/wire_format.md``, with golden vectors.
+
+**Fixed**
+
+* ``long long``, ``unsigned long long``, ``wchar_t``, ``char16_t``, ``char32_t`` and enums
+  over them were recorded as ``other``, which no reader decodes.
+* A ``std::string`` was written with a 16-bit length that no reader decoded.
+* Two C++ types with one custom type name in a channel: the second was serialized with the
+  first one's serializer.
+* A registration that threw could leave a custom type in the schema; it now leaves the
   channel unchanged.
-* MCAP rollover (#98): when ``setMaxTimeBeforeReset`` expires (600 s by
-  default), ``MCAPSink`` continues in a new numbered file, or truncates the same
-  file if ``setCreateNewFileOnReset(false)`` was called (see the entry on safe
-  defaults below). Numbered names that already exist (e.g. from a previous run
-  with the same path) are now skipped instead of overwritten, and the counter
-  advances only once the new file is open. The counter is inserted before the
-  extension, now the trailing run of alphabetic dot-segments, so multi-part
-  extensions survive and dotted stems stay whole: ``run.tamer.mcap`` rolls over
-  to ``run_1.tamer.mcap`` (it was ``run.tamer_1.mcap``), ``log_2026.10.05.mcap``
-  to ``log_2026.10.05_1.mcap``.
-* Safe defaults. Two defaults changed, because each lost data or grew memory
-  silently in a long-running robot process.
+* The schema text and its hash depended on the global C++ locale.
+* Concurrent ``takeSnapshot()`` calls on one channel raced on its snapshot buffer.
+* The parser read past the buffer before checking its size. Both decoders now check bounds
+  before every read and reject masks shorter than the schema, oversized counts and cyclic
+  custom types.
 
-  - ``MCAPSink`` rolls over into new numbered files by default
-    (``setCreateNewFileOnReset`` defaults to ``true``). Before, the file was
-    truncated every ``setMaxTimeBeforeReset`` (600 s), DISCARDING everything
-    recorded before the reset. Nothing is lost now, but disk usage is unbounded:
-    one file per 10 minutes for as long as the process runs. To bound the disk,
-    call ``setCreateNewFileOnReset(false)`` (the old behaviour) or
-    ``setMaxTimeBeforeReset(std::chrono::seconds(0))`` (one file, never reset);
-    delete old files yourself otherwise.
-  - ``ROS2PublisherOptions::data_qos`` defaults to
-    ``rclcpp::QoS(rclcpp::KeepLast(100)).reliable()`` instead of reliable
-    ``KeepAll``. A slow or stalled subscriber no longer makes the publishing
-    process queue messages without bound: it loses the oldest messages instead.
-    With ``aggregate`` each message is a batch, so size the depth accordingly.
-    The QoS stays reliable, so reliable and best-effort subscribers still match.
-    For the old behaviour set ``options.data_qos =
-    rclcpp::QoS(rclcpp::KeepAll()).reliable()``.
-  - Real-time impact: none. Both changes are on the sink worker side;
-    ``tryTakeSnapshot()`` is untouched.
-* MCAP messages carry a per-channel ``sequence`` number (1, 2, 3, ... per MCAP
-  channel and file) instead of always 1, so readers can detect gaps (#98).
-* New ``data_tamer_v2/sinks/mcap_encoding.hpp`` (#96): inline helpers
-  ``mcap_encoding::AddChannel()``, ``WriteSnapshot()`` (for a ``Snapshot``),
-  ``WriteMessage()`` (from a timestamp and mask and payload spans, e.g.
-  for stored data) and ``EncodeMessageBody()`` that write the MCAP records of
-  ``docs/wire_format.md``. ``MCAPSink`` uses them. The caller provides the
-  sequence number and a reusable scratch buffer (no allocation once it is large
-  enough). They need ``data_tamer::data_tamer``, which provides the MCAP headers
-  (see the packaging entries above); outside ROS 2 libdata_tamer contains the MCAP
-  implementation (do not define ``MCAP_IMPLEMENTATION``).
-  ``SerializeMe::Span<const T>`` converts from a ``const std::vector<T>&``. The
-  ``DataSink`` documentation now explains that a slow ``onSnapshot()`` exhausts the
-  channel's shared snapshot pool for every sink.
-* **Breaking, channel API cleanup** (2.0 review items 20-24, 33):
+**Packaging and ABI**
 
-  - ``RegistrationID`` is an opaque handle (no public ``first_index`` /
-    ``fields_count``, no ``operator+=``). It denotes one registration: after
-    ``unregister()`` and a new registration of the same name the old handle is
-    stale, and ``LogChannel::setEnabled`` / ``unregister`` throw
-    ``std::invalid_argument`` instead of acting on the replacement. New
-    ``LogChannel::isEnabled(id)`` and noexcept ``trySetEnabled(id, enable)``.
-    The per-series flags live in an append-only table whose reads are safe to
-    race with registration (they were a ``std::deque`` before).
-    Re-registering the same name more than 16 million times throws.
-  - ``LoggedValue::set(value)`` only stores; the ``auto_enable`` parameter is
-    gone. Re-enable with ``setEnabled(true)``.
-  - ``LoggedValue::getMutablePtr()`` / ``getConstPtr()`` exist only for
-    non-scalar values (scalars: ``set()`` / ``get()``), hold the channel's write
-    transaction instead of the raw mutex, so they nest inside ``scopedWrite()``,
-    and are no longer movable (like ``std::lock_guard``). Removed:
-    ``getLockedPtr()``, the ``mutex()`` accessors, ``AtomicProxy`` /
-    ``AtomicConstProxy``.
-  - Removed ``LogChannel::writeMutex()``, ``sharedState()`` and the global
-    ``Mutex`` alias. ``scopedWrite()`` returns ``DataTamer::WriteTransaction``.
-  - Parser: ``BuildSchemaFromText`` is the entry point; the misspelled
-    ``BuilSchemaFromText`` remains as a deprecated alias for one release.
-* **Breaking, snapshots**: ``takeSnapshot()`` returns a
-  ``SnapshotResult`` instead of ``bool`` (``ok``, ``partial``, ``rejected``,
-  ``no_sinks``, ``not_started``, ``pool_exhausted``, ``oversize``, ``blocked``). New
-  ``tryTakeSnapshot()`` for real-time producers: never blocks on the write mutex
-  and never grows a slot; it requires ``startLogging()``. ``setStrictMode()`` is
-  removed (it was ``tryTakeSnapshot()``'s no-growth behaviour); the
-  ``droppedOversize()`` counter stays.
-* New ``LogChannel::startLogging()`` / ``isLoggingStarted()`` (``prepare()`` /
-  ``isPrepared()`` during the 2.0 development; ``SnapshotResult::not_prepared``
-  is now ``not_started``): freeze the schema, allocate the pool and announce the
-  schema to the sinks, so that the channel is ready to take snapshots. The first
-  ``takeSnapshot()`` with a sink attached calls it automatically. A ``startLogging()``
-  that fails while sizing or announcing leaves the channel exactly as it was
-  (schema open, settable capacities) so it can be retried; if the schema
-  changes afterwards, sinks that already heard it are announced again. Its last
-  step allocates one queue per sink: if that throws (``std::bad_alloc``), the
-  schema stays frozen with its pool, nothing is published, and calling
-  ``startLogging()`` again retries the allocation. ``takeSnapshot()`` without sinks now
-  returns ``no_sinks`` without freezing anything. Sink ``onSchema`` callbacks run
-  with the channel control mutex released, so a sink may query the channel.
-* **Breaking, sinks**: ``DataSinkBase`` is replaced by composition. A sink
-  implements ``DataSink`` (``onSchema(const Schema&)``, ``onSnapshot(const
-  SnapshotRef&)``; throw to report a failure) and is owned by a ``SinkWorker``,
-  which holds the queues and the delivery thread and is what
-  ``LogChannel::addDataSink`` takes. The worker is always stopped before the
-  sink is destroyed, and its destructor delivers what is still queued, so the
-  old ``stopThread()``-in-every-destructor rule and the four lifecycle calls
-  (``stopThread``, ``stopAcceptingSnapshots``, ``processQueuedSnapshots``,
-  ``startAcceptingSnapshots``) are gone; use ``SinkWorker::stop()``,
-  ``start()`` and ``drain()``. ``SinkWorker::Delivery::Manual`` runs without a
-  thread for applications that deliver from their own loop.
-  ``MCAPSink::create(path)``, ``ROS2PublisherSink::create(node, prefix)`` and
-  ``SinkWorker::create<T>(...)`` return a ready-to-attach worker;
-  ``worker->as<MCAPSink>()`` reaches the sink's own methods.
-  ``MCAPSink::finishQueueAndStop()`` is ``worker->stop()`` followed by
-  ``stopRecording()``; ``restartRecording()`` no longer reopens admission, call
-  ``worker->start()`` after a stop. A failed MCAP write now throws from the
-  callback and is reported by ``SinkWorker::errors()`` / ``lastError()``.
-* **Breaking, snapshots**: ``Snapshot`` no longer carries ``channel_name`` (the
-  schema hash identifies the channel; ``Schema::channel_name`` has the name), so
-  it is fully owning. ``SnapshotRef`` is now declared in ``data_sink.hpp`` as an
-  opaque move-only handle: keep a snapshot past the callback with
-  ``ref.clone()``; ``DataSinkBase::retainSnapshot()`` and its thread-local
-  context are gone.
-* Build: the library, tests and benchmarks compile as C++20; the installed
-  headers remain C++17 (consumers need ``cxx_std_17``), enforced by a test
-  target that compiles every core public header as strict C++17 and by building
-  the examples as C++17. The ROS 2 sink header follows rclcpp's standard, which
-  is C++20 on recent distributions. Internally, the reader-quiescence and sink-admission
-  barriers block on ``std::atomic::wait`` instead of yield-spinning, and the
-  sink worker is a ``std::jthread``.
-* Build: CMake 3.22 is now required. The build is target-based: MCAP, rclcpp,
-  rclcpp_lifecycle and the message package are linked as imported targets
-  (``mcap_vendor::mcap``, ``rclcpp::rclcpp``, ...) instead of ``*_INCLUDE_DIRS``
-  and ``*_LIBRARIES`` variables, the library links ``Threads::Threads`` and
-  exports a ``data_tamer::data_tamer`` alias in-tree, ``DATA_TAMER_VERSION``
-  reports the library's own version when built as a subproject, and the
-  installed ``data_tamerConfig.cmake`` finds its dependencies.
-* Robustness fixes from the 2.0 review: the header-only parser and the Python
-  decoder check bounds before every read, reject masks shorter than the schema,
-  oversized dynamic counts and cyclic custom types, match type names exactly and
-  validate fixed-array extents; ``SchemaHash``/``schema_hash`` fields are
-  ``uint64_t`` end to end; ``TypeField::operator!=`` is defined. Library: the
-  fixed-size accumulator for arrays was uninitialized; custom types may now
-  contain numeric ``std::array``/``std::vector`` members; a failed registration
-  leaves the channel unchanged; null custom serializers are rejected; fixed
-  array extents outside 1..65535 fail to compile; the active mask is refreshed
-  under the write mutex so values enabled inside one transaction are captured
-  together; schema text is locale independent. ``MCAPSink`` reports write
-  failures from ``storeSnapshot()``, opens a new file before closing the old one
-  on restart, and synchronizes its setters with the worker. The ROS 2 sink
-  retries schema publication after a failure. ``ChannelsRegistry::clear()``
-  destroys channels outside its lock; ``addDefaultSink(nullptr)`` throws.
-* Schema version 5: the schema hash is FNV-1a 64 of the schema text (minus its
-  own hash line), so it is identical on every platform, verifiable by any
-  decoder and covers custom type bodies. Readers accept version 4 files through
-  their declared hash; parsers older than this release reject version 5 files
-  with "Wrong SCHEMA_VERSION". In the library ``AddFieldToHash`` is replaced by
-  ``SchemaTextHash``/``ComputeSchemaHash``; the header-only parser keeps it
-  for version 4 texts.
-* Real-time front end, steps 0–8: scalar ``LoggedValue`` values use lock-free
-  atomics; ``set()``/``get()`` are wait-free. Non-scalar updates and snapshot
-  serialization share a priority-inheriting mutex. ``LogChannel::scopedWrite()``
-  groups updates into one transaction and supports nested non-scalar ``set()``/``get()``.
-  Lone scalar updates do not promise consistency across values.
-* ``takeSnapshot()`` now freezes schema and capacity state on its first attempt,
-  then serializes directly into a channel pool. Its fixed-size warmed
-  library path takes no structure mutex and performs no heap allocation; user
-  serializers and non-strict payload growth may still allocate or throw.
-  Sequentially consistent sink, liveness, mask-dirty and reader-epoch
-  publication makes concurrent value destruction and sink removal safe.
-* Added pre-freeze ``setPayloadCapacity()`` and ``setPoolCapacity()`` plus
-  runtime ``setStrictMode()``. Initial per-slot reservation is at least the
-  maximum of the hint, twice the initial payload and 256 bytes. Strict mode
-  drops an oversize snapshot against the acquired slot's actual capacity, so a
-  later input cannot grow that slot; non-strict mode grows that slot and retains
-  the new capacity.
-* Added ``writeLockContended()``, ``writeLockWaitMaxNs()`` and ``stats()``.
-  Contention counts acquisitions that block after spinning; maximum wait measures
-  blocking acquisition time, excluding serialization.
-* API: ``Mutex`` now aliases exclusive ``WriteMutex`` (no ``lock_shared()``);
-  ``LoggedValue::get()`` is const; scalar ``getMutablePtr()``/``getConstPtr()``
-  are deprecated in favor of ``set()``/``get()``. Proxy ``mutex()`` is deprecated
-  and proxy boolean conversion is explicit. ``LoggedValue`` is no longer movable.
-  ``DummySink`` exposes synchronized accessors instead of public members.
-* ``MCAPSink`` and ``ROS2PublisherSink`` store private state behind a Pimpl.
-  This release changes their ABI; downstream binaries must be rebuilt.
-* Sink delivery now shares snapshots through a channel pool and a
-  preallocated blocking queue. ``DataSinkBase(size_t queue_capacity = 1024)``
-  treats capacity as a block-rounded minimum shared by all channel producers;
-  ``DummySink`` and ``MCAPSink`` forward the same final defaulted argument.
-  ``DataSinkBase::pushSnapshot`` was removed.
-* Added ``LogChannel::poolExhausted()``, ``Stats::pool_exhausted``, and
-  ``DataSinkBase::storeErrors()``, plus payload reallocation and oversize-drop
-  counters. ``Stats`` fields are plain ``uint64_t`` point-in-time snapshots of
-  relaxed atomic counters.
-  ``DataSinkBase::storeErrors()`` records thrown queued callbacks; a callback
-  returning ``false`` is not an exception.
-* A channel supports eight attached sinks. Same-name compatible
-  re-registration reuses its schema slot after freeze; registration IDs identify
-  slots rather than generations. Control operations must run outside writer
-  guards and serializer callbacks.
-* Derived sinks must call ``stopThread()`` before destroying callback state.
-  Queued callbacks are serialized with manual draining, exceptions do not stop
-  delivery, and protected callback-only ``retainSnapshot()`` can keep pooled
-  payload, mask and channel-name storage alive without changing the
-  ``storeSnapshot(const Snapshot&)`` virtual API.
-* Closing sink admission waits for already admitted enqueues and drains all
-  accepted references. ``MCAPSink::finishQueueAndStop()`` no longer polls or
-  sleeps; explicit restart clears forced-stop state and reopens admission,
-  while automatic rollover preserves an existing closure.
-* Callbacks of one channel run in snapshot order (see the per-channel rings
-  above). A sink shared by multiple channels does not promise global timestamp
-  order; readers that require a merged timeline must sort or merge it.
-* Build: debug/release/asan/tsan presets, sanitizer CI, allocation-counting
-  benchmarks and the ``rt_latency`` harness, including standalone mutex/pool
-  measurements and validated CLI inputs. Conan's benchmark option exports and
-  builds the benchmark sources. Vendored MCAP builds with GCC 15.
-* Versioning. The release number is 2.0.0 everywhere it is kept: CMake
-  ``project(VERSION)`` (was 1.0.0), both ``package.xml`` files (were 1.0.4),
-  ``conanfile.py`` (was 0.9.4) and the Python decoder; ``tools/check_versions.py``
-  checks that they agree and runs as the ctest case ``version_consistency``.
-  The shared library is versioned: ``libdata_tamer.so.2.0.0`` with the SONAME
-  ``libdata_tamer.so.2`` (``SOVERSION`` is the major version, for the ROS 2 and the
-  plain CMake builds). Consumers built against 1.x must be rebuilt: 1.x had no
-  SONAME, so an old binary (``NEEDED libdata_tamer.so``) still finds the new library
-  through the ``libdata_tamer.so`` link and then fails on missing symbols.
-* ABI policy. ``tests/abi_tests.cpp`` pins the size, alignment and member offsets of
-  every public by-value struct, options struct and class whose layout reaches
-  consumers (exact bytes on x86_64 Linux with libstdc++, relations for what holds a
-  mutex on other libstdc++ platforms); a failing pin means a SONAME bump. The
-  ``Stats`` structs are built inline from exported getters and are not pinned. A new
-  ``abi`` workflow compares the library with the last release of the same major
-  version (the merge base until 2.0.0 is tagged) with libabigail and fails on
-  removed or changed exported functions, changed vtables and layouts; run it locally
-  with ``tools/abi_check.sh``. CLAUDE.md states what is frozen in 2.x and when to bump.
-  Defaults that live in a header (member initializers, default arguments) apply only
-  to rebuilt consumers; defaults inside a Pimpl apply to old binaries too.
+* ROS 2: the package is ``data_tamer_v2`` and installs beside ``data_tamer_cpp`` 1.x (the
+  library is ``libdata_tamer_v2.so.2``). Link ``data_tamer_v2::data_tamer``, or use
+  ``find_package(data_tamer 2)`` and ``data_tamer::data_tamer``. ``mcap_vendor`` is linked
+  publicly; ``-DBUILD_TESTING=OFF`` builds no test. ``data_tamer_msgs`` keeps its name.
+* Without ROS: package ``data_tamer``, target ``data_tamer::data_tamer``, SONAME
+  ``libdata_tamer.so.2`` (1.x had none). Building needs CMake 3.22 and C++20; consumers
+  need C++17. ``-Werror`` is opt-in (``DATA_TAMER_WERROR``). As a subproject
+  (``add_subdirectory()``, FetchContent) data_tamer installs nothing and builds no test,
+  example or ROS 2 sink.
+* Outside ROS 2, MCAP is 2.1.3 (1.x bundled 1.3.0). CMake downloads it, pinned by hash
+  (``FETCHCONTENT_SOURCE_DIR_DATA_TAMER_MCAP`` for offline builds), unless
+  ``DATA_TAMER_USE_SYSTEM_MCAP`` is on (conan). The library contains the MCAP
+  implementation and installs its headers: don't define ``MCAP_IMPLEMENTATION``. The
+  ``mcap_lib`` target is gone; zstd and lz4 are linked privately. The vendored moodycamel
+  queue is removed.
+* ABI: within 2.x a newer library runs binaries built against older 2.x headers.
+  ``tests/abi_tests.cpp`` pins the layouts and the ``abi`` CI job (libabigail) compares
+  each change with the last 2.x release. The ``DataSink`` and ``CustomSerializer`` vtables
+  and the MCAP version are frozen; the ``stats()`` functions are inline and built from
+  exported getters, so their structs can grow. ``ROS2PublisherSink`` also follows the
+  rclcpp ABI. Header defaults apply to rebuilt consumers only, Pimpl defaults to old
+  binaries too.
+* One version number for the library, the ROS packages, conan and the Python decoder,
+  checked by ``tools/check_versions.py``.
 
 1.0.4 (2026-07-26)
 ------------------

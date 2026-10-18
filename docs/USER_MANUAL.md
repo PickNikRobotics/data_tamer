@@ -214,7 +214,9 @@ sink.setMaxTimeBeforeReset(std::chrono::seconds(0));  // one file, never reset
 
 `setCreateNewFileOnReset(false)` overwrites the file at every reset, so use it only for a
 recording you don't keep. If the next file cannot be opened at a reset, the failure is
-counted once in `worker->errors()` and the current file keeps recording.
+counted once in `worker->errors()` and the current file keeps recording. A numbered name
+that exists already is skipped, but the file at the path you pass to `create()` is
+overwritten. `worker->start()` after `stop()` continues in the next numbered file.
 
 ### Flight recorder
 
@@ -290,9 +292,9 @@ the sink has files to close and reopen.
 
 ### Shutdown
 
-Stop every sink before the program exits. `stop()` delivers what is queued, then lets the
-sink finish: `MCAPSink` closes its file, `MCAPRingSink` writes a pending dump,
-`ROS2PublisherSink` publishes its partial batch.
+`stop()` ends a recording: it delivers what is queued, then lets the sink finish:
+`MCAPSink` closes its file, `MCAPRingSink` writes a pending dump, `ROS2PublisherSink`
+publishes its partial batch.
 
 ```cpp
 worker->stop();
@@ -300,7 +302,9 @@ worker->stop();
 DataTamer2::ChannelsRegistry::Global().stopAll();
 ```
 
-Destroying a running worker stops it too.
+Destroying the last reference to a running worker stops it too, so the files are complete
+after a normal exit. Call `stop()` where the recording must be complete at a known point,
+or before an exit that skips destructors.
 
 ### Registry defaults
 
@@ -431,8 +435,10 @@ Another thread writes them separately. Write them in one
 
 ### The MCAP file is truncated or can't be opened
 
-The sink was never stopped, so the file has no summary and footer. Call `worker->stop()`
-or `registry.stopAll()` before the program exits.
+The sink was never stopped: the process ended without `stop()` and without destroying the
+worker (a crash, a signal, `std::exit()` with the worker in a local variable), so the file
+has no summary and footer. Call `worker->stop()` or `registry.stopAll()` before such an
+exit.
 
 ### The flight recorder wrote no file
 
