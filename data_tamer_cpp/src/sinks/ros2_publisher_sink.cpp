@@ -10,7 +10,7 @@
 #include <utility>
 #include <vector>
 
-namespace DataTamer
+namespace DataTamer2
 {
 
 namespace
@@ -251,4 +251,4 @@ void ROS2PublisherSink::Pimpl::publishBatch()
   batch_publisher->publish(batch_msg);
 }
 
-}  // namespace DataTamer
+}  // namespace DataTamer2

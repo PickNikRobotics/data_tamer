@@ -15,7 +15,7 @@
 #include <thread>
 #include <string>
 
-using namespace DataTamer;
+using namespace DataTamer2;
 
 TEST(DataTamerROS2Publisher, SharedPointer)
 {

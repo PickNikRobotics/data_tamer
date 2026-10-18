@@ -5,14 +5,14 @@
 #include <cstddef>
 #include <vector>
 
-double useScalar(DataTamer::LoggedValue<double>& value)
+double useScalar(DataTamer2::LoggedValue<double>& value)
 {
   value.set(1.5);
   value.setEnabled(false);
   return value.isEnabled() ? 0.0 : value.get();
 }
 
-std::size_t useVector(DataTamer::LoggedValue<std::vector<double>>& value)
+std::size_t useVector(DataTamer2::LoggedValue<std::vector<double>>& value)
 {
   value.set({ 1.0, 2.0 });
   value.getMutablePtr()->push_back(3.0);

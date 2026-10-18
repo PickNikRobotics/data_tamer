@@ -9,7 +9,7 @@
 #include <memory>
 #include <type_traits>
 
-namespace DataTamer
+namespace DataTamer2
 {
 
 namespace details
@@ -164,4 +164,4 @@ inline ConstPtr<T> LoggedValue<T>::getConstPtr() const
   return ConstPtr<T>(&value_, *state_);
 }
 
-}  // namespace DataTamer
+}  // namespace DataTamer2

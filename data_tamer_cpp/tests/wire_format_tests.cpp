@@ -35,7 +35,7 @@
 
 #include <unistd.h>
 
-using namespace DataTamer;
+using namespace DataTamer2;
 using TestTypes::Point3D;
 
 namespace

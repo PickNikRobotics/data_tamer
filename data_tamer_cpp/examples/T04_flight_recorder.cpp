@@ -9,7 +9,7 @@
 #include <iostream>
 #include <thread>
 
-using namespace DataTamer;
+using namespace DataTamer2;
 using namespace std::chrono_literals;
 
 int main()

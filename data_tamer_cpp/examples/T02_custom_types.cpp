@@ -14,7 +14,7 @@
 int main()
 {
   using namespace TestTypes;
-  using namespace DataTamer;
+  using namespace DataTamer2;
 
   auto dummy_sink = DummySink::create();
   ChannelsRegistry::Global().addDefaultSink(dummy_sink);

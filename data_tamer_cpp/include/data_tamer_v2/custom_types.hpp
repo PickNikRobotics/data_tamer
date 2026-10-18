@@ -14,7 +14,7 @@
 #include "data_tamer_v2/types.hpp"
 #include "data_tamer_v2/contrib/SerializeMe.hpp"
 
-namespace DataTamer
+namespace DataTamer2
 {
 
 /**
@@ -334,4 +334,4 @@ inline CustomSerializer::Ptr TypesRegistry::addType(const std::string& type_name
   return serializer;
 }
 
-}  // namespace DataTamer
+}  // namespace DataTamer2

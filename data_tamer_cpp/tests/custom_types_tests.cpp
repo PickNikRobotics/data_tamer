@@ -9,7 +9,7 @@
 #include <string>
 #include <thread>
 
-using namespace DataTamer;
+using namespace DataTamer2;
 using namespace TestTypes;
 
 struct TestType
@@ -43,7 +43,7 @@ std::string_view TypeDefinition(TestType& obj, AddField& add)
 TEST(DataTamerCustom, Registration)
 {
   auto channel = LogChannel::create("chan");
-  DataTamerTest::Attached<DataTamer::DummySink> sink;
+  DataTamerTest::Attached<DataTamer2::DummySink> sink;
   channel->addDataSink(sink);
 
   Pose poseA;
@@ -65,7 +65,7 @@ TEST(DataTamerCustom, Registration)
 TEST(DataTamerCustom, CustomType1)
 {
   auto channel = LogChannel::create("chan");
-  DataTamerTest::Attached<DataTamer::DummySink> sink;
+  DataTamerTest::Attached<DataTamer2::DummySink> sink;
   channel->addDataSink(sink);
 
   Pose pose = { { 1, 2, 3 }, { 4, 5, 6, 7 } };
@@ -138,7 +138,7 @@ TEST(DataTamerCustom, CustomType1)
 TEST(DataTamerCustom, CustomType2)
 {
   auto channel = LogChannel::create("chan");
-  DataTamerTest::Attached<DataTamer::DummySink> sink;
+  DataTamerTest::Attached<DataTamer2::DummySink> sink;
   channel->addDataSink(sink);
 
   std::array<Point3D, 2> points;
@@ -222,7 +222,7 @@ public:
 TEST(DataTamerCustom, CustomType3)
 {
   auto channel = LogChannel::create("chan");
-  DataTamerTest::Attached<DataTamer::DummySink> sink;
+  DataTamerTest::Attached<DataTamer2::DummySink> sink;
   channel->addDataSink(sink);
 
   auto serializer = std::make_shared<Pos2D_Serializer>();
@@ -273,7 +273,7 @@ TEST(DataTamerCustom, CustomType3)
 TEST(DataTamerCustom, RegisterConstMethods)
 {
   auto channel = LogChannel::create("chan");
-  DataTamerTest::Attached<DataTamer::DummySink> sink;
+  DataTamerTest::Attached<DataTamer2::DummySink> sink;
   channel->addDataSink(sink);
 
   PseudoEigen::Vector2d vect = { 1, 2 };
@@ -336,7 +336,7 @@ std::string_view TypeDefinition(Chassis& c, AddField& add)
 TEST(DataTamerCustom, FixedSizeOfNestedFixedArraysMatchesPayload)
 {
   auto channel = LogChannel::create("chan");
-  DataTamerTest::Attached<DataTamer::DummySink> sink;
+  DataTamerTest::Attached<DataTamer2::DummySink> sink;
   channel->addDataSink(sink);
   Chassis chassis;
   channel->registerValue("chassis", &chassis);

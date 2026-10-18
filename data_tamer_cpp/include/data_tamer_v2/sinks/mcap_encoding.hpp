@@ -45,7 +45,7 @@
  *   MCAP_IMPLEMENTATION, and do not mix in another MCAP version.
  * - Under ROS 2, MCAP comes from mcap_vendor, which the target links publicly.
  */
-namespace DataTamer::mcap_encoding
+namespace DataTamer2::mcap_encoding
 {
 
 /// Writer profile, schema encoding and message encoding.
@@ -153,4 +153,4 @@ inline mcap::Status WriteSnapshot(mcap::McapWriter& writer, mcap::ChannelId chan
                       snapshot.active_mask, snapshot.payload, scratch);
 }
 
-}  // namespace DataTamer::mcap_encoding
+}  // namespace DataTamer2::mcap_encoding

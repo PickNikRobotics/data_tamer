@@ -25,7 +25,7 @@
 #include <unistd.h>
 #endif
 
-using namespace DataTamer;
+using namespace DataTamer2;
 using DataTamerTest::AllocCounter;
 
 namespace

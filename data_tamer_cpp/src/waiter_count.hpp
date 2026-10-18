@@ -3,7 +3,7 @@
 #include <atomic>
 #include <cstdint>
 
-namespace DataTamer::details
+namespace DataTamer2::details
 {
 /**
  * @brief Counts the threads that wait on an atomic, so that the thread that changes it
@@ -48,4 +48,4 @@ public:
 private:
   std::atomic<uint32_t> count_{ 0 };
 };
-}  // namespace DataTamer::details
+}  // namespace DataTamer2::details

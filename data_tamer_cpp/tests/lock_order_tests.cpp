@@ -12,7 +12,7 @@
 #include <optional>
 #include <vector>
 
-using namespace DataTamer;
+using namespace DataTamer2;
 using DataTamerTest::expectFinishes;
 
 #if defined(__linux__)

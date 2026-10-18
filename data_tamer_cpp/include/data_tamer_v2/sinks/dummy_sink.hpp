@@ -6,7 +6,7 @@
 #include <mutex>
 #include <unordered_map>
 
-namespace DataTamer
+namespace DataTamer2
 {
 
 /**
@@ -95,4 +95,4 @@ private:
   Snapshot latest_snapshot_;
 };
 
-}  // namespace DataTamer
+}  // namespace DataTamer2

@@ -34,7 +34,7 @@
 #include <unistd.h>
 #endif
 
-using namespace DataTamer;
+using namespace DataTamer2;
 
 #if defined(DATA_TAMER_TEST_SECCOMP)
 namespace

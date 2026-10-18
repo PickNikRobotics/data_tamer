@@ -13,7 +13,7 @@
 #include "data_tamer_v2/types.hpp"
 #include "data_tamer_v2/contrib/SerializeMe.hpp"
 
-namespace DataTamer
+namespace DataTamer2
 {
 using SerializeMe::has_TypeDefinition;
 
@@ -335,4 +335,4 @@ inline size_t ValuePtr::getSerializedSize() const
   return size_fn_(v_ptr_, serializer_.get());
 }
 
-}  // namespace DataTamer
+}  // namespace DataTamer2

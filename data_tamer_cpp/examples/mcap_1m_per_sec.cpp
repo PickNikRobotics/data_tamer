@@ -5,7 +5,7 @@
 #include <cmath>
 #include <thread>
 
-using namespace DataTamer;
+using namespace DataTamer2;
 
 void WritingThread(const std::string& channel_name)
 {

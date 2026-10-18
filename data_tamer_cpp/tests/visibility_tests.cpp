@@ -11,7 +11,7 @@
 #include <dlfcn.h>
 #endif
 
-using namespace DataTamer;
+using namespace DataTamer2;
 
 // A transaction opened by the library nests the module's LoggedValue::set(): one
 // thread-local transaction chain per process, whatever the consumer's visibility. The

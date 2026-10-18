@@ -11,7 +11,7 @@
  * fwd_header_* build targets check it).
  */
 
-namespace DataTamer
+namespace DataTamer2
 {
 
 class ChannelsRegistry;
@@ -27,4 +27,4 @@ struct Snapshot;
 template <typename T>
 class LoggedValue;
 
-}  // namespace DataTamer
+}  // namespace DataTamer2

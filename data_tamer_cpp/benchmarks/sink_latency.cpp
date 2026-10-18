@@ -18,7 +18,7 @@
 #include <unistd.h>
 #endif
 
-using namespace DataTamer;
+using namespace DataTamer2;
 
 namespace
 {

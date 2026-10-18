@@ -11,12 +11,12 @@
 
 namespace probe
 {
-void useResults(const std::shared_ptr<DataTamer::SnapshotPool>& pool,
-                DataTamer::PoolSlot* slot, const DataTamer::Schema& schema,
-                DataTamer::MCAPRingSink& ring_sink, DataTamer::LogChannel& channel,
-                const DataTamer::RegistrationID& id)
+void useResults(const std::shared_ptr<DataTamer2::SnapshotPool>& pool,
+                DataTamer2::PoolSlot* slot, const DataTamer2::Schema& schema,
+                DataTamer2::MCAPRingSink& ring_sink, DataTamer2::LogChannel& channel,
+                const DataTamer2::RegistrationID& id)
 {
-  using namespace DataTamer;
+  using namespace DataTamer2;
 #ifdef DT_IGNORE_POOL_TRY_ACQUIRE
   pool->tryAcquire();
 #else

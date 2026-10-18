@@ -1,6 +1,6 @@
 #pragma once
 
-namespace DataTamer
+namespace DataTamer2
 {
 
 /// Defined in the library only: consumers hold it through pointers.
@@ -80,4 +80,4 @@ private:
   WriteTransaction tx_;
 };
 
-}  // namespace DataTamer
+}  // namespace DataTamer2

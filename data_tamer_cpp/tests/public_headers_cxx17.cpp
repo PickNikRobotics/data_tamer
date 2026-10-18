@@ -33,7 +33,7 @@ struct ProbeVec
 }  // namespace probe_lib
 
 template <int N>
-struct DataTamer::TypeDefinitionTrait<probe_lib::ProbeVec<N>>
+struct DataTamer2::TypeDefinitionTrait<probe_lib::ProbeVec<N>>
 {
   static std::string name() { return "ProbeVec" + std::to_string(N); }
   template <class AddField>
@@ -58,7 +58,7 @@ std::string_view TypeDefinition(Probe& p, AddField& add)
 }
 [[maybe_unused]] void useEverything()
 {
-  auto channel = DataTamer::LogChannel::create("probe");
+  auto channel = DataTamer2::LogChannel::create("probe");
   double d = 0;
   Probe probe;
   probe_lib::ProbeVec<2> probe_vec;
@@ -68,14 +68,14 @@ std::string_view TypeDefinition(Probe& p, AddField& add)
   channel->registerValue("probe", &probe);
   channel->registerValue("v", &v);
   double joined = 0;
-  const std::string joined_name = DataTamer::JoinNames("ns/", std::string("joined"));
-  if(DataTamer::IsCanonicalName(joined_name))
+  const std::string joined_name = DataTamer2::JoinNames("ns/", std::string("joined"));
+  if(DataTamer2::IsCanonicalName(joined_name))
   {
     channel->registerValue(joined_name, &joined);
   }
   auto logged = channel->createLoggedValue<double>("logged");
   logged->set(1.0);
   auto tx = channel->scopedWrite();
-  channel->addDataSink(DataTamer::DummySink::create());
+  channel->addDataSink(DataTamer2::DummySink::create());
 }
 }  // namespace

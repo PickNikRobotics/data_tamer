@@ -12,7 +12,7 @@
 
 int main()
 {
-  using namespace DataTamer;
+  using namespace DataTamer2;
   const auto dir = std::filesystem::temp_directory_path();
   const std::string sink_path = (dir / "data_tamer_test_package_sink.mcap").string();
   const std::string writer_path = (dir / "data_tamer_test_package_writer.mcap").string();

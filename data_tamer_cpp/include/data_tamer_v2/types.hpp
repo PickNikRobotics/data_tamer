@@ -12,7 +12,7 @@
 #include <vector>
 #include <variant>
 
-namespace DataTamer
+namespace DataTamer2
 {
 
 constexpr int SCHEMA_VERSION = 5;
@@ -236,12 +236,12 @@ enum class SchemaFormat
 /// SchemaTextHash() of ToStr(schema); the value Schema::hash must hold.
 [[nodiscard]] uint64_t ComputeSchemaHash(const Schema& schema);
 
-}  // namespace DataTamer
+}  // namespace DataTamer2
 
 template <>
-struct std::hash<DataTamer::RegistrationID>
+struct std::hash<DataTamer2::RegistrationID>
 {
-  std::size_t operator()(const DataTamer::RegistrationID& id) const
+  std::size_t operator()(const DataTamer2::RegistrationID& id) const
   {
     // Combines index and generation as in http://stackoverflow.com/a/1646913/126995
     std::size_t res = 17;

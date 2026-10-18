@@ -4,9 +4,9 @@
 #include "data_tamer_v2/data_sink.hpp"
 #include "data_tamer_v2/sinks/mcap_ring_sink.hpp"
 
-extern "C" void data_tamer_stats_probe(DataTamer::LogChannel* channel,
-                                       DataTamer::SinkWorker* worker,
-                                       DataTamer::MCAPRingSink* ring)
+extern "C" void data_tamer_stats_probe(DataTamer2::LogChannel* channel,
+                                       DataTamer2::SinkWorker* worker,
+                                       DataTamer2::MCAPRingSink* ring)
 {
   (void)channel->stats();
   (void)worker->stats();

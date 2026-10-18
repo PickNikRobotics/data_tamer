@@ -14,7 +14,7 @@
 #include <sched.h>
 #endif
 
-using DataTamer::WriteMutex;
+using DataTamer2::WriteMutex;
 
 TEST(WriteMutex, IsLockable)
 {

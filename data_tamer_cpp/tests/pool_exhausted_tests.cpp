@@ -13,7 +13,7 @@
 #include <memory>
 #include <thread>
 
-using namespace DataTamer;
+using namespace DataTamer2;
 
 TEST(PoolExhausted, IsZeroBeforeLoggingStarts)
 {

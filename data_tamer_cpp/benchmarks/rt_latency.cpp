@@ -28,7 +28,7 @@
 #include <sched.h>
 #include <time.h>
 
-using namespace DataTamer;
+using namespace DataTamer2;
 
 struct Options
 {

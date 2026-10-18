@@ -10,7 +10,7 @@
 // can include data_tamer_v2/fwd.hpp instead.
 #include "data_tamer_v2/channel.hpp"
 
-namespace DataTamer
+namespace DataTamer2
 {
 
 /**
@@ -99,4 +99,4 @@ private:
   std::unique_ptr<Pimpl> _p;
 };
 
-}  // namespace DataTamer
+}  // namespace DataTamer2

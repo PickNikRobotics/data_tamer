@@ -8,7 +8,7 @@
 #include <string_view>
 #include <vector>
 
-using namespace DataTamer;
+using namespace DataTamer2;
 using DataTamerTest::Inner;
 
 namespace

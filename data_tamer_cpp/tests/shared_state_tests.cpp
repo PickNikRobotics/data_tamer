@@ -7,7 +7,7 @@
 #include <thread>
 #include <utility>
 
-using namespace DataTamer;
+using namespace DataTamer2;
 using DataTamerTest::AllocCounter;
 
 // Once the holder is initialized, publishing a re-registration cannot fail. The limit

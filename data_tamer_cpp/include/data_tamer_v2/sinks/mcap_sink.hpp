@@ -6,7 +6,7 @@
 #include <memory>
 #include <string>
 
-namespace DataTamer
+namespace DataTamer2
 {
 
 namespace details
@@ -105,4 +105,4 @@ private:
                             bool new_file);
 };
 
-}  // namespace DataTamer
+}  // namespace DataTamer2

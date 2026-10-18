@@ -40,7 +40,7 @@ std::string_view TypeDefinition(Holder& holder, AddField& add)
   return "Holder";
 }
 
-void probe(DataTamer::LogChannel& channel)
+void probe(DataTamer2::LogChannel& channel)
 {
   Scalar scalar = 0;
   std::vector<Element> vector;

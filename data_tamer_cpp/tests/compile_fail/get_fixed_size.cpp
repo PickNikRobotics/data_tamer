@@ -15,9 +15,9 @@ size_t fixedSizeOfDescribed()
 {
   bool fixed = true;
   size_t size = 0;
-  DataTamer::GetFixedSize<Described>(fixed, size);
+  DataTamer2::GetFixedSize<Described>(fixed, size);
 #ifdef DT_UNDESCRIBED_TYPE
-  DataTamer::GetFixedSize<Undescribed>(fixed, size);
+  DataTamer2::GetFixedSize<Undescribed>(fixed, size);
 #endif
   return size;
 }

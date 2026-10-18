@@ -6,7 +6,7 @@
 
 namespace probe
 {
-uint32_t readConst(const DataTamer::AtomicWordTable& table)
+uint32_t readConst(const DataTamer2::AtomicWordTable& table)
 {
 #ifdef DT_WRITE_THROUGH_CONST
   table[0].store(1);
@@ -14,7 +14,7 @@ uint32_t readConst(const DataTamer::AtomicWordTable& table)
   return table[0].load();
 }
 
-void writeMutable(DataTamer::AtomicWordTable& table)
+void writeMutable(DataTamer2::AtomicWordTable& table)
 {
   table[0].store(2);
 }

@@ -11,7 +11,7 @@
 #include <string>
 #include <thread>
 
-using namespace DataTamer;
+using namespace DataTamer2;
 
 TEST(DataTamerBasic, BasicTypes)
 {
@@ -24,8 +24,8 @@ TEST(DataTamerBasic, BasicTypes)
 
 TEST(DataTamerBasic, SinkAdd)
 {
-  DataTamerTest::Attached<DataTamer::DummySink> dummy_sink_A;
-  DataTamerTest::Attached<DataTamer::DummySink> dummy_sink_B;
+  DataTamerTest::Attached<DataTamer2::DummySink> dummy_sink_A;
+  DataTamerTest::Attached<DataTamer2::DummySink> dummy_sink_B;
 
   ChannelsRegistry registry;
   registry.addDefaultSink(dummy_sink_A);
@@ -91,7 +91,7 @@ TEST(DataTamerBasic, SerializeVariant)
 TEST(DataTamerBasic, TestRegistration)
 {
   auto channel = LogChannel::create("chan");
-  DataTamerTest::Attached<DataTamer::DummySink> sink;
+  DataTamerTest::Attached<DataTamer2::DummySink> sink;
   channel->addDataSink(sink);
 
   double v1 = 69.0;
@@ -156,7 +156,7 @@ TEST(DataTamerBasic, TestRegistration)
 TEST(DataTamerBasic, Vector)
 {
   auto channel = LogChannel::create("chan");
-  DataTamerTest::Attached<DataTamer::DummySink> sink;
+  DataTamerTest::Attached<DataTamer2::DummySink> sink;
   channel->addDataSink(sink);
 
   std::vector<float> vect = { 1, 2, 3, 4 };
@@ -173,7 +173,7 @@ TEST(DataTamerBasic, Vector)
 TEST(DataTamerBasic, Disable)
 {
   auto channel = LogChannel::create("chan");
-  DataTamerTest::Attached<DataTamer::DummySink> sink;
+  DataTamerTest::Attached<DataTamer2::DummySink> sink;
   channel->addDataSink(sink);
 
   double v1 = 11;
@@ -235,7 +235,7 @@ TEST(DataTamerBasic, Disable)
 TEST(DataTamerBasic, VectorWithChangingSize)
 {
   auto channel = LogChannel::create("chan");
-  DataTamerTest::Attached<DataTamer::DummySink> sink;
+  DataTamerTest::Attached<DataTamer2::DummySink> sink;
   channel->addDataSink(sink);
 
   std::vector<float> vect = { 1, 2, 3, 4 };

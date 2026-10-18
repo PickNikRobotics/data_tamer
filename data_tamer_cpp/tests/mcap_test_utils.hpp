@@ -107,11 +107,11 @@ inline std::vector<uint64_t> logTimes(const std::string& path)
 
 /// Options of a ring sink that dumps to `filepath`, keeps `window` of history and holds
 /// `capacity_bytes` of it.
-inline DataTamer::MCAPRingOptions ringOptions(const std::string& filepath,
-                                              std::chrono::nanoseconds window,
-                                              size_t capacity_bytes = 1 << 20)
+inline DataTamer2::MCAPRingOptions ringOptions(const std::string& filepath,
+                                               std::chrono::nanoseconds window,
+                                               size_t capacity_bytes = 1 << 20)
 {
-  DataTamer::MCAPRingOptions options;
+  DataTamer2::MCAPRingOptions options;
   options.filepath = filepath;
   options.window = window;
   options.capacity_bytes = capacity_bytes;
@@ -119,9 +119,9 @@ inline DataTamer::MCAPRingOptions ringOptions(const std::string& filepath,
 }
 
 /// The window in nanoseconds, as the ring tests count their timestamps.
-inline DataTamer::MCAPRingOptions ringOptions(const std::string& filepath,
-                                              int64_t window_ns,
-                                              size_t capacity_bytes = 1 << 20)
+inline DataTamer2::MCAPRingOptions ringOptions(const std::string& filepath,
+                                               int64_t window_ns,
+                                               size_t capacity_bytes = 1 << 20)
 {
   return ringOptions(filepath, std::chrono::nanoseconds(window_ns), capacity_bytes);
 }
@@ -130,11 +130,11 @@ inline DataTamer::MCAPRingOptions ringOptions(const std::string& filepath,
 /// equals the timestamp of each snapshot.
 struct Source
 {
-  std::shared_ptr<DataTamer::LogChannel> channel;
+  std::shared_ptr<DataTamer2::LogChannel> channel;
   int64_t value = 0;
 
-  Source(const std::string& name, const std::shared_ptr<DataTamer::SinkWorker>& sink)
-    : channel(DataTamer::LogChannel::create(name))
+  Source(const std::string& name, const std::shared_ptr<DataTamer2::SinkWorker>& sink)
+    : channel(DataTamer2::LogChannel::create(name))
   {
     channel->registerValue("value", &value);
     channel->addDataSink(sink);
@@ -146,7 +146,7 @@ struct Source
   void take(std::chrono::nanoseconds timestamp)
   {
     value = timestamp.count();
-    ASSERT_EQ(channel->tryTakeSnapshot(timestamp), DataTamer::SnapshotResult::ok);
+    ASSERT_EQ(channel->tryTakeSnapshot(timestamp), DataTamer2::SnapshotResult::ok);
   }
   void take(int64_t timestamp_ns) { take(std::chrono::nanoseconds(timestamp_ns)); }
 };

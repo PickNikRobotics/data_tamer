@@ -107,9 +107,9 @@ TEST(SerializeMeSize, RealTimeSnapshotOfAnArrayOfVariableSizeElementsDoesNotThro
   recording.channel->registerValue("pair", &pair);
   recording.channel->startLogging();
 
-  DataTamer::SnapshotResult result = DataTamer::SnapshotResult::rejected;
+  DataTamer2::SnapshotResult result = DataTamer2::SnapshotResult::rejected;
   EXPECT_NO_THROW(result = recording.channel->tryTakeSnapshot());
-  EXPECT_EQ(result, DataTamer::SnapshotResult::ok);
+  EXPECT_EQ(result, DataTamer2::SnapshotResult::ok);
 }
 
 TEST(SerializeMeSize, VectorOfPaddedStructsIsSizedByWhatIsWritten)

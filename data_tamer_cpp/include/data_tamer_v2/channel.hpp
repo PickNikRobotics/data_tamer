@@ -25,7 +25,7 @@
 #include <utility>
 #include <vector>
 
-namespace DataTamer
+namespace DataTamer2
 {
 
 /// System-clock time since the epoch: the default timestamp of a snapshot.
@@ -612,4 +612,4 @@ inline LoggedValue<T>::~LoggedValue()
   }
 }
 
-}  // namespace DataTamer
+}  // namespace DataTamer2

@@ -19,7 +19,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace DataTamer
+namespace DataTamer2
 {
 namespace
 {
@@ -693,4 +693,4 @@ std::chrono::nanoseconds MCAPRingSink::newestTimestamp() const
   return _p->ring.count() > 0 ? nanoseconds(_p->ring.backTimestamp()) : nanoseconds(0);
 }
 
-}  // namespace DataTamer
+}  // namespace DataTamer2

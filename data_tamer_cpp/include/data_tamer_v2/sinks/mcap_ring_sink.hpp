@@ -10,7 +10,7 @@
 #include <memory>
 #include <string>
 
-namespace DataTamer
+namespace DataTamer2
 {
 
 /// Configuration of an MCAPRingSink.
@@ -211,4 +211,4 @@ private:
   std::shared_ptr<Pimpl> _p;
 };
 
-}  // namespace DataTamer
+}  // namespace DataTamer2

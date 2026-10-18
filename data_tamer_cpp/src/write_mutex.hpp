@@ -21,7 +21,7 @@
 #define DATA_TAMER_HAS_PI_MUTEX 0
 #endif
 
-namespace DataTamer
+namespace DataTamer2
 {
 namespace details
 {
@@ -150,4 +150,4 @@ private:
   details::PlatformWriteMutex mutex_;
 };
 
-}  // namespace DataTamer
+}  // namespace DataTamer2

@@ -14,7 +14,7 @@
 #include <memory>
 #include <stdexcept>
 
-namespace DataTamer
+namespace DataTamer2
 {
 
 /**
@@ -235,4 +235,4 @@ private:
   AtomicWordTable flags_;
 };
 
-}  // namespace DataTamer
+}  // namespace DataTamer2

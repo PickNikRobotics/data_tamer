@@ -10,7 +10,7 @@
 #include <typeinfo>
 #include <vector>
 
-namespace DataTamer
+namespace DataTamer2
 {
 
 class LogChannel;
@@ -274,4 +274,4 @@ inline void SetBit(ActiveMask& mask, size_t index, bool value)
   }
 }
 
-}  // namespace DataTamer
+}  // namespace DataTamer2

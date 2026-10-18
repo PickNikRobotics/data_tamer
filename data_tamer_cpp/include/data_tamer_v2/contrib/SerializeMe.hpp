@@ -38,6 +38,8 @@
 
 namespace SerializeMe
 {
+inline namespace v2
+{
 
 // Minimal non-owning view of contiguous memory (a subset of std::span).
 template <typename T>
@@ -89,18 +91,19 @@ using StringSize = uint32_t;
 const auto EmptyFuncion = [](const char*, void*) {};
 using EmptyFunc = decltype(EmptyFuncion);
 
+}  // namespace v2
 }  // namespace SerializeMe
 
-namespace DataTamer
+namespace DataTamer2
 {
 /**
  * @brief Customization point that describes a type without reopening its namespace.
  *
- * Specialize it in namespace DataTamer. define() calls add("name", &member) for each
+ * Specialize it in namespace DataTamer2. define() calls add("name", &member) for each
  * field and returns the type name:
  *
  *   template <>
- *   struct DataTamer::TypeDefinitionTrait<third_party::Point>
+ *   struct DataTamer2::TypeDefinitionTrait<third_party::Point>
  *   {
  *     template <class AddField>
  *     static std::string_view define(third_party::Point& p, AddField& add)
@@ -127,12 +130,14 @@ struct TypeDefinitionTrait
   // Marks the primary template: a specialization does not have it.
   using unspecialized_tag = void;
 };
-}  // namespace DataTamer
+}  // namespace DataTamer2
 
 namespace SerializeMe
 {
+inline namespace v2
+{
 
-// True if DataTamer::TypeDefinitionTrait<T> has a static define(T&, AddField&).
+// True if DataTamer2::TypeDefinitionTrait<T> has a static define(T&, AddField&).
 template <typename T, class = void>
 struct has_TypeDefinitionTrait : std::false_type
 {
@@ -140,12 +145,12 @@ struct has_TypeDefinitionTrait : std::false_type
 
 template <typename T>
 struct has_TypeDefinitionTrait<
-    T, std::void_t<decltype(DataTamer::TypeDefinitionTrait<T>::define(
+    T, std::void_t<decltype(DataTamer2::TypeDefinitionTrait<T>::define(
            std::declval<T&>(), std::declval<EmptyFunc&>()))>> : std::true_type
 {
 };
 
-// True if DataTamer::TypeDefinitionTrait<T> is specialized at all.
+// True if DataTamer2::TypeDefinitionTrait<T> is specialized at all.
 template <typename T, class = void>
 struct is_TypeDefinitionTrait_specialized : std::true_type
 {
@@ -153,12 +158,12 @@ struct is_TypeDefinitionTrait_specialized : std::true_type
 
 template <typename T>
 struct is_TypeDefinitionTrait_specialized<
-    T, std::void_t<typename DataTamer::TypeDefinitionTrait<T>::unspecialized_tag>>
+    T, std::void_t<typename DataTamer2::TypeDefinitionTrait<T>::unspecialized_tag>>
   : std::false_type
 {
 };
 
-// True if DataTamer::TypeDefinitionTrait<T> provides static name().
+// True if DataTamer2::TypeDefinitionTrait<T> provides static name().
 template <typename T, class = void>
 struct has_TypeDefinitionTraitName : std::false_type
 {
@@ -167,7 +172,7 @@ struct has_TypeDefinitionTraitName : std::false_type
 template <typename T>
 struct has_TypeDefinitionTraitName<
     T, std::enable_if_t<std::is_convertible_v<
-           decltype(DataTamer::TypeDefinitionTrait<T>::name()), std::string>>>
+           decltype(DataTamer2::TypeDefinitionTrait<T>::name()), std::string>>>
   : std::true_type
 {
 };
@@ -190,7 +195,7 @@ struct has_TypeDefinitionADL<
 {
 };
 
-// True if T is described by DataTamer::TypeDefinitionTrait<T> or by an ADL
+// True if T is described by DataTamer2::TypeDefinitionTrait<T> or by an ADL
 // TypeDefinition() overload. The second parameter is unused (source compatibility).
 template <typename T, class = void>
 struct has_TypeDefinition : std::bool_constant<has_TypeDefinitionTrait<T>::value ||
@@ -198,7 +203,7 @@ struct has_TypeDefinition : std::bool_constant<has_TypeDefinitionTrait<T>::value
 {
   static_assert(!is_TypeDefinitionTrait_specialized<T>::value ||
                     has_TypeDefinitionTrait<T>::value,
-                "DataTamer::TypeDefinitionTrait<T> is specialized, but it has no "
+                "DataTamer2::TypeDefinitionTrait<T> is specialized, but it has no "
                 "static define(T&, AddField&) callable with a generic AddField");
 };
 
@@ -210,7 +215,7 @@ inline decltype(auto) InvokeTypeDefinition(T& obj, AddField& add_field)
   static_assert(has_TypeDefinition<T>::value, "Missing TypeDefinition");
   if constexpr(has_TypeDefinitionTrait<T>::value)
   {
-    return DataTamer::TypeDefinitionTrait<T>::define(obj, add_field);
+    return DataTamer2::TypeDefinitionTrait<T>::define(obj, add_field);
   }
   else
   {
@@ -749,4 +754,5 @@ inline void SerializeIntoBuffer(SpanBytes& buffer, Container<T, TArgs...> const&
   }
 }
 
+}  // namespace v2
 }  // namespace SerializeMe

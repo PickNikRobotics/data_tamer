@@ -15,7 +15,7 @@
 #include "data_tamer_v2/sinks/mcap_encoding.hpp"
 #include <mcap/reader.hpp>  // its implementation is compiled here, as before
 
-namespace DataTamer
+namespace DataTamer2
 {
 
 namespace details
@@ -93,7 +93,7 @@ MCAPSink::MCAPSink(const std::string& filepath, bool do_compression)
   openFile(_p->filepath, do_compression);
 }
 
-void DataTamer::MCAPSink::openFile(std::string const& filepath, bool do_compression)
+void DataTamer2::MCAPSink::openFile(std::string const& filepath, bool do_compression)
 {
   std::scoped_lock lk(_p->mutex);
   // Opening the file in use truncates it: close the old writer first, or its footer
@@ -252,4 +252,4 @@ void MCAPSink::restartRecordingImpl(const std::string& filepath, bool do_compres
   }
 }
 
-}  // namespace DataTamer
+}  // namespace DataTamer2

@@ -2,6 +2,7 @@
 #include "data_tamer_v2/custom_types.hpp"
 #include "data_tamer_v2/data_sink.hpp"
 #include "data_tamer_v2/data_tamer.hpp"
+#include "data_tamer_v2/data_tamer_parser.hpp"
 #include "data_tamer_v2/details/locked_reference.hpp"
 #include "data_tamer_v2/logged_value.hpp"
 #include "data_tamer_v2/sinks/mcap_ring_sink.hpp"
@@ -19,9 +20,12 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <type_traits>
+#include <typeinfo>
+#include <utility>
 
-using namespace DataTamer;
+using namespace DataTamer2;
 
 TEST(ABI, SinksAreOnlyOnePointerLargerThanTheInterface)
 {
@@ -219,4 +223,22 @@ TEST(ABI, LayoutPinsApplyToThisPlatform)
 #if !DT_ABI_PINS
   GTEST_SKIP() << "byte-exact layout pins are for x86_64 Linux with libstdc++";
 #endif
+}
+
+// The library's own namespace is DataTamer2, but SerializeMe and the parser keep their
+// 1.x names inside the inline namespace v2, so that their mangled names differ from
+// those of data_tamer 1.x, which can be loaded into the same process (CLAUDE.md,
+// "Invariants"). One entity per namespace block: a block that loses its inline namespace
+// fails here. Itanium mangling: a type in it is "N11SerializeMe2v2...".
+TEST(ABI, SerializeMeAndParserAreInTheInlineNamespaceV2)
+{
+  const std::pair<const char*, const char*> names[] = {
+    { typeid(SerializeMe::SpanBytes).name(), "N11SerializeMe2v2" },
+    { typeid(SerializeMe::has_TypeDefinitionTrait<int>).name(), "N11SerializeMe2v2" },
+    { typeid(DataTamerParser::Schema).name(), "N15DataTamerParser2v2" },
+  };
+  for(const auto& [name, prefix] : names)
+  {
+    EXPECT_NE(std::string(name).find(prefix), std::string::npos) << name;
+  }
 }

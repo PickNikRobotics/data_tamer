@@ -15,7 +15,7 @@ namespace DataTamerTest
 
 /// The standalone parser's view of `snapshot`. It points into the snapshot, which must
 /// outlive it.
-inline DataTamerParser::SnapshotView viewOf(const DataTamer::Snapshot& snapshot)
+inline DataTamerParser::SnapshotView viewOf(const DataTamer2::Snapshot& snapshot)
 {
   return { snapshot.schema_hash,
            uint64_t(snapshot.timestamp.count()),
@@ -25,11 +25,11 @@ inline DataTamerParser::SnapshotView viewOf(const DataTamer::Snapshot& snapshot)
 
 /// What the standalone parser reads from `snapshot` with the schema `channel` wrote:
 /// every number by the name of its field. The payload must end with the last field.
-inline std::map<std::string, double> decode(const DataTamer::LogChannel& channel,
-                                            const DataTamer::Snapshot& snapshot)
+inline std::map<std::string, double> decode(const DataTamer2::LogChannel& channel,
+                                            const DataTamer2::Snapshot& snapshot)
 {
   const auto schema =
-      DataTamerParser::BuildSchemaFromText(DataTamer::ToStr(channel.getSchema()));
+      DataTamerParser::BuildSchemaFromText(DataTamer2::ToStr(channel.getSchema()));
   std::map<std::string, double> values;
   const bool complete = DataTamerParser::ParseSnapshot(
       schema, viewOf(snapshot),

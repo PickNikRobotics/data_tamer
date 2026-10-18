@@ -17,7 +17,7 @@
 #include <string>
 #include <vector>
 
-using namespace DataTamer;
+using namespace DataTamer2;
 using DataTamerTest::channelWith;
 using DataTamerTest::manual;
 using DataTamerTest::ScratchDir;

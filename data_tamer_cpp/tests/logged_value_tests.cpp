@@ -14,7 +14,7 @@
 #include <utility>
 #include <vector>
 
-using namespace DataTamer;
+using namespace DataTamer2;
 using DataTamerTest::AllocCounter;
 
 TEST(LoggedValue, IsNotMovableOrCopyable)

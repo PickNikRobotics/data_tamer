@@ -5,7 +5,7 @@
 
 int main()
 {
-  using namespace DataTamer;
+  using namespace DataTamer2;
 
   // Sinks added by default are attached to every channel of the registry,
   // the existing ones and the ones created later.

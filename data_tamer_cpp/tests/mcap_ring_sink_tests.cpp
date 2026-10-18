@@ -30,7 +30,7 @@
 #include <sys/resource.h>
 #include <unistd.h>
 
-using namespace DataTamer;
+using namespace DataTamer2;
 using DataTamerTest::ringOptions;
 using DataTamerTest::Source;
 using std::chrono::nanoseconds;

@@ -249,6 +249,14 @@ DATA_TAMER_UPDATE_GOLDEN=1 \
 - MCAP is updated by changing the URL and `URL_HASH` of `FetchContent_Declare` in
   `CMakeLists.txt` together with the conan requirement; after the 2.0.0 tag that is an ABI
   change (see "Versioning and ABI policy").
+- The library's namespace is `DataTamer2`, named after the major version. `SerializeMe`
+  and `DataTamerParser` keep their 1.x names and open `inline namespace v2` inside
+  every block (`contrib/SerializeMe.hpp` has two), written out without a macro: the
+  standalone parser can't include a library header. So no data_tamer symbol of 2.x has
+  the mangled name of a 1.x one, and under ROS 2, where both use `mcap_vendor`, 1.x and
+  2.x load into one process (two plugins built against different majors). Outside ROS 2
+  both export their bundled `mcap::`. `ABI.SerializeMeAndParserAreInTheInlineNamespaceV2`
+  checks the inline ones: add an entity for a new block.
 
 ## Versioning and ABI policy
 
@@ -318,7 +326,8 @@ consumers; defaults inside a Pimpl take effect for old binaries too. Say which i
 CHANGELOG.
 
 Changing anything frozen is a break: bump the major version in all the files above
-(so `SOVERSION` changes) and record it in the CHANGELOG. Put new state behind a Pimpl
+(so `SOVERSION` changes), rename the namespaces (`DataTamer2` to `DataTamer3`, the inline
+`v2` to `v3`) and record it in the CHANGELOG. Put new state behind a Pimpl
 instead of growing a pinned layout. Options structs passed by value are not size-tagged,
 so adding a field to one is a break too.
 

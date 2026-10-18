@@ -10,7 +10,7 @@
 #include <unordered_set>
 #include <vector>
 
-namespace DataTamer
+namespace DataTamer2
 {
 
 namespace
@@ -166,4 +166,4 @@ void ChannelsRegistry::clear()
   }
 }
 
-}  // namespace DataTamer
+}  // namespace DataTamer2

@@ -8,7 +8,7 @@
 #include <memory>
 #include <utility>
 
-namespace DataTamer
+namespace DataTamer2
 {
 
 /// One pre-allocated snapshot plus its reference count (0 means free). Only a snapshot
@@ -110,4 +110,4 @@ private:
   std::atomic<uint64_t> exhausted_{ 0 };
 };
 
-}  // namespace DataTamer
+}  // namespace DataTamer2

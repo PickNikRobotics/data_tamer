@@ -6,7 +6,7 @@
 #include <stdexcept>
 #include <string>
 
-using namespace DataTamer;
+using namespace DataTamer2;
 using DataTamerTest::Outer;
 using DataTamerTest::Reading;
 

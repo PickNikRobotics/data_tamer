@@ -134,7 +134,7 @@ the colon of `### key:`, trimmed; the space after the colon is optional
    the space included, and no 0x7F (bytes above 0x7F, as in UTF-8, are fine).
    Decoders reject a text with any other name. It may have empty
    `/`-separated components (leading, trailing or repeated `/`): writers do not
-   reject them, although names built with `DataTamer::JoinNames()` have none. `type-spec`
+   reject them, although names built with `DataTamer2::JoinNames()` have none. `type-spec`
    is a basic type name or a custom type name (not empty, no whitespace or control
    character), optionally followed by `[]`
    (dynamic vector) or `[N]` (fixed array, decimal N, 1 to 65535), and nothing

@@ -15,7 +15,7 @@
 #include <rclcpp/node_interfaces/node_topics_interface.hpp>
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
 
-namespace DataTamer
+namespace DataTamer2
 {
 
 using PublisherNodeInterfaces =
@@ -137,4 +137,4 @@ private:
   void create_publishers(const std::string& topic_prefix);
 };
 
-}  // namespace DataTamer
+}  // namespace DataTamer2
