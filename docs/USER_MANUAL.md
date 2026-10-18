@@ -74,14 +74,14 @@ The names of custom types and of their fields follow the same rule. A channel na
 contain spaces, but it can't be empty or contain a control character.
 A registration that throws changes nothing, so you can catch the exception and carry on.
 Use `/` to build a hierarchy, which
-PlotJuggler shows as a tree. `DataTamer::JoinNames()` drops empty components, so you don't
+PlotJuggler shows as a tree. `DataTamer2::JoinNames()` drops empty components, so you don't
 end up with `loco//LF/x`:
 
 ```cpp
 #include "data_tamer_v2/names.hpp"
 
-const auto name = DataTamer::JoinNames("loco/", leg_name, "x");
-assert(DataTamer::IsCanonicalName(name));  // optional check
+const auto name = DataTamer2::JoinNames("loco/", leg_name, "x");
+assert(DataTamer2::IsCanonicalName(name));  // optional check
 channel->registerValue(name, &x);
 ```
 
@@ -100,13 +100,13 @@ real-time threads.
 
 The [README example](../README.md#how-to-register-custom-types) puts a `TypeDefinition()`
 function in the namespace of the type. For types whose namespace you don't own, such as
-Eigen or a vendor SDK, specialize `DataTamer::TypeDefinitionTrait` instead:
+Eigen or a vendor SDK, specialize `DataTamer2::TypeDefinitionTrait` instead:
 
 ```cpp
 #include "data_tamer_v2/custom_types.hpp"
 
 template <>
-struct DataTamer::TypeDefinitionTrait<Eigen::Vector3d>
+struct DataTamer2::TypeDefinitionTrait<Eigen::Vector3d>
 {
   template <typename AddField>
   static std::string_view define(Eigen::Vector3d& v, AddField& add)
@@ -166,7 +166,7 @@ channel->startLogging();                    // freeze the schema, allocate, anno
 
 // inside the loop
 const auto result = channel->tryTakeSnapshot();
-if(result != DataTamer::SnapshotResult::ok)
+if(result != DataTamer2::SnapshotResult::ok)
 {
   ++snapshot_failures;  // count it, report it from another thread
 }
@@ -196,7 +196,7 @@ reach the sink's own functions with `worker->as<SinkType>()`.
 ```cpp
 #include "data_tamer_v2/sinks/mcap_sink.hpp"
 
-auto worker = DataTamer::MCAPSink::create("run.mcap");
+auto worker = DataTamer2::MCAPSink::create("run.mcap");
 channel->addDataSink(worker);
 ```
 
@@ -205,7 +205,7 @@ By default `MCAPSink` starts a new numbered file every 10 minutes (`run.mcap`,
 it:
 
 ```cpp
-auto& sink = worker->as<DataTamer::MCAPSink>();
+auto& sink = worker->as<DataTamer2::MCAPSink>();
 sink.setMaxTimeBeforeReset(std::chrono::seconds(0));  // one file, never reset
 // or: sink.setCreateNewFileOnReset(false);           // keep only the last 10 minutes
 ```
@@ -222,15 +222,15 @@ file only when you call `requestDump()`, for instance after a fault:
 ```cpp
 #include "data_tamer_v2/sinks/mcap_ring_sink.hpp"
 
-DataTamer::MCAPRingOptions options;
+DataTamer2::MCAPRingOptions options;
 options.filepath = "fault.mcap";            // fault_1.mcap, fault_2.mcap, ...
 options.window = std::chrono::seconds(5);   // history before the trigger
 options.capacity_bytes = size_t(64) << 20;  // the sink uses about twice this
-auto worker = DataTamer::MCAPRingSink::create(options);
+auto worker = DataTamer2::MCAPRingSink::create(options);
 channel->addDataSink(worker);
 
 // from any thread, real-time ones included: keep also 2 s after the trigger
-(void)worker->as<DataTamer::MCAPRingSink>().requestDump(std::chrono::seconds(2));
+(void)worker->as<DataTamer2::MCAPRingSink>().requestDump(std::chrono::seconds(2));
 ```
 
 The dump covers `[trigger - window, trigger + post_trigger]` in snapshot time, so it
@@ -248,11 +248,11 @@ aggregate the samples into batches on `<prefix>/data_batch`:
 ```cpp
 #include "data_tamer_v2/sinks/ros2_publisher_sink.hpp"
 
-DataTamer::ROS2PublisherOptions options;
+DataTamer2::ROS2PublisherOptions options;
 options.aggregate = true;
 options.max_batch_size = 100;                              // snapshots per message
 options.max_batch_delay = std::chrono::milliseconds(100);  // or this old
-auto worker = DataTamer::ROS2PublisherSink::create(node, "/robot", options);
+auto worker = DataTamer2::ROS2PublisherSink::create(node, "/robot", options);
 channel->addDataSink(worker);
 ```
 
@@ -263,26 +263,26 @@ subscriber loses old messages instead of growing the publisher's memory.
 
 ### Writing your own sink
 
-Derive from `DataTamer::DataSink`, implement `onSchema()` and `onSnapshot()`, and wrap it in
+Derive from `DataTamer2::DataSink`, implement `onSchema()` and `onSnapshot()`, and wrap it in
 a `SinkWorker`, which owns the thread that calls them:
 
 ```cpp
-class CountingSink : public DataTamer::DataSink
+class CountingSink : public DataTamer2::DataSink
 {
 protected:
-  void onSchema(const DataTamer::Schema& schema) override { /* once per channel */ }
-  void onSnapshot(const DataTamer::SnapshotRef& snapshot) override { ++count_; }
+  void onSchema(const DataTamer2::Schema& schema) override { /* once per channel */ }
+  void onSnapshot(const DataTamer2::SnapshotRef& snapshot) override { ++count_; }
 
 private:
   size_t count_ = 0;
 };
 
-auto worker = DataTamer::SinkWorker::create<CountingSink>();
+auto worker = DataTamer2::SinkWorker::create<CountingSink>();
 channel->addDataSink(worker);
 ```
 
 Keep `onSnapshot()` short: while it holds a snapshot, that slot of the channel's pool stays
-busy for every sink. For slow work, copy the snapshot (`DataTamer::Snapshot copy =
+busy for every sink. For slow work, copy the snapshot (`DataTamer2::Snapshot copy =
 *snapshot;`) and hand the copy to your own thread. Override `onStop()` and `onStart()` if
 the sink has files to close and reopen.
 
@@ -295,7 +295,7 @@ sink finish: `MCAPSink` closes its file, `MCAPRingSink` writes a pending dump,
 ```cpp
 worker->stop();
 // or, for every sink of a registry:
-DataTamer::ChannelsRegistry::Global().stopAll();
+DataTamer2::ChannelsRegistry::Global().stopAll();
 ```
 
 Destroying a running worker stops it too.
@@ -308,12 +308,12 @@ and attaches the default sinks to every channel, existing ones included:
 ```cpp
 using namespace std::chrono_literals;
 
-auto& registry = DataTamer::ChannelsRegistry::Global();
-DataTamer::ChannelDefaults defaults;
+auto& registry = DataTamer2::ChannelsRegistry::Global();
+DataTamer2::ChannelDefaults defaults;
 defaults.pool_stall_tolerance = 200ms;  // with the next line: 200 slots per channel
 defaults.pool_snapshot_period = 1ms;
 registry.setChannelDefaults(defaults);  // for channels created from now on
-registry.addDefaultSink(DataTamer::MCAPSink::create("run.mcap"));
+registry.addDefaultSink(DataTamer2::MCAPSink::create("run.mcap"));
 auto channel = registry.getChannel("controller");
 ```
 
@@ -374,7 +374,10 @@ CMake package finds them.
 The shared library has the SONAME `libdata_tamer.so.2` (`libdata_tamer_v2.so.2` under
 ROS 2), so a program built against any 2.x release runs with any later 2.x library, and
 `find_package(data_tamer 2 REQUIRED)` accepts any 2.x. Defaults that live in headers
-change only when you rebuild.
+change only when you rebuild. Under ROS 2, one process can also load data_tamer 1.x and
+2.x, e.g. two plugins built against different majors: the library's namespace is
+`DataTamer2`, and `SerializeMe` and `DataTamerParser` are in an inline namespace `v2`, so
+no 2.x symbol clashes with 1.x.
 
 A header that only names DataTamer types, such as a `LogChannel&` parameter or a
 `std::shared_ptr<SinkWorker>` member, can include `data_tamer_v2/fwd.hpp` instead of the full

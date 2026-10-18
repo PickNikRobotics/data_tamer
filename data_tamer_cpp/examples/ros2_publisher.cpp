@@ -5,7 +5,7 @@
 #include <cmath>
 #include <string>
 
-using namespace DataTamer;
+using namespace DataTamer2;
 
 // Usage: ros2_publisher [--aggregate] [--yaml]
 //   --aggregate  publish SnapshotBatch messages on /test/data_batch (100 snapshots

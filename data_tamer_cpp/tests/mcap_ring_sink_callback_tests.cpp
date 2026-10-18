@@ -9,7 +9,7 @@
 #include <cstdint>
 #include <string>
 
-using namespace DataTamer;
+using namespace DataTamer2;
 using DataTamerTest::manual;
 using DataTamerTest::ringOptions;
 using DataTamerTest::ScratchDir;

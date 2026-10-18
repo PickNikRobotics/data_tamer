@@ -9,7 +9,7 @@
 #include <type_traits>
 #include <vector>
 
-using namespace DataTamer;
+using namespace DataTamer2;
 using DataTamerTest::AllocCounter;
 
 static std::shared_ptr<SnapshotPool> makePool(size_t capacity = 4)

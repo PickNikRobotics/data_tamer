@@ -12,7 +12,7 @@
 #include <string>
 #include <thread>
 
-using namespace DataTamer;
+using namespace DataTamer2;
 using DataTamerTest::channelWith;
 using DataTamerTest::countMessages;
 using DataTamerTest::manual;

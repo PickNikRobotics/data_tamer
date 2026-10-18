@@ -14,7 +14,7 @@
 #include <mutex>
 #include <thread>
 
-using namespace DataTamer;
+using namespace DataTamer2;
 
 /// Warm up, then time takeSnapshot() while counting the allocations it makes
 /// on this thread; reports them as the "allocs/op" counter.

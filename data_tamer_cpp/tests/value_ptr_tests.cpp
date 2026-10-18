@@ -9,7 +9,7 @@
 #include <cstring>
 #include <vector>
 
-using namespace DataTamer;
+using namespace DataTamer2;
 
 static std::vector<uint8_t> serialize(const ValuePtr& ptr)
 {

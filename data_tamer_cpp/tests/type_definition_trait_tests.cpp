@@ -1,4 +1,4 @@
-// DataTamer::TypeDefinitionTrait: describing types without reopening their
+// DataTamer2::TypeDefinitionTrait: describing types without reopening their
 // namespace (PickNikRobotics/data_tamer#94).
 
 #include "data_tamer_v2/channel.hpp"
@@ -68,7 +68,7 @@ std::string_view TypeDefinition(Both& v, AddField& add)
 }
 }  // namespace third_party
 
-namespace DataTamer
+namespace DataTamer2
 {
 // full specialization
 template <>
@@ -131,7 +131,7 @@ struct TypeDefinitionTrait<third_party::Mat<N>>
 //   {
 //     static std::string_view define(third_party::Point&, int&);
 //   };
-//   // error: "DataTamer::TypeDefinitionTrait<T> is specialized, but it has no
+//   // error: "DataTamer2::TypeDefinitionTrait<T> is specialized, but it has no
 //   //         static define(T&, AddField&) callable with a generic AddField"
 
 // the trait wins over the ADL overload
@@ -146,9 +146,9 @@ struct TypeDefinitionTrait<third_party::Both>
     return "BothTrait";
   }
 };
-}  // namespace DataTamer
+}  // namespace DataTamer2
 
-using namespace DataTamer;
+using namespace DataTamer2;
 using SerializeMe::has_TypeDefinition;
 using SerializeMe::has_TypeDefinitionADL;
 using SerializeMe::has_TypeDefinitionTrait;
@@ -217,7 +217,7 @@ TEST(TypeDefinitionTrait, TypeNames)
 TEST(TypeDefinitionTrait, RegisterAndSnapshot)
 {
   auto channel = LogChannel::create("chan");
-  DataTamerTest::Attached<DataTamer::DummySink> sink;
+  DataTamerTest::Attached<DataTamer2::DummySink> sink;
   channel->addDataSink(sink);
 
   third_party::Point point{ 1, 2 };
@@ -304,7 +304,7 @@ TEST(TypeDefinitionTrait, RegisterAndSnapshot)
 TEST(TypeDefinitionTrait, DefineReturningStdString)
 {
   auto channel = LogChannel::create("chan");
-  DataTamerTest::Attached<DataTamer::DummySink> sink;
+  DataTamerTest::Attached<DataTamer2::DummySink> sink;
   channel->addDataSink(sink);
 
   third_party::Mat<2> mat;

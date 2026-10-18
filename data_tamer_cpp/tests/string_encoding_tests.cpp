@@ -40,7 +40,7 @@ TEST(StringEncoding, StringMemberIsSerializedAsACharVector)
 
   const auto snapshot = recording.snapshot();
   EXPECT_EQ(snapshot.payload, (std::vector<uint8_t>{ 1, 3, 0, 0, 0, 'a', 'b', 'c' }));
-  EXPECT_NE(DataTamer::ToStr(recording.channel->getSchema()).find("char[] name\n"),
+  EXPECT_NE(DataTamer2::ToStr(recording.channel->getSchema()).find("char[] name\n"),
             std::string::npos);
   const std::map<std::string, double> expected = {
     { "n/tag", 1 }, { "n/name[0]", 'a' }, { "n/name[1]", 'b' }, { "n/name[2]", 'c' }
@@ -80,10 +80,10 @@ TEST(StringEncoding, StringLongerThan64KiBIsSerialized)
     recording.channel->startLogging();
 
     named.name = big;
-    DataTamer::SnapshotResult result = DataTamer::SnapshotResult::rejected;
+    DataTamer2::SnapshotResult result = DataTamer2::SnapshotResult::rejected;
     EXPECT_NO_THROW(result = c.real_time ? recording.channel->tryTakeSnapshot() :
                                            recording.channel->takeSnapshot());
-    EXPECT_EQ(result, DataTamer::SnapshotResult::ok);
+    EXPECT_EQ(result, DataTamer2::SnapshotResult::ok);
     recording.sink.drain();
     EXPECT_EQ(recording.sink->latestPayloadSize(), size_t{ 1 + 4 + 70 * 1024 });
   }

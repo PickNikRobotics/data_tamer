@@ -22,7 +22,7 @@
 #include <unordered_map>
 #include <vector>
 
-using namespace DataTamer;
+using namespace DataTamer2;
 using DataTamerTest::acceptedUntilExhausted;
 using DataTamerTest::attach;
 using DataTamerTest::channelWith;

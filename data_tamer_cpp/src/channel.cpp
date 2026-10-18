@@ -21,7 +21,7 @@
 #include <utility>
 #include <vector>
 
-namespace DataTamer
+namespace DataTamer2
 {
 namespace
 {
@@ -1253,4 +1253,4 @@ SnapshotResult LogChannel::takeSnapshotImpl(std::chrono::nanoseconds timestamp,
   return accepted == attached ? SnapshotResult::ok : SnapshotResult::partial;
 }
 
-}  // namespace DataTamer
+}  // namespace DataTamer2

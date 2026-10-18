@@ -21,7 +21,7 @@
 #include <utility>
 #include <vector>
 
-using namespace DataTamer;
+using namespace DataTamer2;
 using namespace TestTypes;
 
 namespace
@@ -138,7 +138,7 @@ struct NameRegistrations
 };
 }  // namespace
 
-// Types described only by DataTamer::TypeDefinitionTrait (no ADL overload), and
+// Types described only by DataTamer2::TypeDefinitionTrait (no ADL overload), and
 // one with both, where the trait is the definition that is registered. Their
 // field names are not canonical; registration accepts them.
 namespace names_third_party
@@ -160,7 +160,7 @@ std::string_view TypeDefinition(BothBadTrait& obj, AddField& add)
 }  // namespace names_third_party
 
 template <>
-struct DataTamer::TypeDefinitionTrait<names_third_party::TraitBad>
+struct DataTamer2::TypeDefinitionTrait<names_third_party::TraitBad>
 {
   template <typename AddField>
   static std::string_view define(names_third_party::TraitBad& obj, AddField& add)
@@ -171,7 +171,7 @@ struct DataTamer::TypeDefinitionTrait<names_third_party::TraitBad>
 };
 
 template <>
-struct DataTamer::TypeDefinitionTrait<names_third_party::BothBadTrait>
+struct DataTamer2::TypeDefinitionTrait<names_third_party::BothBadTrait>
 {
   template <typename AddField>
   static std::string_view define(names_third_party::BothBadTrait& obj, AddField& add)

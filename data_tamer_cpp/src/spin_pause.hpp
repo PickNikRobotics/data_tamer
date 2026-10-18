@@ -1,6 +1,6 @@
 #pragma once
 
-namespace DataTamer
+namespace DataTamer2
 {
 namespace details
 {
@@ -18,4 +18,4 @@ inline void spinPause() noexcept
 #endif
 }
 }  // namespace details
-}  // namespace DataTamer
+}  // namespace DataTamer2

@@ -31,26 +31,26 @@
 namespace fwd_probe
 {
 // What a header that only names the types declares.
-void takesChannel(DataTamer::LogChannel& channel);
-void takesConstChannel(const DataTamer::LogChannel* channel);
-std::shared_ptr<DataTamer::LogChannel> makeChannel();
-void takesRegistry(DataTamer::ChannelsRegistry& registry);
-void takesSink(std::shared_ptr<DataTamer::DataSink> sink);
-void takesWorker(const std::shared_ptr<DataTamer::SinkWorker>& worker);
-void takesSchema(const DataTamer::Schema& schema);
-void takesSnapshot(const DataTamer::Snapshot& snapshot);
-void takesSnapshotRef(const DataTamer::SnapshotRef& snapshot);
-void takesId(const DataTamer::RegistrationID& id);
-void takesLogged(const std::shared_ptr<DataTamer::LoggedValue<double>>& value);
+void takesChannel(DataTamer2::LogChannel& channel);
+void takesConstChannel(const DataTamer2::LogChannel* channel);
+std::shared_ptr<DataTamer2::LogChannel> makeChannel();
+void takesRegistry(DataTamer2::ChannelsRegistry& registry);
+void takesSink(std::shared_ptr<DataTamer2::DataSink> sink);
+void takesWorker(const std::shared_ptr<DataTamer2::SinkWorker>& worker);
+void takesSchema(const DataTamer2::Schema& schema);
+void takesSnapshot(const DataTamer2::Snapshot& snapshot);
+void takesSnapshotRef(const DataTamer2::SnapshotRef& snapshot);
+void takesId(const DataTamer2::RegistrationID& id);
+void takesLogged(const std::shared_ptr<DataTamer2::LoggedValue<double>>& value);
 
 struct Holder
 {
-  std::shared_ptr<DataTamer::LogChannel> channel;
-  DataTamer::LogChannel* raw = nullptr;
+  std::shared_ptr<DataTamer2::LogChannel> channel;
+  DataTamer2::LogChannel* raw = nullptr;
 };
 
 // Defined in this translation unit without the definition of LogChannel.
-void takesChannel(DataTamer::LogChannel& channel)
+void takesChannel(DataTamer2::LogChannel& channel)
 {
   (void)&channel;
 }

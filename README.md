@@ -66,10 +66,10 @@ int main()
   int value_int = 42;
 
   // Multiple channels can use this sink. Data will be saved in mylog.mcap
-  auto mcap_sink = DataTamer::MCAPSink::create("mylog.mcap");
+  auto mcap_sink = DataTamer2::MCAPSink::create("mylog.mcap");
 
   // Create a channel and attach a sink. A channel can have multiple sinks
-  auto channel = DataTamer::LogChannel::create("my_channel");
+  auto channel = DataTamer2::LogChannel::create("my_channel");
   channel->addDataSink(mcap_sink);
 
   auto id1 = channel->registerValue("value_real", &value_real);
@@ -131,8 +131,8 @@ int main()
   std::vector<double> values = {1, 2, 3, 4};
   MyNamespace::Point3D position = {0.1, -0.2, 0.3};
 
-  auto channel = DataTamer::LogChannel::create("my_channel");
-  channel->addDataSink(DataTamer::MCAPSink::create("mylog.mcap"));
+  auto channel = DataTamer2::LogChannel::create("my_channel");
+  channel->addDataSink(DataTamer2::MCAPSink::create("mylog.mcap"));
   channel->registerValue("values", &values);
   channel->registerValue("position", &position);
 
@@ -142,7 +142,7 @@ int main()
 ```
 
 For types whose namespace you can't modify (Eigen, a vendor SDK, ...), specialize
-`DataTamer::TypeDefinitionTrait` instead.
+`DataTamer2::TypeDefinitionTrait` instead.
 
 More examples, including publishing on ROS 2 and the flight recorder, are in
 [data_tamer_cpp/examples](data_tamer_cpp/examples).

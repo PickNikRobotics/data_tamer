@@ -9,7 +9,7 @@
 #include <string_view>
 #include <vector>
 
-using namespace DataTamer;
+using namespace DataTamer2;
 using DataTamerTest::Recording;
 
 // Class templates with two type parameters have the shape of a container, but these
@@ -54,7 +54,7 @@ std::string_view TypeDefinition(Tagged<T, Tag>& tagged, AddField& add)
 
 // A trait, for a type the application does not own.
 template <typename A, typename B>
-struct DataTamer::TypeDefinitionTrait<Pair<A, B>>
+struct DataTamer2::TypeDefinitionTrait<Pair<A, B>>
 {
   template <typename AddField>
   static std::string_view define(Pair<A, B>& pair, AddField& add)

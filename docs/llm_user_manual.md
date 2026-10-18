@@ -105,6 +105,10 @@ flowchart LR
 header that only names the types (a `std::shared_ptr<LogChannel>` member, a `LogChannel&`
 parameter) can include `fwd.hpp` instead.
 
+Everything is in the namespace `DataTamer2` (1.x used `DataTamer`). `SerializeMe` and
+`DataTamerParser` keep their 1.x names, inside an inline namespace `v2` that code never
+names.
+
 ## Minimal end-to-end example
 
 A 1 kHz loop that logs four joints, a cycle time and a mode to an MCAP file. It compiles
@@ -133,7 +137,7 @@ struct JointState
 
 // Describes JointState without touching namespace robot.
 template <>
-struct DataTamer::TypeDefinitionTrait<robot::JointState>
+struct DataTamer2::TypeDefinitionTrait<robot::JointState>
 {
   template <typename AddField>
   static std::string_view define(robot::JointState& js, AddField& add)
@@ -148,23 +152,23 @@ struct DataTamer::TypeDefinitionTrait<robot::JointState>
 int main()
 {
   using namespace std::chrono_literals;
-  using DataTamer::SnapshotResult;
+  using DataTamer2::SnapshotResult;
 
   // Registered variables are declared before the channel, so they outlive it.
   std::array<robot::JointState, 4> joints{};
   double cycle_time_ms = 0;
 
-  auto mcap = DataTamer::MCAPSink::create("control.mcap");
+  auto mcap = DataTamer2::MCAPSink::create("control.mcap");
   // Every 10 minutes the recording continues in control_1.mcap, control_2.mcap, ...
   // (the default). setCreateNewFileOnReset(false) would truncate control.mcap instead.
 
-  auto channel = DataTamer::LogChannel::create("control");
+  auto channel = DataTamer2::LogChannel::create("control");
   channel->addDataSink(mcap);
 
   const std::array<const char*, 4> legs = { "LF", "RF", "LH", "RH" };
   for(size_t i = 0; i < joints.size(); ++i)
   {
-    channel->registerValue(DataTamer::JoinNames("joints", legs[i]), &joints[i]);
+    channel->registerValue(DataTamer2::JoinNames("joints", legs[i]), &joints[i]);
   }
   channel->registerValue("cycle_time_ms", &cycle_time_ms);
   auto mode = channel->createLoggedValue<int32_t>("mode");  // RAII, atomic
@@ -260,9 +264,9 @@ per character. Do not log text.
   registrations), an allocation failure and `createLoggedValue()` included.
 - Registration accepts empty `/`-separated components (`"/loco//x/"`), but PlotJuggler
   shows them as empty path elements. Build hierarchical names with
-  `DataTamer::JoinNames(parts...)` (`data_tamer_v2/names.hpp`), which drops empty components:
+  `DataTamer2::JoinNames(parts...)` (`data_tamer_v2/names.hpp`), which drops empty components:
   `JoinNames("/loco/", "LF/", "x") == "loco/LF/x"`. Enforce the rule with
-  `assert(DataTamer::IsCanonicalName(name))` if you want to.
+  `assert(DataTamer2::IsCanonicalName(name))` if you want to.
 - Custom type fields, vector elements and array elements extend the name with `/field`
   and `[i]` in decoders: `joints/LF/position`, `path/points[2]/x`.
 
@@ -356,7 +360,7 @@ progress: never release the last `shared_ptr` on a real-time thread. Inside
 ## Custom types
 
 A struct is recorded field by field once data_tamer knows its fields. Specialize
-`DataTamer::TypeDefinitionTrait<T>` (`data_tamer_v2/contrib/SerializeMe.hpp`, reached
+`DataTamer2::TypeDefinitionTrait<T>` (`data_tamer_v2/contrib/SerializeMe.hpp`, reached
 through `data_tamer_v2/custom_types.hpp`): it works for types you cannot modify and needs
 no change to their namespace. See the `JointState` trait in the
 [end-to-end example](#minimal-end-to-end-example).
@@ -510,7 +514,7 @@ log, allocate or retry inside the loop.
 
 ### Timestamps
 
-The timestamp argument defaults to `DataTamer::NsecSinceEpoch()`: `std::chrono::system_clock`
+The timestamp argument defaults to `DataTamer2::NsecSinceEpoch()`: `std::chrono::system_clock`
 in nanoseconds since the epoch. Pass your own `std::chrono::nanoseconds` (simulation
 time, sensor time) when it is the time that matters. The timestamp becomes the MCAP log
 and publish time, `timestamp_nsec` in ROS messages, and the time base of the
@@ -579,7 +583,7 @@ ordering rules:
 
 ```cpp
 // Every default sink and every sink attached to a registry channel, once each.
-DataTamer::ChannelsRegistry::Global().stopAll();
+DataTamer2::ChannelsRegistry::Global().stopAll();
 ```
 
 ### Registry
@@ -620,12 +624,12 @@ channels it creates, their default sinks and their default settings.
 
 ```cpp
 using namespace std::chrono_literals;
-auto& registry = DataTamer::ChannelsRegistry::Global();
-DataTamer::ChannelDefaults defaults;
+auto& registry = DataTamer2::ChannelsRegistry::Global();
+DataTamer2::ChannelDefaults defaults;
 defaults.pool_stall_tolerance = 200ms;  // absorb a 200 ms sink stall ...
 defaults.pool_snapshot_period = 1ms;    // ... at 1 kHz: 200 slots
 registry.setChannelDefaults(defaults);
-registry.addDefaultSink(DataTamer::MCAPSink::create("run.mcap"));
+registry.addDefaultSink(DataTamer2::MCAPSink::create("run.mcap"));
 auto channel = registry.getChannel("controller");  // 200 slots, MCAP attached
 // ... register, startLogging(), log ...
 registry.stopAll();  // run.mcap is complete
@@ -801,7 +805,7 @@ sleeping.
 
 ### Writing a custom sink
 
-Derive from `DataTamer::DataSink` and implement the two protected callbacks, plus
+Derive from `DataTamer2::DataSink` and implement the two protected callbacks, plus
 `onStop()` and `onStart()` if the sink has something to finish and reopen:
 
 - `onSchema(const Schema&)` runs on the thread that starts logging or attaches the
@@ -829,7 +833,7 @@ Derive from `DataTamer::DataSink` and implement the two protected callbacks, plu
   `std::logic_error`.
 
 ```cpp
-class SlowSink : public DataTamer::DataSink
+class SlowSink : public DataTamer2::DataSink
 {
 public:
   SlowSink() : thread_([this] { run(); }) {}
@@ -844,14 +848,14 @@ public:
   }
 
 protected:
-  void onSchema(const DataTamer::Schema& schema) override
+  void onSchema(const DataTamer2::Schema& schema) override
   {
     std::scoped_lock lock(mutex_);
     schemas_.push_back(schema);
   }
-  void onSnapshot(const DataTamer::SnapshotRef& ref) override
+  void onSnapshot(const DataTamer2::SnapshotRef& ref) override
   {
-    DataTamer::Snapshot copy = *ref;  // the pool slot is free once we return
+    DataTamer2::Snapshot copy = *ref;  // the pool slot is free once we return
     {
       std::scoped_lock lock(mutex_);
       pending_.push_back(std::move(copy));
@@ -878,13 +882,13 @@ private:
   }
   std::mutex mutex_;
   std::condition_variable cv_;
-  std::deque<DataTamer::Snapshot> pending_;
-  std::vector<DataTamer::Schema> schemas_;
+  std::deque<DataTamer2::Snapshot> pending_;
+  std::vector<DataTamer2::Schema> schemas_;
   bool done_ = false;
   std::thread thread_;
 };
 
-auto slow = DataTamer::SinkWorker::create<SlowSink>();
+auto slow = DataTamer2::SinkWorker::create<SlowSink>();
 channel->addDataSink(slow);
 ```
 

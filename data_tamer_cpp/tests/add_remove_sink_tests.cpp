@@ -6,7 +6,7 @@
 #include <gtest/gtest.h>
 #include <string>
 
-using namespace DataTamer;
+using namespace DataTamer2;
 
 void take_snapshots(std::shared_ptr<LogChannel> channel,
                     const DataTamerTest::Attached<DummySink>& sink, int count,

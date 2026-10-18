@@ -21,7 +21,7 @@ struct CustomValue
 /// Serializer of a CustomValue for the tests of a snapshot in progress. While `gate` is
 /// set, serializedSize() parks the snapshot on it until the test opens the gate; the
 /// throw_* flags make the calls throw, and size_calls counts serializedSize().
-class PausedSerializer : public DataTamer::CustomSerializer
+class PausedSerializer : public DataTamer2::CustomSerializer
 {
 public:
   mutable Gate* gate = nullptr;
@@ -30,7 +30,7 @@ public:
   bool throw_schema = false;
   mutable size_t size_calls = 0;
 
-  std::optional<DataTamer::CustomSchema> typeSchema() const override
+  std::optional<DataTamer2::CustomSchema> typeSchema() const override
   {
     if(throw_schema)
     {

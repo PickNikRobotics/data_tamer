@@ -12,7 +12,7 @@
 #include <future>
 #include <thread>
 
-using namespace DataTamer;
+using namespace DataTamer2;
 using DataTamerTest::Attached;
 using DataTamerTest::CustomValue;
 using DataTamerTest::PausedSerializer;

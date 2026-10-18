@@ -4,6 +4,12 @@ Changelog for package data_tamer
 
 Unreleased
 ----------
+* **Breaking, namespace**: the library's namespace is ``DataTamer2`` (it was
+  ``DataTamer``): ``DataTamer2::LogChannel``, ``using namespace DataTamer2;``,
+  ``DataTamer2::TypeDefinitionTrait``. ``SerializeMe`` and ``DataTamerParser`` keep their
+  names, inside an inline namespace ``v2``. No 2.x symbol has the mangled name of a 1.x
+  one, so a process can load plugins built against 1.x and against 2.x: before, the
+  dynamic linker merged their same-named symbols and the process crashed.
 * **Breaking, headers**: the public headers move from ``data_tamer/`` to ``data_tamer_v2/``
   (``#include "data_tamer_v2/channel.hpp"``), and the standalone parser from
   ``data_tamer_parser/data_tamer_parser.hpp`` to ``data_tamer_v2/data_tamer_parser.hpp``,

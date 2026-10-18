@@ -4,7 +4,7 @@
 #include <string>
 #include <string_view>
 
-namespace DataTamer
+namespace DataTamer2
 {
 namespace details
 {
@@ -97,4 +97,4 @@ template <typename... Parts>
          name.find("//") == std::string_view::npos;
 }
 
-}  // namespace DataTamer
+}  // namespace DataTamer2

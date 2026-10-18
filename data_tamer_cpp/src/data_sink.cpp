@@ -15,7 +15,7 @@
 #include <utility>
 #include <vector>
 
-namespace DataTamer
+namespace DataTamer2
 {
 namespace
 {
@@ -702,4 +702,4 @@ std::string SinkWorker::lastError() const
   return _p->last_error;
 }
 
-}  // namespace DataTamer
+}  // namespace DataTamer2

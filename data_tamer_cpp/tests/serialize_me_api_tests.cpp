@@ -11,7 +11,7 @@
 #include <type_traits>
 
 // Return types of an ADL TypeDefinition(): the name may be a view, a C string or an
-// owning string, as it may be for DataTamer::TypeDefinitionTrait<T>::define().
+// owning string, as it may be for DataTamer2::TypeDefinitionTrait<T>::define().
 
 namespace names_app
 {
@@ -58,7 +58,7 @@ TEST(SerializeMeApi, AdlTypeDefinitionMayReturnAnyNameType)
 
 TEST(SerializeMeApi, ChannelRegistersTypesNamedByAnyAdlReturnType)
 {
-  auto channel = DataTamer::LogChannel::create("names");
+  auto channel = DataTamer2::LogChannel::create("names");
   names_app::ViewName view;
   names_app::CStringName c_string;
   names_app::OwnedName owned;
@@ -66,7 +66,7 @@ TEST(SerializeMeApi, ChannelRegistersTypesNamedByAnyAdlReturnType)
   channel->registerValue("c_string", &c_string);
   channel->registerValue("owned", &owned);
 
-  const std::string schema = DataTamer::ToStr(channel->getSchema());
+  const std::string schema = DataTamer2::ToStr(channel->getSchema());
   EXPECT_NE(schema.find("ViewName view\n"), std::string::npos) << schema;
   EXPECT_NE(schema.find("CStringName c_string\n"), std::string::npos) << schema;
   EXPECT_NE(schema.find("OwnedName owned\n"), std::string::npos) << schema;

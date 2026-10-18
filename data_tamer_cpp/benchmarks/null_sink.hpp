@@ -2,7 +2,7 @@
 
 #include "data_tamer_v2/data_sink.hpp"
 
-namespace DataTamer
+namespace DataTamer2
 {
 
 /// Sink that accepts every snapshot and does nothing with it. Used by the
@@ -15,4 +15,4 @@ public:
   void onSnapshot(const SnapshotRef&) override {}
 };
 
-}  // namespace DataTamer
+}  // namespace DataTamer2

@@ -19,7 +19,7 @@
 #include <thread>
 #include <vector>
 
-using namespace DataTamer;
+using namespace DataTamer2;
 using DataTamerTest::Attached;
 using DataTamerTest::expectFinishes;
 

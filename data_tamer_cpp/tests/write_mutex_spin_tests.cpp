@@ -9,7 +9,7 @@
 #include <thread>
 #include <utility>
 
-using namespace DataTamer;
+using namespace DataTamer2;
 using namespace std::chrono_literals;
 
 // tryTakeSnapshot() calls the try paths, and must not throw.

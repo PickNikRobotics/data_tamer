@@ -22,6 +22,8 @@
 
 namespace DataTamerParser
 {
+inline namespace v2
+{
 
 constexpr int SCHEMA_VERSION = 5;
 /// Version of the YAML rendering of a schema (docs/wire_format.md, section 2.1).
@@ -636,7 +638,7 @@ inline std::optional<uint16_t> ParseArrayExtent(const std::string& digits)
   return static_cast<uint16_t>(*extent);
 }
 
-/// Parses the block-mapping subset of YAML written by DataTamer::ToYaml().
+/// Parses the block-mapping subset of YAML written by DataTamer2::ToYaml().
 inline std::vector<YamlNode> ParseYamlTree(const std::string& txt)
 {
   struct Level
@@ -1496,4 +1498,5 @@ inline size_t ForEachSnapshotInBatch(SchemaRegistry& registry, const BatchMsgT& 
   return visited;
 }
 
+}  // namespace v2
 }  // namespace DataTamerParser

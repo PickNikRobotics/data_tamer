@@ -10,13 +10,13 @@
 
 namespace probe
 {
-std::shared_ptr<DataTamer::CustomSerializer> make()
+std::shared_ptr<DataTamer2::CustomSerializer> make()
 {
-  DataTamer::CustomSerializerT<Described> direct(std::string("Described"));
+  DataTamer2::CustomSerializerT<Described> direct(std::string("Described"));
 #ifdef DT_IMPLICIT_NAME
-  DataTamer::CustomSerializerT<Described> implicit = std::string("Described");
+  DataTamer2::CustomSerializerT<Described> implicit = std::string("Described");
   (void)implicit;
 #endif
-  return std::make_shared<DataTamer::CustomSerializerT<Described>>(std::string("Named"));
+  return std::make_shared<DataTamer2::CustomSerializerT<Described>>(std::string("Named"));
 }
 }  // namespace probe

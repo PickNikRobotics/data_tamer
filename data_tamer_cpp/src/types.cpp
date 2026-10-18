@@ -14,7 +14,7 @@
 #include <utility>
 #include <vector>
 
-namespace DataTamer
+namespace DataTamer2
 {
 
 // clang-format off
@@ -550,4 +550,4 @@ CustomSerializer::Ptr TypesRegistry::find(const std::string& type_name) const
   return it == _impl->types.end() ? nullptr : it->second;
 }
 
-}  // namespace DataTamer
+}  // namespace DataTamer2

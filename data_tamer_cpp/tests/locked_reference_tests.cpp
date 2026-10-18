@@ -7,7 +7,7 @@
 #include <thread>
 #include <type_traits>
 
-using namespace DataTamer;
+using namespace DataTamer2;
 
 namespace
 {

@@ -5,7 +5,7 @@
 #include <iostream>
 #include <thread>
 
-using namespace DataTamer;
+using namespace DataTamer2;
 
 int main()
 {

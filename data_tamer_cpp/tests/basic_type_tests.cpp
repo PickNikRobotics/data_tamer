@@ -11,7 +11,7 @@
 #include <type_traits>
 #include <vector>
 
-using namespace DataTamer;
+using namespace DataTamer2;
 using DataTamerTest::Recording;
 
 namespace

@@ -56,7 +56,7 @@ uint16  my/short
 
 TEST(DataTamerParser, SchemaHash)
 {
-  auto channel = DataTamer::LogChannel::create("chan");
+  auto channel = DataTamer2::LogChannel::create("chan");
 
   // logs in channelA
   std::vector<double> v1(10, 0);
@@ -107,7 +107,7 @@ TEST(DataTamerParser, DeclaredSchemaHashUsesFullUint64Range)
 
 TEST(DataTamerParser, CustomTypes)
 {
-  auto channel = DataTamer::LogChannel::create("chan");
+  auto channel = DataTamer2::LogChannel::create("chan");
 
   Pose pose;
   channel->registerValue("pose", &pose);
@@ -141,7 +141,7 @@ TEST(DataTamerParser, CustomTypes)
   }
 }
 
-SnapshotView ConvertSnapshot(const DataTamer::Snapshot& snapshot)
+SnapshotView ConvertSnapshot(const DataTamer2::Snapshot& snapshot)
 {
   return { snapshot.schema_hash,
            uint64_t(snapshot.timestamp.count()),
@@ -151,8 +151,8 @@ SnapshotView ConvertSnapshot(const DataTamer::Snapshot& snapshot)
 
 TEST(DataTamerParser, PlainParsing)
 {
-  auto channel = DataTamer::LogChannel::create("channel");
-  DataTamerTest::Attached<DataTamer::DummySink> dummy_sink;
+  auto channel = DataTamer2::LogChannel::create("channel");
+  DataTamerTest::Attached<DataTamer2::DummySink> dummy_sink;
   channel->addDataSink(dummy_sink);
 
   int32_t v1 = 5;
@@ -165,7 +165,7 @@ TEST(DataTamerParser, PlainParsing)
   channel->registerValue("v3", &v3);
   channel->registerValue("v4", &v4);
 
-  ASSERT_EQ(channel->takeSnapshot(), DataTamer::SnapshotResult::ok);
+  ASSERT_EQ(channel->takeSnapshot(), DataTamer2::SnapshotResult::ok);
   dummy_sink.drain();
 
   const auto& schema_in = channel->getSchema();
@@ -195,9 +195,9 @@ TEST(DataTamerParser, PlainParsing)
 
 TEST(DataTamerParser, CustomParsing)
 {
-  DataTamer::ChannelsRegistry registry;
+  DataTamer2::ChannelsRegistry registry;
   auto channel = registry.getChannel("channel");
-  DataTamerTest::Attached<DataTamer::DummySink> dummy_sink;
+  DataTamerTest::Attached<DataTamer2::DummySink> dummy_sink;
   channel->addDataSink(dummy_sink);
 
   Pose pose;
@@ -205,7 +205,7 @@ TEST(DataTamerParser, CustomParsing)
   pose.rot = { 4, 5, 6, 7 };
   channel->registerValue("pose", &pose);
 
-  ASSERT_EQ(channel->takeSnapshot(), DataTamer::SnapshotResult::ok);
+  ASSERT_EQ(channel->takeSnapshot(), DataTamer2::SnapshotResult::ok);
   dummy_sink.drain();
 
   const auto& schema_in = channel->getSchema();
@@ -239,9 +239,9 @@ TEST(DataTamerParser, CustomParsing)
 
 TEST(DataTamerParser, VectorParsing)
 {
-  DataTamer::ChannelsRegistry registry;
+  DataTamer2::ChannelsRegistry registry;
   auto channel = registry.getChannel("channel");
-  DataTamerTest::Attached<DataTamer::DummySink> dummy_sink;
+  DataTamerTest::Attached<DataTamer2::DummySink> dummy_sink;
   channel->addDataSink(dummy_sink);
 
   std::vector<double> valsA = { 10, 11, 12 };
@@ -260,7 +260,7 @@ TEST(DataTamerParser, VectorParsing)
   channel->registerValue("points", &points);
   channel->registerValue("quats", &quats);
 
-  ASSERT_EQ(channel->takeSnapshot(), DataTamer::SnapshotResult::ok);
+  ASSERT_EQ(channel->takeSnapshot(), DataTamer2::SnapshotResult::ok);
   dummy_sink.drain();
 
   const auto& schema_in = channel->getSchema();
@@ -316,7 +316,7 @@ TEST(DataTamerParser, VectorParsing)
 // platform-independent one.
 TEST(DataTamerParser, ReadsAndVerifiesBothSchemaVersions)
 {
-  auto channel = DataTamer::LogChannel::create("chan");
+  auto channel = DataTamer2::LogChannel::create("chan");
   Pose pose;
   int32_t count = 0;
   channel->registerValue("pose", &pose);
@@ -353,14 +353,14 @@ TEST(DataTamerParser, ReadsAndVerifiesBothSchemaVersions)
 // Corrupt or hostile input must fail with an exception, never read out of bounds.
 TEST(DataTamerParser, RejectsMalformedInput)
 {
-  auto channel = DataTamer::LogChannel::create("chan");
+  auto channel = DataTamer2::LogChannel::create("chan");
   Pose pose;
   std::vector<double> samples = { 1.0, 2.0 };
   channel->registerValue("pose", &pose);
   channel->registerValue("samples", &samples);
-  DataTamerTest::Attached<DataTamer::DummySink> sink;
+  DataTamerTest::Attached<DataTamer2::DummySink> sink;
   channel->addDataSink(sink);
-  ASSERT_EQ(channel->takeSnapshot(), DataTamer::SnapshotResult::ok);
+  ASSERT_EQ(channel->takeSnapshot(), DataTamer2::SnapshotResult::ok);
   sink.drain();
   const auto snapshot = sink->latestSnapshot();
   const auto schema = BuildSchemaFromText(ToStr(channel->getSchema()));
@@ -387,8 +387,8 @@ TEST(DataTamerParser, RejectsMalformedInput)
   }
   static_assert(sizeof(SnapshotView::schema_hash) == 8, "schema hash must be 64-bit "
                                                         "everywhere");
-  static_assert(sizeof(DataTamer::Snapshot::schema_hash) == 8, "schema hash must be "
-                                                               "64-bit everywhere");
+  static_assert(sizeof(DataTamer2::Snapshot::schema_hash) == 8, "schema hash must be "
+                                                                "64-bit everywhere");
   EXPECT_FALSE(schema.fields[0] !=
                schema.fields[0]);  // operator!= must be defined (link check)
   EXPECT_TRUE(schema.fields[0] != schema.fields[1]);
@@ -472,8 +472,8 @@ struct FakeBatchMsg
 
 TEST(DataTamerParser, SnapshotBatchHelpers)
 {
-  auto channel = DataTamer::LogChannel::create("batch_channel");
-  DataTamerTest::Attached<DataTamer::DummySink> dummy_sink;
+  auto channel = DataTamer2::LogChannel::create("batch_channel");
+  DataTamerTest::Attached<DataTamer2::DummySink> dummy_sink;
   channel->addDataSink(dummy_sink);
 
   int32_t v1 = 0;
@@ -489,7 +489,7 @@ TEST(DataTamerParser, SnapshotBatchHelpers)
     v1 = i;
     v2 = 0.5 * i;
     ASSERT_EQ(channel->takeSnapshot(std::chrono::nanoseconds(1000 + 7 * i)),
-              DataTamer::SnapshotResult::ok);
+              DataTamer2::SnapshotResult::ok);
     dummy_sink.drain();
     const auto snapshot = dummy_sink->latestSnapshot();
     batch.snapshots.push_back({ uint64_t(snapshot.timestamp.count()),
@@ -541,18 +541,18 @@ TEST(DataTamerParser, SnapshotBatchHelpers)
 
 TEST(DataTamerParser, YamlSchemaRoundTrip)
 {
-  DataTamer::Schema schema;
+  DataTamer2::Schema schema;
   schema.channel_name = "yaml";
-  schema.fields = { { "a/b/c", DataTamer::BasicType::FLOAT64, "", false, 0 },
-                    { "a/b/d", DataTamer::BasicType::INT32, "", true, 0 },
-                    { "a/e", DataTamer::BasicType::OTHER, "Custom Type", true, 3 },
-                    { "x", DataTamer::BasicType::UINT8, "", false, 0 } };
-  schema.custom_types["Custom Type"] = { { "v", DataTamer::BasicType::BOOL, "", false,
+  schema.fields = { { "a/b/c", DataTamer2::BasicType::FLOAT64, "", false, 0 },
+                    { "a/b/d", DataTamer2::BasicType::INT32, "", true, 0 },
+                    { "a/e", DataTamer2::BasicType::OTHER, "Custom Type", true, 3 },
+                    { "x", DataTamer2::BasicType::UINT8, "", false, 0 } };
+  schema.custom_types["Custom Type"] = { { "v", DataTamer2::BasicType::BOOL, "", false,
                                            0 } };
   schema.custom_schemas["Blob"] = { "proto\"buf", "line 1\n\tline \"2\"\x01\nlast" };
-  schema.hash = DataTamer::ComputeSchemaHash(schema);
+  schema.hash = DataTamer2::ComputeSchemaHash(schema);
 
-  const auto yaml = DataTamer::ToYaml(schema);
+  const auto yaml = DataTamer2::ToYaml(schema);
   const auto parsed = BuildSchemaFromText(yaml, true);
   EXPECT_EQ(parsed.hash, schema.hash);
   ASSERT_EQ(parsed.fields.size(), 4u);
@@ -565,16 +565,16 @@ TEST(DataTamerParser, YamlSchemaRoundTrip)
   ASSERT_EQ(parsed.custom_schemas.count("Blob"), 1u);
   EXPECT_EQ(parsed.custom_schemas.at("Blob").encoding, "proto\"buf");
   EXPECT_EQ(parsed.custom_schemas.at("Blob").schema, "line 1\n\tline \"2\"\x01\nlast");
-  EXPECT_EQ(ToText(parsed), DataTamer::ToStr(schema));
-  EXPECT_EQ(DataTamer::RenderSchema(schema, DataTamer::SchemaFormat::Yaml), yaml);
-  EXPECT_EQ(DataTamer::RenderSchema(schema, DataTamer::SchemaFormat::Text),
-            DataTamer::ToStr(schema));
+  EXPECT_EQ(ToText(parsed), DataTamer2::ToStr(schema));
+  EXPECT_EQ(DataTamer2::RenderSchema(schema, DataTamer2::SchemaFormat::Yaml), yaml);
+  EXPECT_EQ(DataTamer2::RenderSchema(schema, DataTamer2::SchemaFormat::Text),
+            DataTamer2::ToStr(schema));
 
   // empty mappings
-  DataTamer::Schema empty;
+  DataTamer2::Schema empty;
   empty.channel_name = "empty";
-  empty.hash = DataTamer::ComputeSchemaHash(empty);
-  EXPECT_TRUE(BuildSchemaFromText(DataTamer::ToYaml(empty), true).fields.empty());
+  empty.hash = DataTamer2::ComputeSchemaHash(empty);
+  EXPECT_TRUE(BuildSchemaFromText(DataTamer2::ToYaml(empty), true).fields.empty());
 }
 
 TEST(DataTamerParser, YamlSchemaRejectsMalformedInput)
@@ -627,14 +627,14 @@ TEST(DataTamerParser, YamlSchemaIsLocaleIndependentAndEscapesLineBreaks)
   const std::locale previous =
       std::locale::global(std::locale(std::locale(), new Grouping));
 
-  DataTamer::Schema schema;
+  DataTamer2::Schema schema;
   schema.channel_name = "line\u2028sep";
   // NEL, LS and PS are line breaks for YAML 1.1 loaders: they must be escaped
-  schema.fields = { { "a\u0085b", DataTamer::BasicType::INT8, "", false, 0 },
-                    { "c\u2029d", DataTamer::BasicType::INT8, "", false, 0 },
-                    { "caf\u00e9", DataTamer::BasicType::INT8, "", false, 0 } };
-  schema.hash = DataTamer::ComputeSchemaHash(schema);
-  const auto yaml = DataTamer::ToYaml(schema);
+  schema.fields = { { "a\u0085b", DataTamer2::BasicType::INT8, "", false, 0 },
+                    { "c\u2029d", DataTamer2::BasicType::INT8, "", false, 0 },
+                    { "caf\u00e9", DataTamer2::BasicType::INT8, "", false, 0 } };
+  schema.hash = DataTamer2::ComputeSchemaHash(schema);
+  const auto yaml = DataTamer2::ToYaml(schema);
   std::locale::global(previous);
 
   EXPECT_NE(yaml.find("hash: " + std::to_string(schema.hash) + "\n"), std::string::npos)
@@ -655,13 +655,13 @@ TEST(DataTamerParser, YamlSchemaIsLocaleIndependentAndEscapesLineBreaks)
 
 TEST(DataTamerParser, SchemaRegistryRejectsHashMismatch)
 {
-  DataTamer::Schema schema;
+  DataTamer2::Schema schema;
   schema.channel_name = "c";
-  schema.fields = { { "a", DataTamer::BasicType::INT8, "", false, 0 } };
-  schema.hash = DataTamer::ComputeSchemaHash(schema);
+  schema.fields = { { "a", DataTamer2::BasicType::INT8, "", false, 0 } };
+  schema.hash = DataTamer2::ComputeSchemaHash(schema);
   DataTamerParser::SchemaRegistry registry;
-  EXPECT_THROW(registry.add(schema.hash + 1, DataTamer::ToStr(schema)),
+  EXPECT_THROW(registry.add(schema.hash + 1, DataTamer2::ToStr(schema)),
                std::runtime_error);
   EXPECT_EQ(registry.size(), 0u);
-  EXPECT_EQ(registry.add(schema.hash, DataTamer::ToYaml(schema)).fields.size(), 1u);
+  EXPECT_EQ(registry.add(schema.hash, DataTamer2::ToYaml(schema)).fields.size(), 1u);
 }

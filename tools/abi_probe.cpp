@@ -43,7 +43,7 @@ std::string_view TypeDefinition(Point& point, AddField& add)
 }
 }  // namespace abi_probe_types
 
-namespace DataTamer
+namespace DataTamer2
 {
 namespace abi_probe
 {
@@ -173,4 +173,4 @@ size_t probeRegistry(ChannelsRegistry& registry, TypesRegistry& types)
 }
 
 }  // namespace abi_probe
-}  // namespace DataTamer
+}  // namespace DataTamer2
