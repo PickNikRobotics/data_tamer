@@ -126,6 +126,7 @@ TEST(SinkQueue, PoolExhaustionIsSeparateAndRetainedSlotsAreReusable)
   uint64_t value = 1;
   auto sink = queueSink();
   auto channel = channelWith(sink, &value);
+  channel->setPoolCapacity(64);
   std::vector<SnapshotRef> retained;
   sink->callback = [&](const SnapshotRef& ref) { retained.push_back(ref.clone()); };
   for(int i = 0; i < 64; ++i)

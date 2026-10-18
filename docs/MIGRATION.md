@@ -275,7 +275,7 @@ These changes compile without a warning.
 | MCAP reset every 600 s | truncated the file, losing everything recorded before | continues in a new numbered file; disk use is unbounded | `setCreateNewFileOnReset(false)` |
 | Rollover file names | `run.mcap_1` | `run_1.mcap`; existing files are skipped, not overwritten | none |
 | `worker->stop()` | (did not exist) | closes the MCAP file | none |
-| Slow sink | its queue grew without bound | the channel's pool holds 64 snapshots by default; after that, snapshots are lost with `pool_exhausted` | none; `setPoolCapacity()` raises the bound |
+| Slow sink | its queue grew without bound | the channel's pool holds by default 8 MiB of snapshots, from 64 to 1024 (1 s at 1 kHz for a payload under 8 KB); after that, snapshots are lost with `pool_exhausted` | none; `setPoolCapacity()` raises the bound |
 | ROS 2 data topic QoS | reliable `KeepAll` | reliable `KeepLast(100)` | `options.data_qos = rclcpp::QoS(rclcpp::KeepAll()).reliable()` |
 | ROS 2 schemas topic | reliable, transient-local `KeepAll`, published with the next snapshot | reliable, transient-local `KeepLast(1)`, published by `startLogging()`; each message holds every schema, as before | none |
 | `LoggedValue::set()` | re-enabled a disabled value | stores only | call `setEnabled(true)` |
@@ -283,11 +283,12 @@ These changes compile without a warning.
 | MCAP message `sequence` | always 1 | 1, 2, 3, ... per channel and file | none |
 | Negative snapshot timestamp | written, as a huge unsigned log time | not written by the MCAP sinks; counted in `errors()` | none |
 
-Size the pool for the longest stall you want to absorb, before `startLogging()`:
+The default pool absorbs a disk flush. For a sink that stalls longer, size the pool for
+the longest stall you want to absorb, before `startLogging()`:
 
 ```cpp
 using namespace std::chrono_literals;
-channel->setPoolCapacity(500ms, 1ms);  // 500 slots: a 500 ms disk stall at 1 kHz
+channel->setPoolCapacity(2s, 1ms);  // 2000 slots: a 2 s stall at 1 kHz
 ```
 
 `ChannelsRegistry::setChannelDefaults()` applies the same setting to every new channel.

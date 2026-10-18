@@ -439,8 +439,8 @@ TEST(ChannelsRegistry, ChannelDefaultsApplyToNewChannelsOnly)
     channel->startLogging();
   }
   EXPECT_EQ(acceptedUntilExhausted(*created), 3u);
-  // An existing channel keeps the library default.
-  EXPECT_EQ(acceptedUntilExhausted(*existing), 64u);
+  // An existing channel keeps the library default: 1024 slots for one double.
+  EXPECT_EQ(acceptedUntilExhausted(*existing), 1024u);
 
   // The pool in time: ceil(10 ms / 3 ms) = 4 slots.
   defaults = {};
@@ -458,7 +458,7 @@ TEST(ChannelsRegistry, ChannelDefaultsApplyToNewChannelsOnly)
   fresh->registerValue("value", &value);
   fresh->addDataSink(sink);
   fresh->startLogging();
-  EXPECT_EQ(acceptedUntilExhausted(*fresh), 64u);
+  EXPECT_EQ(acceptedUntilExhausted(*fresh), 1024u);
 }
 
 TEST(ChannelsRegistry, ChannelDefaultsPayloadCapacityIsAFloor)

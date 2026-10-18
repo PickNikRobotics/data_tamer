@@ -2,6 +2,7 @@
 
 #include "data_tamer_v2/data_sink.hpp"
 
+#include <algorithm>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -28,7 +29,20 @@ struct PoolSlot
 class SnapshotPool
 {
 public:
-  static constexpr size_t kDefaultCapacity = 64;
+  /// The default size, when LogChannel::setPoolCapacity() was not called: the slots
+  /// that fit in kDefaultBytes, at least kDefaultMinCapacity and at most
+  /// kDefaultMaxCapacity (one second at 1 kHz). The cap bounds what a refused
+  /// tryAcquire() costs: it reads every slot.
+  static constexpr size_t kDefaultBytes = size_t(8) << 20;
+  static constexpr size_t kDefaultMinCapacity = 64;
+  static constexpr size_t kDefaultMaxCapacity = 1024;
+
+  static constexpr size_t defaultCapacity(size_t payload_capacity, size_t mask_bytes)
+  {
+    const size_t slot_bytes = sizeof(PoolSlot) + payload_capacity + mask_bytes;
+    return std::clamp(kDefaultBytes / slot_bytes, kDefaultMinCapacity,
+                      kDefaultMaxCapacity);
+  }
 
   SnapshotPool(size_t capacity, size_t payload_capacity, size_t mask_bytes)
     : capacity_(capacity), slots_(new PoolSlot[capacity])

@@ -10,6 +10,7 @@
 #include <chrono>
 #include <cstring>
 #include <limits>
+#include <memory>
 #include <string_view>
 #include <thread>
 #include <vector>
@@ -430,6 +431,28 @@ TEST(ChannelCapacity, AutomaticMinimumAndTryDropRecoverAfterShrink)
 }
 
 using DataTamerTest::acceptedUntilExhausted;
+
+// Without setPoolCapacity(): 8 MiB of slots, between 64 and 1024 of them.
+TEST(ChannelCapacity, DefaultPoolFillsEightMiBBetween64And1024Slots)
+{
+  const auto slots = [](auto* value) {
+    CapacityWorker sink;
+    auto channel = LogChannel::create("default");
+    channel->registerValue("value", value);
+    channel->addDataSink(sink);
+    channel->startLogging();
+    return acceptedUntilExhausted(*channel);
+  };
+  uint64_t small = 1;
+  EXPECT_EQ(slots(&small), 1024u);  // 1 s at 1 kHz
+  // 32 KiB per slot: 8 MiB holds 255 of them, with the slot overhead.
+  auto medium = std::make_unique<std::array<double, 4096>>();
+  EXPECT_EQ(slots(medium.get()), SnapshotPool::defaultCapacity(sizeof(*medium), 1));
+  EXPECT_NEAR(double(slots(medium.get())), 256.0, 2.0);
+  // 160 KB per slot: the floor, 10 MB.
+  auto large = std::make_unique<std::array<double, 20000>>();
+  EXPECT_EQ(slots(large.get()), 64u);
+}
 
 TEST(ChannelCapacity, PoolSizedInTimeIsTheCeilingOfStallOverPeriod)
 {

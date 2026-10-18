@@ -279,7 +279,9 @@ public:
   void setPayloadCapacity(size_t bytes);
 
   /// Sets the number of pool slots: how many snapshots sinks may hold or have queued
-  /// at the same time (default 64). Each attached sink gets a queue of the same size.
+  /// at the same time. By default as many as fit in 8 MiB, at least 64 and at most 1024
+  /// (SnapshotPool::defaultCapacity()): 1 s at 1 kHz for a payload under 8 KB, enough
+  /// for a disk flush. Each attached sink gets a queue of the same size.
   /// Call it before startLogging(): it throws std::runtime_error afterwards, and
   /// std::invalid_argument for zero.
   void setPoolCapacity(size_t count);
