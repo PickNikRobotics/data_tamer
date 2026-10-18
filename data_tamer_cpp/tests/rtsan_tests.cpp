@@ -138,6 +138,7 @@ SnapshotResult cycle(const Loop& loop) noexcept [[clang::nonblocking]]
   (void)loop.channel->writeLockWaitMaxNs();
   (void)loop.channel->payloadReallocations();
   (void)loop.channel->droppedOversize();
+  (void)loop.channel->serializeFailures();
   (void)loop.channel->snapshotAttempts();
   (void)loop.channel->snapshotsAccepted();
   (void)loop.channel->poolExhausted();

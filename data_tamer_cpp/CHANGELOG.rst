@@ -106,6 +106,10 @@ reads 1.x files.
   schema; the first ``takeSnapshot()`` calls it. ``tryTakeSnapshot()``, for real-time
   threads, never blocks or allocates, also when data_tamer is loaded with ``dlopen()``.
   Several threads may take snapshots of one channel.
+* ``tryTakeSnapshot()`` is ``noexcept``: a serializer that throws ends it with
+  ``SnapshotResult::serialize_failed``, counted by ``serializeFailures()``;
+  ``takeSnapshot()`` lets the exception through, as in 1.x. The library catches it, so
+  serializers compiled into binaries built against earlier headers are covered too.
 * ``LogChannel::scopedWrite()`` groups writes from another thread into one snapshot.
   ``registerValue()`` accepts a ``const std::atomic<T>*``.
 * ``setEnabled()`` is lock-free; new ``trySetEnabled()`` (``noexcept``) and
@@ -113,8 +117,8 @@ reads 1.x files.
 * ``setPoolCapacity()`` (a count, or a stall tolerance and a period),
   ``setPayloadCapacity()`` and ``ChannelsRegistry::setChannelDefaults()``.
 * ``LogChannel::stats()`` and ``SinkWorker::stats()``: snapshot attempts and accepted
-  snapshots, pool, oversize and lock counters, refusals per sink, deliveries, errors and
-  queue high water.
+  snapshots, pool, oversize, serialization-failure and lock counters, refusals per sink,
+  deliveries, errors and queue high water.
 * ``MCAPRingSink``, a flight recorder: it keeps the last ``window`` of every channel in
   RAM and writes an MCAP file on ``requestDump()``, which is real-time safe.
 * ``ROS2PublisherSink`` takes ``ROS2PublisherOptions``: QoS, aggregation into

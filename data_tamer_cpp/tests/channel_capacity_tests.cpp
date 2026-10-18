@@ -11,8 +11,10 @@
 #include <cstring>
 #include <limits>
 #include <memory>
+#include <stdexcept>
 #include <string_view>
 #include <thread>
+#include <utility>
 #include <vector>
 
 using namespace DataTamer2;
@@ -55,6 +57,7 @@ public:
   size_t size = 8;
   mutable size_t calls = 0;
   bool throw_size = false, throw_serialize = false;
+  std::vector<double>* grow = nullptr;  // grown by one element in serialize()
   const std::string& typeName() const override
   {
     static const std::string name = "SizedValue";
@@ -75,6 +78,11 @@ public:
     if(throw_serialize)
     {
       throw std::runtime_error("serialize");
+    }
+    if(grow)
+    {
+      // Within its capacity: the value changes size after sizing, without allocating.
+      grow->resize(grow->size() + 1);
     }
     const auto value = static_cast<const SizedValue*>(source)->value;
     std::memcpy(bytes.data(), &value, 8);
@@ -281,6 +289,11 @@ TEST(ChannelCapacity, DisabledOversizedAndDeadFieldsNeverSizeOrSerialize)
   EXPECT_EQ(channel->droppedOversize(), 0u);
 }
 
+static_assert(noexcept(std::declval<LogChannel&>().tryTakeSnapshot()));
+
+// A serializer that throws, while sizing or serializing, breaks its contract:
+// tryTakeSnapshot() returns serialize_failed, takeSnapshot() lets the exception through.
+// Either way nothing is queued, and the slot and the snapshot epoch are released.
 TEST(ChannelCapacity, ExceptionsReleaseSingleSlotAndEpochOnBothPaths)
 {
   for(bool real_time : { false, true })
@@ -302,13 +315,86 @@ TEST(ChannelCapacity, ExceptionsReleaseSingleSlotAndEpochOnBothPaths)
       sink.drain();
       serializer->throw_size = sizing;
       serializer->throw_serialize = !sizing;
-      EXPECT_THROW(take(), std::runtime_error);
+      if(real_time)
+      {
+        EXPECT_EQ(take(), SnapshotResult::serialize_failed);
+      }
+      else
+      {
+        try
+        {
+          take();
+          ADD_FAILURE() << "takeSnapshot() did not throw";
+        }
+        catch(const std::runtime_error& error)
+        {
+          EXPECT_STREQ(error.what(), sizing ? "size" : "serialize");
+        }
+      }
+      EXPECT_EQ(channel->snapshotAttempts(), 2u);
+      EXPECT_EQ(channel->snapshotsAccepted(), 1u);
+      EXPECT_EQ(channel->serializeFailures(), real_time ? 1u : 0u);
+      sink.drain();
+      EXPECT_EQ(sink->received, 1u);  // nothing queued
       serializer->throw_size = serializer->throw_serialize = false;
       channel->unregister(id);  // A leaked odd epoch would block here.
       channel->registerCustomValue("value", &value, serializer);
       EXPECT_EQ(take(), SnapshotResult::ok);
       EXPECT_EQ(channel->poolExhausted(), 0u);
     }
+  }
+}
+
+// A vector that grows between sizing and serialization (here from the serializer of the
+// value before it; in a program, a write outside scopedWrite()) no longer fits its bytes,
+// though the slot has room: SerializeMe throws std::runtime_error, which takeSnapshot()
+// lets through and tryTakeSnapshot() turns into serialize_failed. The next snapshot
+// takes the released slot, without allocating.
+TEST(ChannelCapacity, AVectorThatGrowsAfterSizingFailsTheSnapshot)
+{
+  for(bool real_time : { false, true })
+  {
+    auto channel = LogChannel::create("capacity");
+    const auto take = [&] {
+      return real_time ? channel->tryTakeSnapshot() : channel->takeSnapshot();
+    };
+    CapacityWorker sink;
+    auto serializer = std::make_shared<SizedSerializer>();
+    SizedValue value;
+    std::vector<double> later(2, 1.0);
+    later.reserve(16);
+    auto id = channel->registerCustomValue("value", &value, serializer);
+    channel->registerValue("later", &later);  // serialized after "value"
+    channel->setPoolCapacity(1);  // a leaked slot would show as pool_exhausted
+    channel->addDataSink(sink);
+    channel->startLogging();
+    sink.drain();  // The first delivery pass sizes the worker's pass list.
+    serializer->grow = &later;
+    if(real_time)
+    {
+      EXPECT_EQ(take(), SnapshotResult::serialize_failed);
+    }
+    else
+    {
+      EXPECT_THROW(take(), std::runtime_error);
+    }
+    serializer->grow = nullptr;
+    sink.drain();
+    EXPECT_EQ(sink->received, 0u);  // nothing queued
+    size_t allocations = 0;
+    {
+      DataTamerTest::AllocCounter::Scope scope;
+      EXPECT_EQ(take(), SnapshotResult::ok);
+      allocations = scope.allocations();
+    }
+    EXPECT_EQ(allocations, 0u);
+    EXPECT_EQ(channel->serializeFailures(), real_time ? 1u : 0u);
+    EXPECT_EQ(channel->stats().serialize_failures, real_time ? 1u : 0u);
+    EXPECT_EQ(channel->droppedOversize(), 0u);
+    EXPECT_EQ(channel->poolExhausted(), 0u);
+    sink.drain();
+    channel->unregister(id);  // A leaked odd epoch would block here.
+    EXPECT_EQ(take(), SnapshotResult::ok);
   }
 }
 

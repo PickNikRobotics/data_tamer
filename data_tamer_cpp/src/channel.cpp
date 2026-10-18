@@ -143,6 +143,7 @@ struct LogChannel::Pimpl
   size_t pool_capacity = 0;  // 0: SnapshotPool::defaultCapacity() at startLogging()
   std::atomic<uint64_t> payload_reallocations{ 0 };
   std::atomic<uint64_t> dropped_oversize{ 0 };
+  std::atomic<uint64_t> serialize_failures{ 0 };
   std::atomic<uint64_t> attempts{ 0 };  // takeSnapshot()/tryTakeSnapshot() calls
   std::atomic<uint64_t> accepted{ 0 };  // ... that at least one sink took
   std::shared_ptr<SnapshotPool> pool;
@@ -948,6 +949,11 @@ uint64_t LogChannel::droppedOversize() const noexcept DATA_TAMER_NONBLOCKING
   return _p->dropped_oversize.load(std::memory_order_relaxed);
 }
 
+uint64_t LogChannel::serializeFailures() const noexcept DATA_TAMER_NONBLOCKING
+{
+  return _p->serialize_failures.load(std::memory_order_relaxed);
+}
+
 uint64_t LogChannel::snapshotAttempts() const noexcept DATA_TAMER_NONBLOCKING
 {
   return _p->attempts.load(std::memory_order_relaxed);
@@ -1123,14 +1129,8 @@ SnapshotResult LogChannel::takeSnapshot(std::chrono::nanoseconds timestamp)
   return takeSnapshotImpl(timestamp, false);
 }
 
-// Not noexcept: a serializer that breaks the contract and throws still unwinds
-// through it cleanly (ChannelCapacity.ExceptionsReleaseSingleSlotAndEpochOnBothPaths).
-#if defined(DATA_TAMER_HAS_NONBLOCKING)
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wperf-constraint-implies-noexcept"
-#endif
-SnapshotResult
-LogChannel::tryTakeSnapshot(std::chrono::nanoseconds timestamp) DATA_TAMER_NONBLOCKING
+SnapshotResult LogChannel::tryTakeSnapshot(std::chrono::nanoseconds timestamp) noexcept
+    DATA_TAMER_NONBLOCKING
 {
   _p->attempts.fetch_add(1, std::memory_order_relaxed);
   if(!_p->logging_started.load(std::memory_order_acquire))
@@ -1139,9 +1139,6 @@ LogChannel::tryTakeSnapshot(std::chrono::nanoseconds timestamp) DATA_TAMER_NONBL
   }
   return takeSnapshotImpl(timestamp, true);
 }
-#if defined(DATA_TAMER_HAS_NONBLOCKING)
-#pragma clang diagnostic pop
-#endif
 
 SnapshotResult LogChannel::takeSnapshotImpl(std::chrono::nanoseconds timestamp,
                                             bool real_time)
@@ -1225,29 +1222,47 @@ SnapshotResult LogChannel::takeSnapshotImpl(std::chrono::nanoseconds timestamp,
   // active bit acquires registration's initialized holder through its SC flag
   // load; see refreshMaskIfDirty() for the ordering argument.
   _p->refreshMaskIfDirty();
-  // The RT path sizes against the slot: it neither throws nor allocates.
-  const auto payload_size =
-      real_time ? _p->payloadSize(snapshot.payload.capacity()) : _p->payloadSize();
-  if(payload_size > snapshot.payload.capacity())
+  // The serializers, called to size and to serialize, are the only code on the real-time
+  // path that can throw: user code, or SerializeMe when a container changed size outside
+  // scopedWrite(). tryTakeSnapshot() is noexcept: it counts the exception and returns
+  // serialize_failed. takeSnapshot() rethrows it, like its own throws (a slot that
+  // cannot grow). Either way the guards above release the slot, the epoch and the write
+  // mutex, in that order.
+  try
   {
-    if(real_time)
+    // The RT path sizes against the slot: no length_error, no allocation.
+    const auto payload_size =
+        real_time ? _p->payloadSize(snapshot.payload.capacity()) : _p->payloadSize();
+    if(payload_size > snapshot.payload.capacity())
     {
-      _p->dropped_oversize.fetch_add(1, std::memory_order_relaxed);
-      return SnapshotResult::oversize;
+      if(real_time)
+      {
+        _p->dropped_oversize.fetch_add(1, std::memory_order_relaxed);
+        return SnapshotResult::oversize;
+      }
+      snapshot.payload.reserve(checkedDouble(payload_size));
+      _p->payload_reallocations.fetch_add(1, std::memory_order_relaxed);
     }
-    snapshot.payload.reserve(checkedDouble(payload_size));
-    _p->payload_reallocations.fetch_add(1, std::memory_order_relaxed);
+    snapshot.payload.resize(payload_size);
+    SerializeMe::SpanBytes payload_buffer(snapshot.payload);
+    for(size_t i = 0; i < _p->series.size(); i++)
+    {
+      if(GetBit(_p->active_mask, i))
+      {
+        _p->series[i].holder.serialize(payload_buffer);
+      }
+    }
+    snapshot.payload.resize(snapshot.payload.size() - payload_buffer.size());
   }
-  snapshot.payload.resize(payload_size);
-  SerializeMe::SpanBytes payload_buffer(snapshot.payload);
-  for(size_t i = 0; i < _p->series.size(); i++)
+  catch(...)
   {
-    if(GetBit(_p->active_mask, i))
+    if(!real_time)
     {
-      _p->series[i].holder.serialize(payload_buffer);
+      throw;
     }
+    _p->serialize_failures.fetch_add(1, std::memory_order_relaxed);
+    return SnapshotResult::serialize_failed;
   }
-  snapshot.payload.resize(snapshot.payload.size() - payload_buffer.size());
   snapshot.active_mask = _p->active_mask;
   snapshot.schema_hash = _p->schema.hash;
   snapshot.timestamp = timestamp;

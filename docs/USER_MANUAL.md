@@ -175,8 +175,10 @@ if(result != DataTamer2::SnapshotResult::ok)
 
 Where `takeSnapshot()` would wait for a writer or grow a slot, `tryTakeSnapshot()` gives up
 and returns `blocked` or `oversize`. It reports every failure as a `SnapshotResult` and
-doesn't throw. Several threads may take snapshots of one channel: they take turns on its
-write mutex, and `tryTakeSnapshot()` returns `blocked` while another snapshot holds it.
+doesn't throw: an exception from a custom serializer inside it becomes `serialize_failed`
+(the throw itself allocates: fix the serializer). Several threads may take snapshots of
+one channel: they take turns on its write mutex, and `tryTakeSnapshot()` returns
+`blocked` while another snapshot holds it.
 `tryTakeSnapshot()` doesn't allocate when data_tamer is loaded with `dlopen()` either, in
 a plugin for example.
 
@@ -431,13 +433,14 @@ Check what `takeSnapshot()` or `tryTakeSnapshot()` returns:
 | `no_sinks` | No sink is attached. | Attach one. |
 | `oversize` | A vector outgrew the slot (`tryTakeSnapshot()` only). | Raise `setPayloadCapacity()`. |
 | `blocked` | A writer or another snapshot held the write mutex too long (`tryTakeSnapshot()`), or the calling thread holds it itself (both). | Shorten `scopedWrite()` scopes; release guards before a snapshot. |
+| `serialize_failed` | A serializer threw inside `tryTakeSnapshot()` (`takeSnapshot()` lets the exception through): a custom serializer failed, or another thread changed a vector without `scopedWrite()`, so it no longer fit. | Fix the serializer; write shared variables inside `scopedWrite()`. |
 | `not_started` | `startLogging()` was not called (`tryTakeSnapshot()` only). | Call it before the loop. |
 
 For totals over time, read the counters from a non real-time thread:
 
 ```cpp
 const auto channel_stats = channel->stats();
-// attempts, accepted, pool_exhausted, dropped_oversize, dropped_by_sink, ...
+// attempts, accepted, pool_exhausted, dropped_oversize, serialize_failures, ...
 const auto sink_stats = worker->stats();
 // delivered, errors, last_error, queue_high_water
 ```

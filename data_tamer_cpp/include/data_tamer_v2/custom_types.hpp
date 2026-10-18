@@ -20,7 +20,9 @@ namespace DataTamer2
 /**
  * @brief Serializes a type the library does not know (registerCustomValue()).
  * The snapshot path, tryTakeSnapshot() included, calls serializedSize(),
- * isFixedSize() and serialize(): they must not allocate, block or throw.
+ * isFixedSize() and serialize(): they must not allocate, block or throw. If one throws
+ * anyway, tryTakeSnapshot() returns SnapshotResult::serialize_failed and takeSnapshot()
+ * propagates the exception.
  *
  * ABI: the virtual functions are frozen for 2.x (the library calls them through
  * vtables compiled into user binaries) and the class keeps no data members. New

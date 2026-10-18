@@ -1,5 +1,6 @@
 // LogChannel::Stats (attempts, accepted, dropped_by_sink) and SinkWorker::Stats.
 #include "data_tamer_v2/channel.hpp"
+#include "data_tamer_v2/custom_types.hpp"
 #include "data_tamer_v2/data_sink.hpp"
 #include "alloc_counter.hpp"
 #include "test_sinks.hpp"
@@ -8,6 +9,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <stdexcept>
@@ -39,12 +41,42 @@ public:
   int snapshots = 0;
   int throw_every = 0;  // 0: never
 };
+
+// Writes its 8-byte value, or throws while `fail` is set.
+class FlakySerializer : public CustomSerializer
+{
+public:
+  const std::string& typeName() const override
+  {
+    static const std::string name = "Flaky";
+    return name;
+  }
+  size_t serializedSize(const void*) const override { return sizeof(uint64_t); }
+  bool isFixedSize() const override { return true; }
+  void serialize(const void* instance, SerializeMe::SpanBytes& buffer) const override
+  {
+    if(fail)
+    {
+      throw std::runtime_error("flaky");
+    }
+    SerializeMe::SerializeIntoBuffer(buffer, *static_cast<const uint64_t*>(instance));
+  }
+  bool fail = false;
+};
+
+struct Flaky
+{
+  uint64_t value = 0;
+};
 }  // namespace
 
 TEST(ChannelStats, CountersMatchEveryResultOfAScriptedSequence)
 {
   auto channel = LogChannel::create("stats");
   auto value = channel->createLoggedValue<std::vector<double>>("value", { 1.0 });
+  Flaky flaky;
+  auto flaky_serializer = std::make_shared<FlakySerializer>();
+  channel->registerCustomValue("flaky", &flaky, flaky_serializer);
   channel->setPoolCapacity(3);
   channel->setPayloadCapacity(256);
   auto a = manual<CountingSink>();
@@ -88,6 +120,10 @@ TEST(ChannelStats, CountersMatchEveryResultOfAScriptedSequence)
   expect(channel->tryTakeSnapshot(), SnapshotResult::oversize);
   value->set(std::vector<double>{ 1.0 });
 
+  flaky_serializer->fail = true;
+  expect(channel->tryTakeSnapshot(), SnapshotResult::serialize_failed);
+  flaky_serializer->fail = false;
+
   SnapshotResult probe = SnapshotResult::ok;
   {
     // stats() takes the control mutex, which must not be taken inside a
@@ -99,18 +135,20 @@ TEST(ChannelStats, CountersMatchEveryResultOfAScriptedSequence)
   expect(channel->tryTakeSnapshot(), SnapshotResult::ok);
 
   // Every result of the script was exercised, and the counters add up.
-  for(auto result : { SnapshotResult::ok, SnapshotResult::partial,
-                      SnapshotResult::rejected, SnapshotResult::no_sinks,
-                      SnapshotResult::not_started, SnapshotResult::pool_exhausted,
-                      SnapshotResult::oversize, SnapshotResult::blocked })
+  for(auto result :
+      { SnapshotResult::ok, SnapshotResult::partial, SnapshotResult::rejected,
+        SnapshotResult::no_sinks, SnapshotResult::not_started,
+        SnapshotResult::pool_exhausted, SnapshotResult::oversize, SnapshotResult::blocked,
+        SnapshotResult::serialize_failed })
   {
     EXPECT_GE(seen[result], 1u) << "result " << int(result) << " never happened";
   }
   const auto stats = channel->stats();
-  EXPECT_EQ(stats.attempts, 13u);
+  EXPECT_EQ(stats.attempts, 14u);
   EXPECT_EQ(stats.accepted, 6u);  // 5 ok + 1 partial
   EXPECT_EQ(stats.pool_exhausted, 2u);
   EXPECT_EQ(stats.dropped_oversize, 1u);
+  EXPECT_EQ(stats.serialize_failures, 1u);
   EXPECT_EQ(stats.write_lock_contended, 1u);
   EXPECT_EQ(channel->snapshotAttempts(), stats.attempts);
   EXPECT_EQ(channel->snapshotsAccepted(), stats.accepted);
