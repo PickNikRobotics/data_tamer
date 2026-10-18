@@ -48,7 +48,8 @@ private:
     }
     if(channel_->takeSnapshot() != DataTamer2::SnapshotResult::ok)
     {
-      RCLCPP_WARN(get_logger(), "Snapshot was not accepted by every sink");
+      RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000,
+                           "Snapshot was not accepted by every sink");
     }
   }
 

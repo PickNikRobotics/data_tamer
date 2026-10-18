@@ -1,5 +1,5 @@
 // T03 Channels and the registry
-// You will learn: share a sink across rates, toggle a value, and own a LoggedValue.
+// You will learn: share a sink across rates and toggle a value.
 // Run: ./T03_channels_and_registry then open T03_joint_states.mcap in PlotJuggler
 #include "data_tamer_v2/data_tamer.hpp"
 #include "data_tamer_v2/sinks/mcap_sink.hpp"
@@ -23,9 +23,6 @@ int main()
   const auto effort_id = controller->registerValue("efforts", &efforts);
   planner->registerValue("target_positions", &target_positions);
 
-  // Owns its storage and unregisters on destruction. Release the last handle on
-  // a normal thread: unregistering can wait for a snapshot in progress.
-  auto tracking_error = controller->createLoggedValue<double>("tracking_error");
   for(int cycle = 0; cycle < 1500; ++cycle)
   {
     const double t = cycle * 0.001;
@@ -41,7 +38,6 @@ int main()
       target_positions = { std::sin(4 * t + 0.1), std::sin(4 * t + 0.6) };
       planner->takeSnapshot();
     }
-    tracking_error->set(target_positions[0] - positions[0]);
     // Disabling keeps the registration and only omits the value from the snapshots.
     if(cycle == 500)
     {

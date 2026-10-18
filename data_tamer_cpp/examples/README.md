@@ -9,7 +9,7 @@ directory, and the `.mcap` files open in [PlotJuggler](https://github.com/facont
 
 1. [T01_hello_mcap.cpp](T01_hello_mcap.cpp): register borrowed doubles, take snapshots, close an MCAP file.
 2. [T02_custom_types.cpp](T02_custom_types.cpp): vectors, arrays, a local TypeDefinition and a vendor TypeDefinitionTrait.
-3. [T03_channels_and_registry.cpp](T03_channels_and_registry.cpp): a 1 kHz controller and 10 Hz planner, shared sinks, toggles and RAII.
+3. [T03_channels_and_registry.cpp](T03_channels_and_registry.cpp): a 1 kHz controller and 10 Hz planner, shared sinks and toggles.
 4. [T04_realtime_loop.cpp](T04_realtime_loop.cpp): prepare with startLogging, use tryTakeSnapshot, count failures and read stats outside the loop.
 5. [T05_threads.cpp](T05_threads.cpp): a sensor thread, atomic LoggedValue updates and consistent scopedWrite transactions.
 6. [T06_flight_recorder.cpp](T06_flight_recorder.cpp): keep recent history in MCAPRingSink and dump around a fault.
@@ -18,23 +18,17 @@ directory, and the `.mcap` files open in [PlotJuggler](https://github.com/facont
 
 ## Build and run
 
-From `data_tamer_cpp/`, use a preset (`release` also enables benchmarks, `asan` enables
-the tutorials with ASan/UBSan):
+From `data_tamer_cpp/`, every preset builds the tutorials (`debug`, `release`, `asan`,
+`tsan`):
 
 ```bash
-cmake --preset asan
-cmake --build --preset asan -j 6
-ctest --preset asan -R '^T0[1-8]_'
-cd build/asan/examples
-./T01_hello_mcap
-./T02_custom_types
-./T03_channels_and_registry
-./T04_realtime_loop
-./T05_threads
-./T06_flight_recorder
-./T07_custom_sink
-./T08_mcap_reader T01_joint_states.mcap
+cmake --preset debug
+cmake --build --preset debug -j 6
+ctest --preset debug -R '^T0[1-8]_'
 ```
+
+Run one from `build/debug/examples`, e.g. `./T01_hello_mcap`. T08 reads
+`T01_joint_states.mcap` unless you pass another file.
 
 Or configure explicitly, from the repository root:
 

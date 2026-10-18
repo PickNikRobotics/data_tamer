@@ -21,6 +21,7 @@ int main()
   channel->registerValue("positions", &positions);
   channel->registerValue("velocities", &velocities);
   channel->registerValue("efforts", &efforts);
+  // A LoggedValue owns its storage and unregisters itself when destroyed.
   auto motor_temperature = channel->createLoggedValue<double>("motor_temperature", 25);
   channel->startLogging();
 
@@ -31,17 +32,22 @@ int main()
       const double t = sample * 0.001;
       // An independent scalar: set() is an atomic store, safe without a guard.
       motor_temperature->set(25 + std::sin(t));
+      // Compute first, so that the transaction only copies and snapshots wait less.
+      std::array<double, 2> new_positions{}, new_velocities{}, new_efforts{};
+      for(size_t joint = 0; joint < new_positions.size(); ++joint)
+      {
+        const double phase = 4 * t + 0.5 * static_cast<double>(joint);
+        new_positions[joint] = std::sin(phase);
+        new_velocities[joint] = 4 * std::cos(phase);
+        new_efforts[joint] = 0.2 * std::sin(phase);
+      }
       {
         // Raw registered values written by another thread MUST use scopedWrite().
         // One transaction makes position, velocity and effort match one sample.
         auto tx = channel->scopedWrite();
-        for(size_t joint = 0; joint < positions.size(); ++joint)
-        {
-          const double phase = 4 * t + 0.5 * static_cast<double>(joint);
-          positions[joint] = std::sin(phase);
-          velocities[joint] = 4 * std::cos(phase);
-          efforts[joint] = 0.2 * std::sin(phase);
-        }
+        positions = new_positions;
+        velocities = new_velocities;
+        efforts = new_efforts;
       }  // Release before sleeping; never block while holding the transaction.
       next_sample += std::chrono::milliseconds(1);
       std::this_thread::sleep_until(next_sample);

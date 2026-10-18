@@ -10,14 +10,12 @@
 #include <chrono>
 #include <cmath>
 #include <cstddef>
-#include <cstdint>
 #include <fstream>
 #include <ios>
 #include <iostream>
 #include <stdexcept>
 #include <string>
 #include <thread>
-#include <unordered_map>
 #include <variant>
 
 class CsvSink : public DataTamer2::DataSink
@@ -34,25 +32,28 @@ protected:
   void onSchema(const DataTamer2::Schema& schema) override
   {
     // Translate the public schema once; the standalone parser needs no library state.
-    schemas_[schema.hash] =
-        DataTamerParser::BuildSchemaFromText(DataTamer2::ToStr(schema));
+    schemas_.add(schema.hash, DataTamer2::ToStr(schema));
   }
 
   void onSnapshot(const DataTamer2::SnapshotRef& snapshot) override
   {
-    const auto& schema = schemas_.at(snapshot->schema_hash);
+    const DataTamerParser::Schema* schema = schemas_.find(snapshot->schema_hash);
+    if(schema == nullptr)
+    {
+      throw std::runtime_error("CSV snapshot of an unknown schema");
+    }
     DataTamerParser::SnapshotView view;
     view.schema_hash = snapshot->schema_hash;
     view.active_mask = { snapshot->active_mask.data(), snapshot->active_mask.size() };
     view.payload = { snapshot->payload.data(), snapshot->payload.size() };
     const auto write_number = [&](const std::string& name,
                                   const DataTamerParser::VarNumber& value) {
-      output_ << snapshot->timestamp.count() << ',' << schema.channel_name << ',' << name
+      output_ << snapshot->timestamp.count() << ',' << schema->channel_name << ',' << name
               << ',';
       std::visit([&](auto number) { output_ << number; }, value);
       output_ << '\n';
     };
-    if(!DataTamerParser::ParseSnapshot(schema, view, write_number))
+    if(!DataTamerParser::ParseSnapshot(*schema, view, write_number))
     {
       throw std::runtime_error("CSV snapshot does not match its schema");
     }
@@ -68,7 +69,7 @@ protected:
 private:
   // SinkWorker serializes callbacks: these members need no additional mutex.
   std::ofstream output_;
-  std::unordered_map<uint64_t, DataTamerParser::Schema> schemas_;
+  DataTamerParser::SchemaRegistry schemas_;
 };
 
 int main()

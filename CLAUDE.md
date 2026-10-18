@@ -111,15 +111,15 @@ is sourced, because a top-level build is the ROS flavour whenever it finds
 newer compilers; CI turns it on everywhere.
 
 ```bash
-cmake --preset debug            # build/debug: tests on, examples and benchmarks off
+cmake --preset debug            # build/debug: tests and examples on, benchmarks off
 cmake --build --preset debug
 ctest --preset debug            # every gtest case is its own ctest entry
 ctest --preset debug -R 'WireFormat'
 ```
 
-Other presets: `release` (adds examples and benchmarks), `asan` (adds examples and runs
-them as tests), `tsan` (runs the tests through `tests/run_under_tsan.sh`).
-CI runs `asan` and `tsan`.
+Other presets: `release` (adds benchmarks), `asan`, `tsan` (runs the tests through
+`tests/run_under_tsan.sh`). Every preset builds the examples and runs the tutorials T01
+to T08 as tests. CI runs `asan` and `tsan`.
 
 Install check, as the CI `install` job does it (repeat with `-DBUILD_SHARED_LIBS=ON`):
 

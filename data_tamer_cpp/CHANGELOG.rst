@@ -5,7 +5,8 @@ Changelog for package data_tamer
 Unreleased
 ----------
 * Examples: replace the introductory demos with eight progressive robot-arm tutorials,
-  cover custom types, real-time logging, threads and sinks, and run them under ASan/UBSan.
+  cover custom types, real-time logging, threads and sinks; ctest runs them, under
+  ASan/UBSan and TSan in CI.
 * **Behaviour change, pool**: by default a channel's pool has as many slots as fit in
   8 MiB, at least 64 and at most 1024 (``SnapshotPool::defaultCapacity()``, from the
   slot's payload reservation): one second at 1 kHz for a payload under 8 KB, longer

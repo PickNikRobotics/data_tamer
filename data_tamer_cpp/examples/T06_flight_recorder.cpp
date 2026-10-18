@@ -4,8 +4,10 @@
 #include "data_tamer_v2/channel.hpp"
 #include "data_tamer_v2/sinks/mcap_ring_sink.hpp"
 
+#include <array>
 #include <chrono>
 #include <cmath>
+#include <cstddef>
 #include <iostream>
 #include <thread>
 
@@ -25,15 +27,11 @@ int main()
               << " messages) " << dump.error << std::endl;
   });
 
-  double shoulder_position = 0, shoulder_velocity = 0, shoulder_effort = 0;
-  double elbow_position = 0, elbow_velocity = 0, elbow_effort = 0;
+  std::array<double, 2> positions{}, velocities{}, efforts{};
   auto channel = LogChannel::create("controller");
-  channel->registerValue("shoulder/position", &shoulder_position);
-  channel->registerValue("shoulder/velocity", &shoulder_velocity);
-  channel->registerValue("shoulder/effort", &shoulder_effort);
-  channel->registerValue("elbow/position", &elbow_position);
-  channel->registerValue("elbow/velocity", &elbow_velocity);
-  channel->registerValue("elbow/effort", &elbow_effort);
+  channel->registerValue("positions", &positions);
+  channel->registerValue("velocities", &velocities);
+  channel->registerValue("efforts", &efforts);
   channel->addDataSink(worker);
   channel->startLogging();
 
@@ -41,12 +39,13 @@ int main()
   for(int i = 0; i < 1500; i++)
   {
     const double t = i * 0.001;
-    shoulder_position = std::sin(4 * t);
-    shoulder_velocity = 4 * std::cos(4 * t);
-    shoulder_effort = 0.2 * std::sin(4 * t);
-    elbow_position = std::sin(4 * t + 0.5);
-    elbow_velocity = 4 * std::cos(4 * t + 0.5);
-    elbow_effort = 0.2 * std::sin(4 * t + 0.5);
+    for(size_t joint = 0; joint < positions.size(); ++joint)
+    {
+      const double phase = 4 * t + 0.5 * static_cast<double>(joint);
+      positions[joint] = std::sin(phase);
+      velocities[joint] = 4 * std::cos(phase);
+      efforts[joint] = 0.2 * std::sin(phase);
+    }
     (void)channel->tryTakeSnapshot();
     if(i == 1000)
     {
