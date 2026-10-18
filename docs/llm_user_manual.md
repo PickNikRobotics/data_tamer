@@ -1049,9 +1049,9 @@ use `dt.SchemaRegistry`, `dt.parse_snapshot_msg()` and `dt.iter_snapshot_batch()
 and keeps the result on the `Schema`: parse a schema once per channel and reuse it (it
 may be shared by threads), and do not modify it after decoding. For columns (pandas,
 numpy), `dt.parse_snapshot_values(schema, mask, payload)` returns `(names, values)`, two
-tuples in payload order equal to `tuple(d)` and `tuple(d.values())` of the dict; one
-layout (mask and vector lengths) returns the same `names` object, but compare names with
-`==`. `python/README.md` builds pandas tables with it.
+tuples in payload order equal to `tuple(d)` and `tuple(d.values())` of the dict;
+consecutive snapshots of one layout (mask and vector lengths) return the same `names`
+object, but compare names with `==`. `python/README.md` builds pandas tables with it.
 
 In C++, `data_tamer_v2/data_tamer_parser.hpp` is a single header with no dependency
 on the library. `DataTamerParser::BuildSchemaFromText()` reads both schema renderings.
