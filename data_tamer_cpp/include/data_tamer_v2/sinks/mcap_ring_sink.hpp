@@ -132,8 +132,9 @@ public:
    * dump is handed to the writer thread). Requests are not merged, and a file being
    * written does not block new ones.
    */
-  [[nodiscard]] bool requestDump(
-      std::chrono::nanoseconds post_trigger = std::chrono::nanoseconds(0)) noexcept;
+  [[nodiscard]] bool
+  requestDump(std::chrono::nanoseconds post_trigger =
+                  std::chrono::nanoseconds(0)) noexcept DATA_TAMER_NONBLOCKING;
 
   /// True from an accepted requestDump() until its dump is handed to the writer.
   [[nodiscard]] bool dumpRequested() const noexcept;

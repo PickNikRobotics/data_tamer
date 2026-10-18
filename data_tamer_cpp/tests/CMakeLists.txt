@@ -183,6 +183,27 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND DATA_TAMER_LIBRARY_TYPE STREQUAL "SHAR
         DATA_TAMER_SONAME="$<TARGET_SONAME_FILE_NAME:data_tamer>")
 endif()
 
+# The real-time API under RealtimeSanitizer (Clang 20 or later), on Linux: the tests
+# read procfs, and the library's RTSan hooks are ELF only. Only this program is built
+# with -fsanitize=realtime: the runtime intercepts the library's calls as well. Not
+# with another sanitizer, whose runtime would conflict.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT CMAKE_CXX_FLAGS MATCHES "-fsanitize")
+    include(CheckCXXSourceCompiles)
+    set(CMAKE_REQUIRED_FLAGS -fsanitize=realtime)
+    set(CMAKE_REQUIRED_LINK_OPTIONS -fsanitize=realtime)
+    check_cxx_source_compiles("int main() { return 0; }" DATA_TAMER_HAS_RTSAN)
+    unset(CMAKE_REQUIRED_FLAGS)
+    unset(CMAKE_REQUIRED_LINK_OPTIONS)
+    if(DATA_TAMER_HAS_RTSAN)
+        data_tamer_add_gtest(rtsan_test
+            SOURCES rtsan_tests.cpp
+            LIBRARIES data_tamer ${DATA_TAMER_MCAP_TARGET})
+        target_compile_features(rtsan_test PRIVATE cxx_std_20)
+        target_compile_options(rtsan_test PRIVATE -fsanitize=realtime)
+        target_link_options(rtsan_test PRIVATE -fsanitize=realtime)
+    endif()
+endif()
+
 # Resolve the package directory first: when it is a symlink (workspaces that
 # link each package into src/), "<link>/../python" names a directory next to
 # the link, not next to the real package, and Python normalizes ".." textually.
@@ -299,6 +320,19 @@ foreach(case VALUE VECTOR MEMBER LOGGED)
     data_tamer_compile_fail_test(long_double_${case_name}_is_rejected
         long_double_registration.cpp DT_LONG_DOUBLE_${case} REGEX "has no wire type")
 endforeach()
+
+# The real-time API is marked [[clang::nonblocking]] (DATA_TAMER_NONBLOCKING, Clang 20 or
+# later): a nonblocking caller compiles with -Wfunction-effects -Werror, and a call that
+# is not real-time safe in it is an error.
+check_cxx_compiler_flag(-Wfunction-effects DATA_TAMER_HAS_WFUNCTION_EFFECTS)
+if(DATA_TAMER_HAS_WFUNCTION_EFFECTS)
+    foreach(case TAKE_SNAPSHOT REGISTER_VALUE NON_SCALAR_SET STATS)
+        string(TOLOWER ${case} case_name)
+        data_tamer_compile_fail_test(nonblocking_caller_rejects_${case_name}
+            nonblocking_caller.cpp DT_${case} OPTIONS -Wfunction-effects
+            REGEX "must not call non-'nonblocking' function")
+    endforeach()
+endif()
 
 data_tamer_compile_fail_test(endian_swap_of_long_double_is_rejected
     endian_swap_size.cpp DT_SWAP_LONG_DOUBLE OPTIONS -DSERIALIZE_LITTLEENDIAN=0

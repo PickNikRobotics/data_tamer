@@ -10,6 +10,17 @@
 namespace DataTamerTest
 {
 
+/// Death tests re-execute the binary (threadsafe style), so the parent's threads don't
+/// matter. Everything a death test needs must be created inside its statement.
+inline void useThreadsafeDeathTests()
+{
+#ifdef GTEST_FLAG_SET
+  GTEST_FLAG_SET(death_test_style, "threadsafe");
+#else
+  ::testing::GTEST_FLAG(death_test_style) = "threadsafe";
+#endif
+}
+
 /// Death-test child: exits 2 if `body` still runs after `limit` (a hang), else 3 after
 /// a failed assertion (printed to stderr, which the parent shows) or 0.
 template <typename Body>
@@ -36,16 +47,11 @@ template <typename Body>
 
 /// Runs `body` in a child process and expects it to finish without a failed assertion
 /// within `limit`: a deadlock then fails this test instead of hanging the whole binary.
-/// Threadsafe style: the child re-executes the binary, so the parent's threads don't
-/// matter. Everything `body` needs must be created inside it.
+/// Everything `body` needs must be created inside it (useThreadsafeDeathTests()).
 template <typename Body>
 void expectFinishes(Body body, std::chrono::milliseconds limit = std::chrono::seconds(10))
 {
-#ifdef GTEST_FLAG_SET
-  GTEST_FLAG_SET(death_test_style, "threadsafe");
-#else
-  ::testing::GTEST_FLAG(death_test_style) = "threadsafe";
-#endif
+  useThreadsafeDeathTests();
   EXPECT_EXIT(runWithWatchdog(limit, body), ::testing::ExitedWithCode(0), "");
 }
 

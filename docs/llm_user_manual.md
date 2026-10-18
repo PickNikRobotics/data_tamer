@@ -1029,7 +1029,7 @@ The two extra counters cost the snapshot path two atomic increments (`attempts` 
 | non-scalar `LoggedValue::set()`, `get()`, pointer guards | no | Lock the write mutex while a snapshot serializes. |
 | `trySetEnabled()`, `LogChannel::isEnabled()`, `LoggedValue::setEnabled()`, `LoggedValue::isEnabled()` | yes | Lock-free, `noexcept`. `LogChannel::setEnabled()` can throw. |
 | `MCAPRingSink::requestDump()` | yes | One compare-exchange; `noexcept`. |
-| `writeLockContended()`, `payloadReallocations()`, `droppedOversize()`, `snapshotAttempts()`, `snapshotsAccepted()`, `poolExhausted()` | yes | Atomic loads. |
+| `writeLockContended()`, `writeLockWaitMaxNs()`, `payloadReallocations()`, `droppedOversize()`, `snapshotAttempts()`, `snapshotsAccepted()`, `poolExhausted()` | yes | Atomic loads; `noexcept`. |
 | `registerValue()`, `createLoggedValue()`, `unregister()`, `LoggedValue` destructor | no | Control mutex; can wait for a snapshot. |
 | `addDataSink()`, `removeDataSink()`, `startLogging()` | no | Control mutex; run sink callbacks. |
 | `LogChannel::stats()`, `getSchema()` | no | Control mutex. |
@@ -1041,6 +1041,25 @@ Control operations must stay out of custom serializers, and out of sink callback
 where you can (those that would wait for the callback's own worker throw
 `std::logic_error`, see [Writing a custom sink](#writing-a-custom-sink)); inside
 `scopedWrite()` scopes and pointer guards they are safe.
+
+The "yes" rows are declared `[[clang::nonblocking]]` (macro `DATA_TAMER_NONBLOCKING`,
+Clang 20 or later; nothing on other compilers), and `NsecSinceEpoch()`, the default
+timestamp, too; for the templates `LoggedValue::set()` and `get()` Clang infers it for
+scalars and rejects the other types. Mark the user's real-time function
+`noexcept [[clang::nonblocking]]`; then:
+
+- `-Wfunction-effects` (Clang, not in `-Wall`) makes each call to a "no" row an
+  error with `-Werror`: "function with 'nonblocking' attribute must not call
+  non-'nonblocking' function 'DataTamer2::LogChannel::takeSnapshot'".
+- `-fsanitize=realtime` on the user's executable (RTSan, Clang 20 or later) aborts at
+  the first allocation, lock or system call made under that function, inside data_tamer
+  and custom serializers too, with a prebuilt library as well, and at a call of
+  `takeSnapshot()`. On Linux (ELF) only, data_tamer tells RTSan about the calls the
+  real-time path makes on purpose (releasing the write mutex, waking a sleeping sink
+  worker or a waiting control operation or `stop()`), so they are not reported; on
+  other platforms (macOS) RTSan reports the release of the write mutex in the first
+  `tryTakeSnapshot()`. `RTSAN_OPTIONS=halt_on_error=0` reports every distinct stack
+  instead of aborting at the first.
 
 Threads involved:
 
