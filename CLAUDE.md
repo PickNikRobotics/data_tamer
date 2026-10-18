@@ -18,7 +18,7 @@ behaviour, API, defaults, options, build steps or the wire format updates, in th
 - docs/llm_user_manual.md;
 - docs/MIGRATION.md, while 2.0 is unreleased: every source break and silent behaviour
   change since 1.0.4;
-- docs/wire_format.md, together with the golden vectors and both decoders;
+- docs/wire_format.md, together with the golden vectors and every decoder;
 - code comments and doc comments in the public headers;
 - this CLAUDE.md.
 
@@ -84,6 +84,10 @@ under "Unreleased" in `data_tamer_cpp/CHANGELOG.rst`.
   `test_fast_path.py` checks them against it, values and error messages: random schemas,
   the golden vectors, the 1.0.4 recording and every decode of the other tests.
   `benchmark_decode.py` times the three.
+- `data_tamer_foxglove/`: strict ESM TypeScript snapshot decoder, no runtime dependencies;
+  schema versions 4/5/6, bounded mask/layout plans and ROS 2 message helpers. Its
+  `test/` checks golden vectors, the 1.0.4 recording and generated Python differential
+  cases; `bench/benchmark.mjs` times flat and nested output.
 - `docs/`: `USER_MANUAL.md` (for people), `llm_user_manual.md` (for coding agents),
   `MIGRATION.md` (1.x to 2.0), `wire_format.md` and its golden vectors in
   `wire_format/vectors/` (`v4/`: a 1.0.4 recording).
@@ -177,6 +181,20 @@ is installed (`pip install "./python[mcap]"`).
 python3 -m unittest discover -s python -p 'test_*.py'
 ```
 
+TypeScript decoder (Node 22, Python 3.9+ for the differential oracle):
+
+```bash
+cd data_tamer_foxglove
+npm ci
+npm run typecheck             # strict tsc --noEmit
+npm test                      # builds, generates fixed-seed Python oracle, node --test
+npm run bench                 # decodeFlat/decodeMessage, ns per snapshot
+```
+
+The recording test uses the development dependency `@mcap/core`. The Python generator
+runs with `python3 -I`, imports the repository reference explicitly, and needs only the
+standard library.
+
 Regenerate the golden vectors after a deliberate format change, then review the diff
 and update `docs/wire_format/vectors/expected.json` by hand (`vectors/v4/` is a file
 recorded by data_tamer 1.0.4: it is never regenerated):
@@ -266,9 +284,10 @@ DATA_TAMER_UPDATE_GOLDEN=1 \
 - A change to the schema text, the payload encoding, the schema hash or the MCAP and ROS
   message layout is a format revision. Update `docs/wire_format.md`, regenerate the
   vectors, update `python/data_tamer_parser.py` (the reference walker, then the compiled
-  plans until `test_fast_path.py` passes) and `data_tamer_parser.hpp`, and bump
+  plans until `test_fast_path.py` passes), `data_tamer_parser.hpp` and the TypeScript
+  decoder in `data_tamer_foxglove/src/`, and bump
   `SCHEMA_VERSION` or `SCHEMA_YAML_VERSION` in `types.hpp` when the text changes. The
-  `WireFormat.*` tests and the Python tests fail until all of them agree.
+  `WireFormat.*`, Python and TypeScript tests fail until all four decoders agree.
 - LogChannel, ChannelsRegistry, SinkWorker, TypesRegistry, MCAPSink, MCAPRingSink and
   ROS2PublisherSink keep all their state behind a Pimpl (LogChannel's only other base is
   `enable_shared_from_this`). Add members to the Pimpl. `tests/abi_tests.cpp` pins the
@@ -313,7 +332,7 @@ DATA_TAMER_UPDATE_GOLDEN=1 \
 
 ## Versioning and ABI policy
 
-One version number covers the C++ library, the ROS packages and the Python decoder
+One version number covers the C++ library, the ROS packages, Python and TypeScript decoders
 (2.0.0 until the 2.0.0 tag). It lives in:
 
 - `data_tamer_cpp/CMakeLists.txt`, `project(... VERSION x.y.z)`. The shared library gets
@@ -325,6 +344,7 @@ One version number covers the C++ library, the ROS packages and the Python decod
 - `data_tamer_cpp/package.xml` and `data_tamer_msgs/package.xml`, `<version>`;
 - `data_tamer_cpp/conanfile.py`, `version`;
 - `python/data_tamer_parser.py`, `__version__`;
+- `data_tamer_foxglove/package.json`, `version` (keep `package-lock.json` consistent);
 - `data_tamer_cpp/CHANGELOG.rst`: the head section is "Unreleased" until the release
   commit renames it to `x.y.z (date)`.
 

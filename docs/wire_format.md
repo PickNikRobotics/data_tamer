@@ -18,14 +18,17 @@ sources. Two artifacts keep it honest:
 - `data_tamer_cpp/tests/wire_format_tests.cpp` regenerates those bytes from the
   library and fails if they differ. `python/data_tamer_parser.py` is a
   standard-library-only reference decoder and `python/test_data_tamer_parser.py`
-  decodes the same fixtures and checks them against `expected.json`.
+  decodes the same fixtures and checks them against `expected.json`. The fourth
+  decoder, `data_tamer_foxglove/src/` (TypeScript, no runtime dependencies), tests
+  the same fixtures and recording plus generated cases against the Python reference.
 
 A change to any byte described here is a format revision: bump `SCHEMA_VERSION`
 in `data_tamer_v2/types.hpp`, `data_tamer_v2/data_tamer_parser.hpp` and
-`python/data_tamer_parser.py` (and the version history below), regenerate the vectors with
+`python/data_tamer_parser.py` (and the version history below), update the version
+checks in `data_tamer_foxglove/src/schema.ts`, and regenerate the vectors with
 `DATA_TAMER_UPDATE_GOLDEN=1 datatamer_test --gtest_filter='WireFormat.*'`,
 update `expected.json` by hand (it is the oracle, never generated), update the
-Python decoder, and describe the change in this file.
+Python and TypeScript decoders, and describe the change in this file.
 
 ### Version history
 
@@ -56,6 +59,7 @@ There are no strings, no alignment padding, no separators and no per-field tags.
 A C++ `std::string` is registered as `char[]`: a `uint32` count, then that many bytes,
 with no terminator and no charset.
 All multi-byte numbers are **little-endian**.
+Decoders need not preserve NaN payload bits or signaling NaNs; -0.0 and every non-NaN bit pattern must be exact.
 
 ### Basic types
 
