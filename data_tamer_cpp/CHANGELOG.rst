@@ -20,13 +20,15 @@ Unreleased
   no test; the gtest packages are ``<test_depend>``, ``lz4`` and ``libzstd-dev`` are no
   longer dependencies. ``data_tamer_msgs`` drops ``builtin_interfaces`` and
   ``ament_lint_common``. Both manifests have a description and urls.
-* **ABI, MCAP**: the bundled MCAP C++ headers are 2.1.3 (they were 1.3.0, which does not
-  compile with GCC 15), with their MIT licence. libdata_tamer compiles the MCAP
-  implementation and exports its ``mcap::`` symbols, which change with it; from 2.0.0
-  the bundled MCAP version is part of the 2.x ABI. An installed MCAP package is no longer
-  used silently instead of the bundled headers: ``DATA_TAMER_USE_SYSTEM_MCAP=ON`` opts in
-  (conan does, with ``mcap/2.1.3`` and conan 2.4 or later).
-* **Packaging**: the bundled MCAP headers install in ``include/data_tamer_v2_mcap/mcap``,
+* **ABI, MCAP**: outside ROS 2, MCAP is 2.1.3 (1.x bundled 1.3.0, which does not compile
+  with GCC 15). It is no longer in the repository (``3rdparty/`` is gone): CMake downloads
+  the release archive, pinned by hash, with FetchContent; offline builds pass
+  ``FETCHCONTENT_SOURCE_DIR_DATA_TAMER_MCAP``. Under ROS 2 it is still ``mcap_vendor``.
+  libdata_tamer compiles the MCAP implementation and exports its ``mcap::`` symbols,
+  which change with it; from 2.0.0 the MCAP version is part of the 2.x ABI. An installed
+  MCAP package is no longer used silently instead: ``DATA_TAMER_USE_SYSTEM_MCAP=ON`` opts
+  in (conan does, with ``mcap/2.1.3`` and conan 2.4 or later).
+* **Packaging**: the MCAP headers and licence install in ``include/data_tamer_v2_mcap/mcap``,
   an include directory of ``data_tamer::data_tamer`` that holds nothing else. The
   ``mcap_lib`` target is gone (1.x installed ``libmcap_lib.a``). zstd and lz4 are
   linked privately, preferring the shared libraries of their own CMake packages, with a

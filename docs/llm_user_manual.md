@@ -31,7 +31,8 @@ subproject builds no ROS 2 sink, no tests or examples and has no install rules, 
 `ROS2PublisherSink` exists only in the ROS 2 build (the build defines `USING_ROS2`).
 
 `data_tamer_v2/sinks/mcap_encoding.hpp` includes `<mcap/writer.hpp>`. The target carries
-those headers: the bundled MCAP 2.1.3 (installed in `include/data_tamer_v2_mcap`),
+those headers: MCAP 2.1.3, which the build downloads (installed in
+`include/data_tamer_v2_mcap`),
 `mcap_vendor::mcap` under ROS 2, or conan's `mcap`. Outside ROS 2, libdata_tamer contains
 the MCAP implementation: never define `MCAP_IMPLEMENTATION` and never link another MCAP
 build into the same program. Under ROS 2 the implementation is `mcap_vendor`'s

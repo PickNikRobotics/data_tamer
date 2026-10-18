@@ -353,11 +353,13 @@ Python has a decoder now, `pip install "data-tamer-parser[mcap]"` (see
 - Without ROS, the shared library's SONAME is `libdata_tamer.so.2`. In 1.x it was the bare
   `libdata_tamer.so`, which the 2.0 install still provides as a symlink, so a 1.x binary
   that is not rebuilt loads the 2.0 library and fails on missing symbols.
-- `find_package(data_tamer 2 REQUIRED)` accepts any 2.x. The bundled MCAP is 2.1.3
-  (1.x had 1.3.0); its headers are installed with the library, which also contains the
-  MCAP implementation: don't define `MCAP_IMPLEMENTATION` in a program that links
-  data_tamer. An MCAP package installed on the build machine is no longer used instead
-  of the bundled one unless the build sets `DATA_TAMER_USE_SYSTEM_MCAP=ON`. The
+- `find_package(data_tamer 2 REQUIRED)` accepts any 2.x. Outside ROS 2, MCAP is 2.1.3
+  (1.x bundled 1.3.0) and no longer in the repository: CMake downloads it, so the first
+  configure needs network access (or `FETCHCONTENT_SOURCE_DIR_DATA_TAMER_MCAP`). Its
+  headers are installed with the library, which also contains the MCAP implementation:
+  don't define `MCAP_IMPLEMENTATION` in a program that links data_tamer. An MCAP package
+  installed on the build machine is no longer used instead unless the build sets
+  `DATA_TAMER_USE_SYSTEM_MCAP=ON`. The
   `mcap_lib` target is gone: link `data_tamer::data_tamer`.
 - Under ROS 2, data_tamer links `mcap_vendor` publicly: the target gives a program the
   MCAP headers and `libmcap`. `ros2_publisher_sink.hpp` no longer includes the

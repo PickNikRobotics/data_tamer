@@ -54,11 +54,12 @@ under "Unreleased" in `data_tamer_cpp/CHANGELOG.rst`.
     The gtest programs come from `data_tamer_add_gtest()`.
   - `examples/`: T01 to T04, `mcap_1m_per_sec`, `mcap_reader`, `ros2_publisher` (ROS only).
   - `benchmarks/`: built only when Google Benchmark is found.
-  - `3rdparty/mcap/`: the headers of MCAP C++ 2.1.3 and their MIT `LICENSE`, copied
-    unmodified from foxglove/mcap (`cpp/mcap/include/mcap`, tag `releases/cpp/v2.1.3`).
-    No CMake code lives there. Installed (not under ROS, not with
-    `DATA_TAMER_USE_SYSTEM_MCAP`) in `include/data_tamer_v2_mcap/mcap`, an include
-    directory of the target that holds nothing else.
+  - MCAP is not in the tree. Under ROS 2 it is `mcap_vendor`. Otherwise CMake downloads
+    the MCAP C++ 2.1.3 release archive of foxglove/mcap (tag `releases/cpp/v2.1.3`,
+    pinned by SHA256) with FetchContent, as `data_tamer_mcap`, unless
+    `DATA_TAMER_USE_SYSTEM_MCAP` finds an installed package (conan). The downloaded
+    headers and MIT `LICENSE` are installed in `include/data_tamer_v2_mcap/mcap`, an
+    include directory of the target that holds nothing else.
   - `cmake/`: `Findzstd.cmake` and `Findlz4.cmake` (the imported targets
     `data_tamer::zstd` and `data_tamer::lz4`, adapted from Meta's modules: keep their
     Apache-2.0 notice), the installed config `data_tamerConfig.cmake.in`, and
@@ -157,8 +158,8 @@ DATA_TAMER_UPDATE_GOLDEN=1 \
   core public header, so add new headers there. `sinks/ros2_publisher_sink.hpp` is
   exempt (rclcpp sets its own standard). Examples build as C++17 consumers.
 - The library builds with `-Wall -Wextra -Wpedantic -Wconversion -Wno-sign-conversion`,
-  and `-Werror` with `DATA_TAMER_WERROR=ON` (presets and CI). The bundled MCAP headers
-  are a SYSTEM include directory.
+  and `-Werror` with `DATA_TAMER_WERROR=ON` (presets and CI). The MCAP headers are a
+  SYSTEM include directory.
 - The real-time path allocates nothing, takes no blocking lock, does no I/O and does not
   throw. It covers `tryTakeSnapshot()` and what it reaches (`SnapshotPool::tryAcquire`,
   `WriteMutex::tryLockWithSpin`, `ValuePtr` serialization, `SinkWorker::tryPush` and
@@ -245,9 +246,9 @@ DATA_TAMER_UPDATE_GOLDEN=1 \
   `fwd_header_*` targets check it). `data_tamer.hpp` is the umbrella header: it
   includes `channel.hpp` (and through it `data_sink.hpp`), as 1.x did. Keep heavy
   includes out of the other public headers.
-- `3rdparty/` is vendored: do not edit it. pre-commit excludes it. Update MCAP by copying
-  the upstream headers and LICENSE unmodified; after the 2.0.0 tag that is an ABI change
-  (see "Versioning and ABI policy").
+- MCAP is updated by changing the URL and `URL_HASH` of `FetchContent_Declare` in
+  `CMakeLists.txt` together with the conan requirement; after the 2.0.0 tag that is an ABI
+  change (see "Versioning and ABI policy").
 
 ## Versioning and ABI policy
 
@@ -302,9 +303,9 @@ that major. That is frozen inside 2.x:
   text (any wire revision, see Invariants). The transaction chain and the series flag
   word are not among them: their code is in the library, and only the size of
   `WriteTransaction` reaches consumers;
-- the bundled MCAP version (`3rdparty/mcap`, 2.1.3). libdata_tamer compiles the MCAP
+- the MCAP version that CMake downloads (2.1.3). libdata_tamer compiles the MCAP
   implementation and exports its `mcap::` symbols, and `sinks/mcap_encoding.hpp` hands
-  consumers MCAP types, so vendoring another MCAP release after the 2.0.0 tag is a
+  consumers MCAP types, so pinning another MCAP release after the 2.0.0 tag is a
   break. Under ROS 2 MCAP's ABI is `mcap_vendor`'s; a build with
   `DATA_TAMER_USE_SYSTEM_MCAP` (conan) has the ABI of the MCAP package it found, which
   its packager keeps fixed within 2.x. No other library's symbols are exported:

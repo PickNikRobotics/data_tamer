@@ -364,7 +364,8 @@ subproject the library builds without ROS 2, tests or examples, and installs not
 unless you set `DATA_TAMER_INSTALL=ON`. The README lists the build options.
 
 `data_tamer_v2/sinks/mcap_encoding.hpp` includes the MCAP headers, which come with the
-target: the bundled copy (MCAP 2.1.3, installed in `include/data_tamer_v2_mcap`),
+target: MCAP 2.1.3, downloaded when the library is built and installed in
+`include/data_tamer_v2_mcap`,
 `mcap_vendor` under ROS 2, or the `mcap` package with conan. Outside ROS 2 the MCAP
 implementation is part of libdata_tamer, so don't define `MCAP_IMPLEMENTATION` and don't
 link another MCAP library. A static install also needs zstd and lz4 where you build; its

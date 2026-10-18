@@ -69,12 +69,11 @@ jobs:
       uses: codecov/codecov-action@v3
       with:
         directory: ${{github.workspace}}/build
-        gcov_ignore: ${{github.workspace}}/3rdparty
         verbose: true
       env:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
-  # Installs a static and a shared build (bundled MCAP, zstd and lz4 from apt) and builds
+  # Installs a static and a shared build (MCAP downloaded, zstd and lz4 from apt) and builds
   # test_package/, a find_package(data_tamer 2) consumer, against each.
   install:
     runs-on: ${{ matrix.os }}

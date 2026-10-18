@@ -27,7 +27,7 @@ class DataTamerConan(ConanFile):
         "examples": True,
         "benchmarks": False
     }
-    # MCAP comes from the mcap package (DATA_TAMER_USE_SYSTEM_MCAP), not from 3rdparty/.
+    # MCAP comes from the mcap package (DATA_TAMER_USE_SYSTEM_MCAP), not from FetchContent.
     exports_sources = (
         "cmake/*",
         "include/*",

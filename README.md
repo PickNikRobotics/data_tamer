@@ -180,7 +180,11 @@ tests are built when `BUILD_TESTING` is ON (colcon's default); pass
 
 ## Compiling with CMake
 
-Needs zstd and lz4 (on Ubuntu, `libzstd-dev liblz4-dev`); the MCAP headers are bundled.
+Needs zstd and lz4 (on Ubuntu, `libzstd-dev liblz4-dev`). CMake downloads the MCAP C++
+headers (release 2.1.3, pinned by hash) with FetchContent. Without network access, pass
+`-DFETCHCONTENT_SOURCE_DIR_DATA_TAMER_MCAP=<dir>`, an unpacked copy of
+[the release archive](https://github.com/foxglove/mcap/archive/refs/tags/releases/cpp/v2.1.3.tar.gz),
+or use an installed MCAP with `DATA_TAMER_USE_SYSTEM_MCAP`.
 From the repository root:
 
 ```
@@ -196,7 +200,7 @@ cmake --install build --prefix /usr/local
 | `DATA_TAMER_BUILD_ROS` | top level | The ROS 2 package, when `ament_cmake` is found. |
 | `DATA_TAMER_INSTALL` | top level | Install rules. |
 | `DATA_TAMER_WERROR` | `OFF` | Warnings in the library are errors (the presets and CI turn it ON). |
-| `DATA_TAMER_USE_SYSTEM_MCAP` | `OFF` | `find_package(mcap)` instead of the bundled MCAP headers. |
+| `DATA_TAMER_USE_SYSTEM_MCAP` | `OFF` | `find_package(mcap)` instead of downloading MCAP. |
 
 "Top level" means ON when data_tamer is the project being built and OFF when it is
 added with `add_subdirectory()` or FetchContent: then it is a plain library target,
@@ -218,8 +222,9 @@ cmake --build build/Release --parallel
 
 ## Third-party code
 
-- `data_tamer_cpp/3rdparty/mcap`: the headers of [MCAP](https://github.com/foxglove/mcap)
-  C++ 2.1.3, by Foxglove, MIT licence (`3rdparty/mcap/LICENSE`, installed with them).
+- [MCAP](https://github.com/foxglove/mcap) C++ 2.1.3, by Foxglove, MIT licence: not in the
+  repository. Downloaded at configure time outside ROS 2, and its headers and `LICENSE`
+  are installed in `include/data_tamer_v2_mcap/mcap`.
 - `data_tamer_cpp/cmake/Findzstd.cmake` and `Findlz4.cmake`: adapted from find modules by
   Meta Platforms, Apache License 2.0 (notice in each file).
 

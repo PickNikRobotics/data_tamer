@@ -16,7 +16,7 @@ option(DATA_TAMER_BUILD_ROS "Build the ROS 2 package when ament_cmake is found"
     ${PROJECT_IS_TOP_LEVEL})
 option(DATA_TAMER_INSTALL "Generate the install rules" ${PROJECT_IS_TOP_LEVEL})
 option(DATA_TAMER_USE_SYSTEM_MCAP
-    "Use an installed MCAP package (find_package(mcap)) instead of the bundled headers" OFF)
+    "Use an installed MCAP package (find_package(mcap)) instead of downloading MCAP" OFF)
 # OFF by default, so that a release builds with the next compiler (ROS buildfarm, conda,
 # distributions); the presets and CI turn it ON.
 option(DATA_TAMER_WERROR "Treat warnings in the library sources as errors" OFF)
@@ -39,9 +39,9 @@ endif()
 find_package(Threads REQUIRED)
 
 # MCAP: under ROS 2 from mcap_vendor, whose libmcap contains the implementation.
-# Otherwise the headers come from 3rdparty/mcap (default) or from an installed package
-# (DATA_TAMER_USE_SYSTEM_MCAP, e.g. conan), and libdata_tamer compiles the
-# implementation (src/sinks/mcap_sink.cpp), with zstd and lz4.
+# Otherwise the headers are downloaded with FetchContent (default) or come from an
+# installed package (DATA_TAMER_USE_SYSTEM_MCAP, e.g. conan), and libdata_tamer compiles
+# the implementation (src/sinks/mcap_sink.cpp), with zstd and lz4.
 # DATA_TAMER_MCAP_TARGET gives tests and examples the MCAP headers.
 if(DATA_TAMER_BUILD_ROS)
     find_package(mcap_vendor REQUIRED)
@@ -54,12 +54,23 @@ else()
     list(PREPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
     find_package(zstd REQUIRED)
     find_package(lz4 REQUIRED)
-    set(DATA_TAMER_MCAP_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/mcap/include")
+    # The MCAP C++ release archive, pinned by hash. Without network access (conda-forge,
+    # distribution builds), pass -DFETCHCONTENT_SOURCE_DIR_DATA_TAMER_MCAP=<the unpacked
+    # archive or a checkout of the tag>. It has no CMakeLists.txt: this only downloads it.
+    include(FetchContent)
+    if(POLICY CMP0135)
+        cmake_policy(SET CMP0135 NEW)
+    endif()
+    FetchContent_Declare(data_tamer_mcap
+        URL https://github.com/foxglove/mcap/archive/refs/tags/releases/cpp/v2.1.3.tar.gz
+        URL_HASH SHA256=181a7c52cc982444cdef533087b321538b025fcc5eec258e0489d68b9ce53ded)
+    FetchContent_MakeAvailable(data_tamer_mcap)
+    set(DATA_TAMER_MCAP_INCLUDE_DIR "${data_tamer_mcap_SOURCE_DIR}/cpp/mcap/include")
     # Imported, so local to this directory and its subdirectories.
-    add_library(data_tamer_bundled_mcap INTERFACE IMPORTED)
-    set_target_properties(data_tamer_bundled_mcap PROPERTIES
+    add_library(data_tamer_mcap_headers INTERFACE IMPORTED)
+    set_target_properties(data_tamer_mcap_headers PROPERTIES
         INTERFACE_INCLUDE_DIRECTORIES "${DATA_TAMER_MCAP_INCLUDE_DIR}")
-    set(DATA_TAMER_MCAP_TARGET data_tamer_bundled_mcap)
+    set(DATA_TAMER_MCAP_TARGET data_tamer_mcap_headers)
 endif()
 
 if(DATA_TAMER_BUILD_ROS AND NOT BUILD_SHARED_LIBS)
@@ -117,8 +128,9 @@ else()
     # sinks/mcap_encoding.hpp includes the MCAP headers: they are installed in a
     # directory of their own (include/data_tamer_v2_mcap/mcap), exported as an include
     # directory that holds nothing else, so that they cannot shadow another MCAP in the
-    # same prefix nor expose anything else. SYSTEM: the library's warning flags do not apply to vendored code (the
-    # include directories of an installed, imported target are SYSTEM anyway).
+    # same prefix nor expose anything else. SYSTEM: the library's warning flags do not
+    # apply to MCAP (the include directories of an installed, imported target are SYSTEM
+    # anyway).
     # zstd and lz4 are PRIVATE: a shared install exports no dependency, a static one
     # finds them again in data_tamerConfig.cmake.
     target_include_directories(data_tamer SYSTEM PUBLIC
@@ -169,8 +181,10 @@ if(DATA_TAMER_INSTALL)
     include(CMakePackageConfigHelpers)
     install(DIRECTORY include/ DESTINATION include)
     if(NOT DATA_TAMER_BUILD_ROS AND NOT DATA_TAMER_USE_SYSTEM_MCAP)
-        install(DIRECTORY 3rdparty/mcap/include/mcap DESTINATION include/data_tamer_v2_mcap)
-        install(FILES 3rdparty/mcap/LICENSE DESTINATION include/data_tamer_v2_mcap/mcap)
+        install(DIRECTORY ${DATA_TAMER_MCAP_INCLUDE_DIR}/mcap
+            DESTINATION include/data_tamer_v2_mcap)
+        install(FILES ${data_tamer_mcap_SOURCE_DIR}/LICENSE
+            DESTINATION include/data_tamer_v2_mcap/mcap)
     endif()
 
     install(
