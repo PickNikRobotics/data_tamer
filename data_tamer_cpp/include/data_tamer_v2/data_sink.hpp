@@ -88,9 +88,9 @@ private:
  * onStop() and onStart() do nothing by default, and a throw from them is counted too.
  *
  * Keep onSnapshot() short. Every queued or retained SnapshotRef holds a slot of the
- * channel's snapshot pool, which all its sinks share (LogChannel::setPoolCapacity(),
- * 64 slots by default). A sink that blocks or retains references exhausts the pool, and
- * the samples are then lost for EVERY sink of the channel
+ * channel's snapshot pool, which all its sinks share (LogChannel::setPoolCapacity(); by
+ * default 8 MiB, from 64 to 1024 slots). A sink that blocks or retains references
+ * exhausts the pool, and the samples are then lost for EVERY sink of the channel
  * (SnapshotResult::pool_exhausted). For slow work, copy the snapshot
  * (`Snapshot copy = *ref;`) and hand the copy to a thread of your own.
  *

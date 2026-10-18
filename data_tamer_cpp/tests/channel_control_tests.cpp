@@ -530,7 +530,9 @@ TEST(ChannelControl, ExhaustedPoolDoesNotCallSerializer)
   auto serializer = std::make_shared<PausedSerializer>();
   channel->registerCustomValue("value", &value, serializer);
   channel->addDataSink(sink);
-  for(size_t i = 0; i < SnapshotPool::kDefaultCapacity; ++i)
+  constexpr size_t kSlots = 8;
+  channel->setPoolCapacity(kSlots);
+  for(size_t i = 0; i < kSlots; ++i)
   {
     ASSERT_EQ(channel->takeSnapshot(), SnapshotResult::ok);
   }

@@ -139,7 +139,7 @@ struct LogChannel::Pimpl
   std::atomic<uint64_t> write_lock_wait_max_ns{ 0 };
   ActiveMask active_mask;  // write mutex held; independent of retained slots
   size_t payload_capacity = 0;
-  size_t pool_capacity = SnapshotPool::kDefaultCapacity;
+  size_t pool_capacity = 0;  // 0: SnapshotPool::defaultCapacity() at startLogging()
   std::atomic<uint64_t> payload_reallocations{ 0 };
   std::atomic<uint64_t> dropped_oversize{ 0 };
   std::atomic<uint64_t> attempts{ 0 };  // takeSnapshot()/tryTakeSnapshot() calls
@@ -1035,9 +1035,12 @@ void LogChannel::startLogging()
       _p->shared->mask_dirty.exchange(false, std::memory_order_seq_cst);
       _p->rebuildMask();
       const auto capacity = _p->initialPayloadCapacity();
+      const auto mask_bytes = _p->active_mask.size();
+      const auto slots = _p->pool_capacity != 0 ?
+                             _p->pool_capacity :
+                             SnapshotPool::defaultCapacity(capacity, mask_bytes);
       // Publish the pool only after every slot has reserved successfully.
-      _p->pool = std::make_shared<SnapshotPool>(_p->pool_capacity, capacity,
-                                                _p->active_mask.size());
+      _p->pool = std::make_shared<SnapshotPool>(slots, capacity, mask_bytes);
     }
     transaction.reset();  // writers proceed while the sinks hear the schema
     // Announce to one sink at a time with the control mutex released: a sink

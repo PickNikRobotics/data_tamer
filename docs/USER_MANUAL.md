@@ -158,11 +158,8 @@ allocates, so a real-time loop can call it every cycle. Do the work that allocat
 the loop, and call `tryTakeSnapshot()` inside it:
 
 ```cpp
-using namespace std::chrono_literals;
-
 // before the loop, on a normal thread
-channel->setPoolCapacity(200ms, 1ms);  // absorb a 200 ms sink stall at 1 kHz
-channel->startLogging();                    // freeze the schema, allocate, announce to the sinks
+channel->startLogging();  // freeze the schema, allocate, announce to the sinks
 
 // inside the loop
 const auto result = channel->tryTakeSnapshot();
@@ -179,11 +176,12 @@ write mutex, and `tryTakeSnapshot()` returns `blocked` while another snapshot ho
 `tryTakeSnapshot()` doesn't allocate when data_tamer is loaded with `dlopen()` either, in
 a plugin for example.
 
-The pool has 64 slots by default, which is 64 ms at 1 kHz. If a sink stalls longer than
-that (a disk flush can take 200 ms), new snapshots are dropped with `pool_exhausted`.
-`setPoolCapacity(stall, period)` sizes the pool for the stall you want to absorb.
-`setPayloadCapacity(bytes)` reserves room for vectors that grow at run time. Both must be
-called before `startLogging()`.
+The pool is sized for you: as many slots as fit in 8 MiB, at least 64 and at most 1024.
+With a payload under 8 KB (1000 doubles) that is 1024 slots, one second at 1 kHz, longer
+than a disk flush (up to 200 ms). If a sink stalls longer, new snapshots are dropped with
+`pool_exhausted`, and `setPoolCapacity(stall, period)` sizes the pool for the stall you
+want to absorb. `setPayloadCapacity(bytes)` reserves room for vectors that grow at run
+time. Both must be called before `startLogging()`.
 
 ## Sinks
 
@@ -310,7 +308,7 @@ using namespace std::chrono_literals;
 
 auto& registry = DataTamer2::ChannelsRegistry::Global();
 DataTamer2::ChannelDefaults defaults;
-defaults.pool_stall_tolerance = 200ms;  // with the next line: 200 slots per channel
+defaults.pool_stall_tolerance = 2s;  // with the next line: 2000 slots per channel
 defaults.pool_snapshot_period = 1ms;
 registry.setChannelDefaults(defaults);  // for channels created from now on
 registry.addDefaultSink(DataTamer2::MCAPSink::create("run.mcap"));

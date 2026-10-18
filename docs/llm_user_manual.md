@@ -454,7 +454,8 @@ Call `channel->startLogging()` once, after registration and before the loop, on 
 real-time thread. It:
 
 - freezes the schema;
-- allocates the snapshot pool: `setPoolCapacity()` slots (default 64), each reserving the
+- allocates the snapshot pool: `setPoolCapacity()` slots (by default as many as fit in
+  8 MiB, from 64 to 1024: see [Snapshot pool](#snapshot-pool-per-channel)), each reserving the
   payload bytes described in [Payload capacity](#payload-capacity-per-slot);
 - allocates, for each attached sink, a queue holding as many references as the pool has
   slots (24 bytes each). A sink attached later gets its queue in `addDataSink()`;
@@ -626,11 +627,11 @@ channels it creates, their default sinks and their default settings.
 using namespace std::chrono_literals;
 auto& registry = DataTamer2::ChannelsRegistry::Global();
 DataTamer2::ChannelDefaults defaults;
-defaults.pool_stall_tolerance = 200ms;  // absorb a 200 ms sink stall ...
-defaults.pool_snapshot_period = 1ms;    // ... at 1 kHz: 200 slots
+defaults.pool_stall_tolerance = 2s;   // absorb a 2 s sink stall ...
+defaults.pool_snapshot_period = 1ms;  // ... at 1 kHz: 2000 slots
 registry.setChannelDefaults(defaults);
 registry.addDefaultSink(DataTamer2::MCAPSink::create("run.mcap"));
-auto channel = registry.getChannel("controller");  // 200 slots, MCAP attached
+auto channel = registry.getChannel("controller");  // 2000 slots, MCAP attached
 // ... register, startLogging(), log ...
 registry.stopAll();  // run.mcap is complete
 ```
@@ -904,12 +905,16 @@ sinks are sized from the pool and never fill.
 
 ### Snapshot pool (per channel)
 
-Every snapshot queued in any sink, or retained by one, holds a slot. The default is 64
-slots (`SnapshotPool::kDefaultCapacity`): 64 ms at 1 kHz. Size it in time, before
-`startLogging()`:
+Every snapshot queued in any sink, or retained by one, holds a slot. By default the pool
+has as many slots as fit in 8 MiB (`SnapshotPool::kDefaultBytes`), at least 64 and at
+most 1024 (`SnapshotPool::defaultCapacity()`, from the slot's payload reservation): one
+second at 1 kHz for a payload under 8 KB, 256 ms for 32 KB. Most programs keep it. The
+cap keeps a refused `tryTakeSnapshot()` short, because it reads every slot (about 7 us
+with 1024 slots and cold caches). For a sink that stalls longer, size the pool in time,
+before `startLogging()`:
 
 ```cpp
-channel->setPoolCapacity(200ms, 1ms);  // ceil(200 ms / 1 ms) = 200 slots
+channel->setPoolCapacity(2s, 1ms);  // ceil(2 s / 1 ms) = 2000 slots
 ```
 
 `setPoolCapacity(stall_tolerance, snapshot_period)` takes the longest sink stall you
@@ -1069,7 +1074,8 @@ with another standard library (`docs/wire_format.md`, section 5).
       `not_started` forever.
 - [ ] Used `takeSnapshot()` on a real-time thread: use `tryTakeSnapshot()`.
 - [ ] Ignored `SnapshotResult` and never read `stats()`: drops stay invisible.
-- [ ] Kept the default pool (64 ms at 1 kHz) with a sink that stalls longer.
+- [ ] Kept the default pool with a sink that stalls longer than it lasts (1 s at 1 kHz for
+      a payload under 8 KB, less for a larger one).
 - [ ] Did slow work or called a mutating channel API inside `onSnapshot()`.
 - [ ] Set `data_qos` to `KeepAll` for `ROS2PublisherSink` in a robot process: a slow
       subscriber then grows the publisher's memory without bound.

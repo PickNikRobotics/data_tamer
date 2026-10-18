@@ -4,6 +4,14 @@ Changelog for package data_tamer
 
 Unreleased
 ----------
+* **Behaviour change, pool**: by default a channel's pool has as many slots as fit in
+  8 MiB, at least 64 and at most 1024 (``SnapshotPool::defaultCapacity()``, from the
+  slot's payload reservation): one second at 1 kHz for a payload under 8 KB, longer
+  than a disk flush. It had 64 slots, 64 ms at 1 kHz, so a 200 ms flush dropped
+  snapshots unless the program sized the pool. ``SnapshotPool::kDefaultCapacity`` is
+  gone. The default is in the library, so it also applies to binaries built against
+  earlier headers. The cap keeps a refused ``tryTakeSnapshot()`` short: it reads every
+  slot, about 7 us for 1024 with cold caches.
 * **Breaking, namespace**: the library's namespace is ``DataTamer2`` (it was
   ``DataTamer``): ``DataTamer2::LogChannel``, ``using namespace DataTamer2;``,
   ``DataTamer2::TypeDefinitionTrait``. ``SerializeMe`` and ``DataTamerParser`` keep their
@@ -576,7 +584,7 @@ Unreleased
   groups updates into one transaction and supports nested non-scalar ``set()``/``get()``.
   Lone scalar updates do not promise consistency across values.
 * ``takeSnapshot()`` now freezes schema and capacity state on its first attempt,
-  then serializes directly into a 64-slot channel pool. Its fixed-size warmed
+  then serializes directly into a channel pool. Its fixed-size warmed
   library path takes no structure mutex and performs no heap allocation; user
   serializers and non-strict payload growth may still allocate or throw.
   Sequentially consistent sink, liveness, mask-dirty and reader-epoch
@@ -597,7 +605,7 @@ Unreleased
   ``DummySink`` exposes synchronized accessors instead of public members.
 * ``MCAPSink`` and ``ROS2PublisherSink`` store private state behind a Pimpl.
   This release changes their ABI; downstream binaries must be rebuilt.
-* Sink delivery now shares snapshots through a 64-slot channel pool and a
+* Sink delivery now shares snapshots through a channel pool and a
   preallocated blocking queue. ``DataSinkBase(size_t queue_capacity = 1024)``
   treats capacity as a block-rounded minimum shared by all channel producers;
   ``DummySink`` and ``MCAPSink`` forward the same final defaulted argument.
