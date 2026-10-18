@@ -52,8 +52,10 @@ elseif(DATA_TAMER_USE_SYSTEM_MCAP)
     set(DATA_TAMER_MCAP_TARGET mcap::mcap)
 else()
     list(PREPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
-    find_package(zstd REQUIRED)
-    find_package(lz4 REQUIRED)
+    # MODULE: only cmake/Find*.cmake define data_tamer::zstd and data_tamer::lz4 (they
+    # try the upstream configs themselves), also with CMAKE_FIND_PACKAGE_PREFER_CONFIG.
+    find_package(zstd MODULE REQUIRED)
+    find_package(lz4 MODULE REQUIRED)
     # The MCAP C++ release archive, pinned by hash. Without network access (conda-forge,
     # distribution builds), pass -DFETCHCONTENT_SOURCE_DIR_DATA_TAMER_MCAP=<the unpacked
     # archive or a checkout of the tag>. It has no CMakeLists.txt: this only downloads it.
@@ -135,7 +137,8 @@ else()
     # finds them again in data_tamerConfig.cmake.
     target_include_directories(data_tamer SYSTEM PUBLIC
         $<BUILD_INTERFACE:${DATA_TAMER_MCAP_INCLUDE_DIR}>)
-    target_include_directories(data_tamer PUBLIC
+    # BEFORE: ahead of <prefix>/include, where another MCAP may be installed.
+    target_include_directories(data_tamer BEFORE PUBLIC
         $<INSTALL_INTERFACE:include/data_tamer_v2_mcap>)
     target_link_libraries(data_tamer PRIVATE data_tamer::zstd data_tamer::lz4)
 endif()

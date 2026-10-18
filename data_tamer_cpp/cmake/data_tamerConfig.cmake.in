@@ -1,4 +1,7 @@
 @PACKAGE_INIT@
+# Before find_dependency(): with CMake 3.29 and older, a dependency's config can change
+# PACKAGE_PREFIX_DIR, which @PACKAGE_INCLUDE_INSTALL_DIR@ expands to.
+set_and_check(data_tamer_INCLUDE_DIR "@PACKAGE_INCLUDE_INSTALL_DIR@")
 
 include(CMakeFindDependencyMacro)
 find_dependency(Threads)
@@ -11,12 +14,11 @@ elseif(@DATA_TAMER_STATIC@)
   # data_tamer::lz4 from the packages of this machine.
   set(_data_tamer_module_path "${CMAKE_MODULE_PATH}")
   list(PREPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}")
-  find_dependency(zstd)
-  find_dependency(lz4)
+  find_dependency(zstd MODULE)
+  find_dependency(lz4 MODULE)
   set(CMAKE_MODULE_PATH "${_data_tamer_module_path}")
   unset(_data_tamer_module_path)
 endif()
 
-set_and_check(data_tamer_INCLUDE_DIR "@PACKAGE_INCLUDE_INSTALL_DIR@")
 include("${CMAKE_CURRENT_LIST_DIR}/data_tamerTargets.cmake")
 set(data_tamer_LIBRARY data_tamer::data_tamer)

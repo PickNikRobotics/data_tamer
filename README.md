@@ -180,7 +180,8 @@ tests are built when `BUILD_TESTING` is ON (colcon's default); pass
 
 ## Compiling with CMake
 
-Needs zstd and lz4 (on Ubuntu, `libzstd-dev liblz4-dev`). CMake downloads the MCAP C++
+Needs zstd and lz4 (on Ubuntu, `libzstd-dev liblz4-dev`), and GTest (`libgtest-dev`) for
+the tests, which a top-level build includes unless `-DDATA_TAMER_BUILD_TESTS=OFF`. CMake downloads the MCAP C++
 headers (release 2.1.3, pinned by hash) with FetchContent. Without network access, pass
 `-DFETCHCONTENT_SOURCE_DIR_DATA_TAMER_MCAP=<dir>`, an unpacked copy of
 [the release archive](https://github.com/foxglove/mcap/archive/refs/tags/releases/cpp/v2.1.3.tar.gz),
