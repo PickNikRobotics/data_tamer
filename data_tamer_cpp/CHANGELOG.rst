@@ -102,6 +102,9 @@ reads 1.x files.
 
 **New**
 
+* TypeScript snapshot decoder in ``data_tamer_foxglove/``, with schema versions
+  4/5/6, bounded compiled layouts, nested objects and ROS 2 message helpers.
+
 * ``LogChannel::startLogging()`` freezes the schema, allocates the pool and announces the
   schema; the first ``takeSnapshot()`` calls it. ``tryTakeSnapshot()``, for real-time
   threads, never blocks or allocates, also when data_tamer is loaded with ``dlopen()``.

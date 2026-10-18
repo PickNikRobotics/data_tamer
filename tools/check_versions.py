@@ -9,9 +9,11 @@ agree, 1 otherwise. The version lives in:
 - data_tamer_cpp/package.xml and data_tamer_msgs/package.xml  <version>;
 - data_tamer_cpp/conanfile.py  version = "x.y.z";
 - python/data_tamer_parser.py  __version__;
+- data_tamer_foxglove/package.json  version;
 - data_tamer_cpp/CHANGELOG.rst  the first section is "Unreleased" (the release
   commit renames it) or carries the same number.
 """
+import json
 import pathlib
 import re
 import sys
@@ -41,6 +43,8 @@ def main():
         "python/data_tamer_parser.py": first_match(
             "python/data_tamer_parser.py", r'^__version__\s*=\s*"([^"]+)"', re.M),
     }
+    versions["data_tamer_foxglove/package.json"] = json.loads(
+        (ROOT / "data_tamer_foxglove/package.json").read_text(encoding="utf-8"))["version"]
     expected = versions["data_tamer_cpp/CMakeLists.txt"]
     ok = True
     for name, version in versions.items():
