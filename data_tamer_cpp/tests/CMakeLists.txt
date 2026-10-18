@@ -222,6 +222,12 @@ if(Python3_FOUND AND EXISTS "${DATA_TAMER_REPO_DIR}/tools/check_versions.py")
         COMMAND Python3::Interpreter ${DATA_TAMER_REPO_DIR}/tools/check_versions.py)
 endif()
 
+# The release workflow builds the GitHub release notes with tools/release_notes.py.
+if(Python3_FOUND AND EXISTS "${DATA_TAMER_REPO_DIR}/tools/test_release_notes.py")
+    add_test(NAME release_notes
+        COMMAND Python3::Interpreter ${DATA_TAMER_REPO_DIR}/tools/test_release_notes.py)
+endif()
+
 # Every installed header must compile as strict C++17: the library itself is
 # built as C++20, and this object library is what stops a C++20-only construct
 # from leaking into the public interface.

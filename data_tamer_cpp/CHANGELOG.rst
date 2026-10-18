@@ -185,7 +185,8 @@ reads 1.x files.
   rclcpp ABI. Header defaults apply to rebuilt consumers only, Pimpl defaults to old
   binaries too.
 * One version number for the library, the ROS packages, conan and the Python decoder,
-  checked by ``tools/check_versions.py``.
+  checked by ``tools/check_versions.py``. Pushing a tag ``X.Y.Z`` creates the GitHub
+  release, whose notes are this section (``tools/release_notes.py``).
 
 1.0.4 (2026-07-26)
 ------------------
