@@ -4,16 +4,47 @@ function(CompileExample TARGET)
     add_executable(${TARGET} ${TARGET}.cpp)
     target_link_libraries(${TARGET} PRIVATE data_tamer)
     set_target_properties(${TARGET} PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+    if(DATA_TAMER_TEST_WRAPPER)
+        set_property(TARGET ${TARGET} PROPERTY CROSSCOMPILING_EMULATOR "${DATA_TAMER_TEST_WRAPPER}")
+    endif()
 endfunction()
 
-CompileExample(T01_basic_example)
-CompileExample(T02_custom_types)
-CompileExample(T03_mcap_writer)
-CompileExample(T04_flight_recorder)
-CompileExample(mcap_1m_per_sec)
+set(TUTORIALS
+    T01_hello_mcap
+    T02_custom_types
+    T03_channels_and_registry
+    T04_realtime_loop
+    T05_threads
+    T06_flight_recorder
+    T07_custom_sink
+    T08_mcap_reader)
 
-CompileExample(mcap_reader)
-target_link_libraries(mcap_reader PRIVATE ${DATA_TAMER_MCAP_TARGET})
+foreach(TUTORIAL IN LISTS TUTORIALS)
+    CompileExample(${TUTORIAL})
+    # The parent also turns DATA_TAMER_BUILD_TESTS off when ROS BUILD_TESTING is off.
+    if(DATA_TAMER_BUILD_TESTS)
+        if(TUTORIAL STREQUAL "T08_mcap_reader")
+            add_test(NAME ${TUTORIAL} COMMAND ${TUTORIAL} T01_joint_states.mcap)
+        else()
+            add_test(NAME ${TUTORIAL} COMMAND ${TUTORIAL})
+        endif()
+        set_tests_properties(${TUTORIAL} PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+            TIMEOUT 30)
+    endif()
+endforeach()
+target_link_libraries(T08_mcap_reader PRIVATE ${DATA_TAMER_MCAP_TARGET})
+
+if(DATA_TAMER_BUILD_TESTS)
+    set_tests_properties(T01_hello_mcap PROPERTIES FIXTURES_SETUP hello_mcap)
+    set_tests_properties(T08_mcap_reader PROPERTIES
+        FIXTURES_REQUIRED hello_mcap
+        PASS_REGULAR_EXPRESSION "shoulder/position:[1-9][0-9]*"
+        # PASS_REGULAR_EXPRESSION ignores the exit code: fail on a sanitizer report.
+        FAIL_REGULAR_EXPRESSION "ERROR: [A-Za-z]+Sanitizer|runtime error:")
+endif()
+
+CompileExample(mcap_1m_per_sec)
 
 if(DATA_TAMER_BUILD_ROS)
     CompileExample(ros2_publisher)

@@ -11,7 +11,7 @@
 #include "data_tamer_v2/sinks/mcap_sink.hpp"
 #include "data_tamer_v2/data_tamer_parser.hpp"
 #include "test_sinks.hpp"
-#include "../examples/geometry_types.hpp"
+#include "geometry_types.hpp"
 
 #include <mcap/reader.hpp>
 

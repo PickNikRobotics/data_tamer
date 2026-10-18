@@ -1,9 +1,15 @@
 #include "data_tamer_v2/channel.hpp"
 #include "data_tamer_v2/data_tamer.hpp"
 #include "data_tamer_v2/sinks/mcap_sink.hpp"
-#include <iostream>
+#include <chrono>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <cstdio>
+#include <iostream>
+#include <string>
 #include <thread>
+#include <vector>
 
 using namespace DataTamer2;
 
@@ -13,7 +19,7 @@ void WritingThread(const std::string& channel_name)
 
   // Create (or get) a channel using the global registry (singleton)
   auto channel = ChannelsRegistry::Global().getChannel(channel_name);
-  long time_diff_nsec = 0;
+  int64_t time_diff_nsec = 0;
 
   auto const vect_size = 100;
   std::vector<double> real64(vect_size);
@@ -49,15 +55,15 @@ void WritingThread(const std::string& channel_name)
 
     if(count++ % 1000 == 0)
     {
-      printf("[%s] time: %.1f\n", channel_name.c_str(), t);
+      std::printf("[%s] time: %.1f\n", channel_name.c_str(), t);
       std::flush(std::cout);
     }
-    auto t1 = std::chrono::system_clock::now();
+    auto t1 = std::chrono::steady_clock::now();
     if(channel->takeSnapshot() != SnapshotResult::ok)
     {
       std::cout << "pushing failed\n";
     }
-    auto t2 = std::chrono::system_clock::now();
+    auto t2 = std::chrono::steady_clock::now();
 
     auto diff = std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1);
     time_diff_nsec += diff.count();

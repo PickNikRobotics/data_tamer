@@ -15,6 +15,9 @@ the changes listed in [MIGRATION.md](MIGRATION.md).
 - [Troubleshooting](#troubleshooting)
 - [FAQ](#faq)
 
+Follow the [progressive tutorials](../data_tamer_cpp/examples/README.md) for runnable
+examples of a small robot arm, from a first MCAP recording to real-time logging and threads.
+
 ## Concepts
 
 - A **channel** (`LogChannel`) owns a set of registered values and takes snapshots of them.
@@ -98,7 +101,8 @@ real-time threads.
 
 ### Custom types
 
-The [README example](../README.md#how-to-register-custom-types) puts a `TypeDefinition()`
+The [README example](../README.md#how-to-register-custom-types) and
+[T02_custom_types.cpp](../data_tamer_cpp/examples/T02_custom_types.cpp) put a `TypeDefinition()`
 function in the namespace of the type. For types whose namespace you don't own, such as
 Eigen or a vendor SDK, specialize `DataTamer2::TypeDefinitionTrait` instead:
 
@@ -234,7 +238,7 @@ channel->addDataSink(worker);
 The dump covers `[trigger - window, trigger + post_trigger]` in snapshot time, so it
 behaves the same in simulation, in a replay and on the robot. `requestDump()` returns false
 while an earlier dump is still in progress (the result is `[[nodiscard]]`). `setDumpCallback()` reports every file written
-or failed. [T04_flight_recorder.cpp](../data_tamer_cpp/examples/T04_flight_recorder.cpp)
+or failed. [T06_flight_recorder.cpp](../data_tamer_cpp/examples/T06_flight_recorder.cpp)
 is a complete example.
 
 ### Publishing on ROS 2
@@ -317,7 +321,7 @@ auto channel = registry.getChannel("controller");
 
 ## Reading the data
 
-[PlotJuggler](https://github.com/facontidavide/PlotJuggler) 3.8.2 or later opens the MCAP
+[PlotJuggler](https://github.com/facontidavide/PlotJuggler) 4 or later opens the MCAP
 files and subscribes to the ROS 2 topics.
 
 In Python, install `data-tamer-parser` with its MCAP extra:
@@ -340,7 +344,7 @@ releases before 0.7.0 (2023) are not readable.
 In C++, copy the single header
 [data_tamer_parser.hpp](../data_tamer_cpp/include/data_tamer_v2/data_tamer_parser.hpp)
 into your project: it has no dependencies.
-[mcap_reader.cpp](../data_tamer_cpp/examples/mcap_reader.cpp) shows how to use it,
+[T08_mcap_reader.cpp](../data_tamer_cpp/examples/T08_mcap_reader.cpp) shows how to use it,
 including `SplitMcapMessage()` and the checks on a corrupt message. The
 format is specified in [wire_format.md](wire_format.md).
 

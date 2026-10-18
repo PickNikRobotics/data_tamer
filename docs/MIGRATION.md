@@ -309,7 +309,8 @@ is set. What changed:
 
 So:
 
-- update PlotJuggler to a release that bundles the 2.0 parser;
+- update PlotJuggler to 4 or later, which bundles the 2.0 parser (3.x has the 1.x parser
+  and rejects 2.0 files);
 - in your own C++ readers, copy the 2.0
   [data_tamer_v2/data_tamer_parser.hpp](../data_tamer_cpp/include/data_tamer_v2/data_tamer_parser.hpp);
 - 2.0 readers still read files recorded with 1.x (schema version 4), using the hash the

@@ -2,7 +2,7 @@
 #include "data_tamer_v2/details/snapshot_pool.hpp"
 #include "alloc_counter.hpp"
 #include "test_sinks.hpp"
-#include "../examples/geometry_types.hpp"
+#include "geometry_types.hpp"
 
 #include <gtest/gtest.h>
 #include <array>

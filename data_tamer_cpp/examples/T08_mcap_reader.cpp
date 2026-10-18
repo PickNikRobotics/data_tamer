@@ -1,6 +1,11 @@
+// T08 Reading an MCAP recording
+// You will learn: decode schemas and snapshots, then count samples per time series.
+// Run: ./T08_mcap_reader T01_joint_states.mcap and look at the printed counts
 #include "data_tamer_v2/data_tamer_parser.hpp"
 #include <mcap/reader.hpp>
 
+#include <cstddef>
+#include <cstdint>
 #include <iostream>
 #include <map>
 #include <stdexcept>
@@ -8,13 +13,11 @@
 #include <unordered_map>
 #include <vector>
 
-// Reads an MCAP file written by DataTamer (for instance test_sample.mcap from
-// T03_mcap_writer) and counts the samples of each time series.
 int main(int argc, char** argv)
 {
   if(argc != 2)
   {
-    std::cout << "add the MCAP file as argument" << std::endl;
+    std::cout << "Usage: ./T08_mcap_reader T01_joint_states.mcap" << std::endl;
     return 1;
   }
   std::string filepath = argv[1];
@@ -33,7 +36,11 @@ int main(int argc, char** argv)
   std::unordered_map<mcap::SchemaId, size_t> schema_id_to_hash;
   std::unordered_map<size_t, DataTamerParser::Schema> hash_to_schema;
   // must call this, before accessing the schemas
-  auto summary = reader.readSummary(mcap::ReadSummaryMethod::NoFallbackScan);
+  const auto summary = reader.readSummary(mcap::ReadSummaryMethod::NoFallbackScan);
+  if(!summary.ok())
+  {
+    throw std::runtime_error("Cannot read MCAP summary");
+  }
   for(const auto& [schema_id, mcap_schema] : reader.schemas())
   {
     std::string schema_text(reinterpret_cast<const char*>(mcap_schema->data.data()),

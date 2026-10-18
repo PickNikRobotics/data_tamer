@@ -1,7 +1,7 @@
-// Flight recorder: keep the last second of data in RAM and write it to an MCAP
-// file only when something goes wrong, plus half a second after the event.
+// T06 Flight recorder
+// You will learn: keep recent joint history in RAM and dump it after a fault.
+// Run: ./T06_flight_recorder then open fault_*.mcap in PlotJuggler
 #include "data_tamer_v2/channel.hpp"
-#include "data_tamer_v2/data_tamer.hpp"
 #include "data_tamer_v2/sinks/mcap_ring_sink.hpp"
 
 #include <chrono>
@@ -25,26 +25,34 @@ int main()
               << " messages) " << dump.error << std::endl;
   });
 
-  auto channel = LogChannel::create("control");
-  double position = 0;
-  double velocity = 0;
-  channel->registerValue("position", &position);
-  channel->registerValue("velocity", &velocity);
+  double shoulder_position = 0, shoulder_velocity = 0, shoulder_effort = 0;
+  double elbow_position = 0, elbow_velocity = 0, elbow_effort = 0;
+  auto channel = LogChannel::create("controller");
+  channel->registerValue("shoulder/position", &shoulder_position);
+  channel->registerValue("shoulder/velocity", &shoulder_velocity);
+  channel->registerValue("shoulder/effort", &shoulder_effort);
+  channel->registerValue("elbow/position", &elbow_position);
+  channel->registerValue("elbow/velocity", &elbow_velocity);
+  channel->registerValue("elbow/effort", &elbow_effort);
   channel->addDataSink(worker);
   channel->startLogging();
 
-  // A 1 kHz control loop; a fault at t = 2 s.
-  for(int i = 0; i < 3000; i++)
+  // A 1 kHz control loop; a fault at t = 1 s.
+  for(int i = 0; i < 1500; i++)
   {
     const double t = i * 0.001;
-    position = std::sin(t);
-    velocity = std::cos(t);
+    shoulder_position = std::sin(4 * t);
+    shoulder_velocity = 4 * std::cos(4 * t);
+    shoulder_effort = 0.2 * std::sin(4 * t);
+    elbow_position = std::sin(4 * t + 0.5);
+    elbow_velocity = 4 * std::cos(4 * t + 0.5);
+    elbow_effort = 0.2 * std::sin(4 * t + 0.5);
     (void)channel->tryTakeSnapshot();
-    if(i == 2000)
+    if(i == 1000)
     {
       // Real-time safe: one atomic compare-exchange, no allocation. The result is false
       // when an earlier request is still active, which cannot happen here.
-      (void)recorder.requestDump(500ms);
+      (void)recorder.requestDump(250ms);
     }
     std::this_thread::sleep_for(1ms);
   }

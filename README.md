@@ -11,7 +11,7 @@
 takes periodic "snapshots" of their values, to later visualize them as **timeseries**.
 
 It works great with [PlotJuggler](https://github.com/facontidavide/PlotJuggler),
-the timeseries visualization tool (note: you will need PlotJuggler **3.8.2** or later).
+the timeseries visualization tool (note: you will need PlotJuggler **4** or later).
 
 **DataTamer** is "fearless data logger" because you can record hundreds or **thousands of variables**:
 even 1 million points per second should have a fairly small CPU overhead.
@@ -55,97 +55,92 @@ visualize your logs offline or in real-time.
 ## Basic example
 
 ```cpp
-#include "data_tamer_v2/data_tamer.hpp"
+#include "data_tamer_v2/channel.hpp"
 #include "data_tamer_v2/sinks/mcap_sink.hpp"
+
+#include <chrono>
+#include <cmath>
+#include <thread>
 
 int main()
 {
-  // You can register any arithmetic value. You are responsible for their lifetime:
-  // declare them before the channel, so that they outlive it.
-  double value_real = 3.14;
-  int value_int = 42;
+  // The channel borrows these variables: declare them first so they outlive it.
+  double shoulder_position = 0, shoulder_velocity = 0, shoulder_effort = 0;
+  double elbow_position = 0, elbow_velocity = 0, elbow_effort = 0;
 
-  // Multiple channels can use this sink. Data will be saved in mylog.mcap
-  auto mcap_sink = DataTamer2::MCAPSink::create("mylog.mcap");
+  // The sink writes the file; the channel takes snapshots and hands them to its sinks.
+  auto sink = DataTamer2::MCAPSink::create("T01_joint_states.mcap");
+  auto channel = DataTamer2::LogChannel::create("controller");
+  channel->addDataSink(sink);
 
-  // Create a channel and attach a sink. A channel can have multiple sinks
-  auto channel = DataTamer2::LogChannel::create("my_channel");
-  channel->addDataSink(mcap_sink);
+  channel->registerValue("shoulder/position", &shoulder_position);
+  channel->registerValue("shoulder/velocity", &shoulder_velocity);
+  channel->registerValue("shoulder/effort", &shoulder_effort);
+  channel->registerValue("elbow/position", &elbow_position);
+  channel->registerValue("elbow/velocity", &elbow_velocity);
+  channel->registerValue("elbow/effort", &elbow_effort);
 
-  auto id1 = channel->registerValue("value_real", &value_real);
-  channel->registerValue("value_int", &value_int);
-
-  // If you prefer to use RAII, use this method instead
-  // logged_real will unregister itself when it goes out of scope.
-  auto logged_real = channel->createLoggedValue<float>("my_real");
-
-  // Store the current value of all the registered values. It returns
-  // SnapshotResult::ok when every sink accepted it; stats() counts the rest.
-  channel->takeSnapshot();
-
-  // You can disable (i.e., stop recording) a value like this
-  channel->setEnabled(id1, false);
-  // or, in the case of a LoggedValue
-  logged_real->setEnabled(false);
-
-  // The next snapshot will contain only value_int,
-  // since the other two were disabled
-  channel->takeSnapshot();
+  for(int cycle = 0; cycle < 1500; ++cycle)
+  {
+    const double t = cycle * 0.001;
+    shoulder_position = std::sin(4 * t);
+    shoulder_velocity = 4 * std::cos(4 * t);
+    shoulder_effort = 0.2 * std::sin(4 * t);
+    elbow_position = std::sin(4 * t + 0.5);
+    elbow_velocity = 4 * std::cos(4 * t + 0.5);
+    elbow_effort = 0.2 * std::sin(4 * t + 0.5);
+    channel->takeSnapshot();  // One sample of every registered value.
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+  sink->stop();  // Deliver queued snapshots and close the file, including its footer.
 }
 ```
 
 ## How to register custom types
 
-Containers such as `std::vector` and `std::array` are supported out of the box.
-You can also register a custom type, as shown in the example below.
+Containers such as `std::vector` and `std::array` work out of the box, including
+containers of your own types. Describe a struct in its own namespace:
 
 ```cpp
-#include "data_tamer_v2/data_tamer.hpp"
-#include "data_tamer_v2/sinks/mcap_sink.hpp"
+#include "data_tamer_v2/channel.hpp"
 
-namespace MyNamespace
+#include <string_view>
+#include <vector>
+
+namespace robot
 {
-// a custom type
-struct Point3D
+struct JointState
 {
-  double x;
-  double y;
-  double z;
+  double position = 0;
+  double velocity = 0;
+  double effort = 0;
 };
 
-// TypeDefinition must be in the same namespace as Point3D.
-// List all the member variables that you want to be saved (including their name)
+// Put this beside your own type so argument-dependent lookup finds it.
 template <typename AddField>
-std::string_view TypeDefinition(Point3D& point, AddField& add)
+std::string_view TypeDefinition(JointState& joint, AddField& add)
 {
-  add("x", &point.x);
-  add("y", &point.y);
-  add("z", &point.z);
-  return "Point3D";
+  add("position", &joint.position);
+  add("velocity", &joint.velocity);
+  add("effort", &joint.effort);
+  return "JointState";
 }
-} // end namespace MyNamespace
-
-int main()
-{
-  // Array/vectors are supported natively
-  std::vector<double> values = {1, 2, 3, 4};
-  MyNamespace::Point3D position = {0.1, -0.2, 0.3};
-
-  auto channel = DataTamer2::LogChannel::create("my_channel");
-  channel->addDataSink(DataTamer2::MCAPSink::create("mylog.mcap"));
-  channel->registerValue("values", &values);
-  channel->registerValue("position", &position);
-
-  // save the data as usual ...
-  channel->takeSnapshot();
-}
+}  // namespace robot
 ```
 
-For types whose namespace you can't modify (Eigen, a vendor SDK, ...), specialize
-`DataTamer2::TypeDefinitionTrait` instead.
+Declare `std::vector<robot::JointState> joints(2);` before the channel, then call
+`channel->registerValue("joints", &joints);`. The recorded series include
+`joints[0]/position`, `joints[0]/velocity` and `joints[0]/effort`.
 
-More examples, including publishing on ROS 2 and the flight recorder, are in
-[data_tamer_cpp/examples](data_tamer_cpp/examples).
+For a type whose namespace you cannot modify, specialize
+`DataTamer2::TypeDefinitionTrait<T>` with a static `define(T&, AddField&)` instead.
+[T02_custom_types.cpp](data_tamer_cpp/examples/T02_custom_types.cpp) shows both forms
+in one file, including a vendor class with accessors. Return a string literal for the
+type name: the definition also runs when taking snapshots.
+
+More examples: follow the [progressive tutorial](data_tamer_cpp/examples/README.md),
+from a joint-controller MCAP recording to threads, a flight recorder and a custom sink.
+The same directory also contains the throughput and ROS 2 demos.
 
 # Documentation
 
@@ -236,7 +231,7 @@ reference decoders:
 
 - C++: [data_tamer_parser.hpp](data_tamer_cpp/include/data_tamer_v2/data_tamer_parser.hpp),
   a single header without external dependencies that you can copy into your project.
-  See how it is used in [mcap_reader](data_tamer_cpp/examples/mcap_reader.cpp).
+  See how it is used in [T08_mcap_reader](data_tamer_cpp/examples/T08_mcap_reader.cpp).
 - Python: [python/data_tamer_parser.py](python/data_tamer_parser.py), standard library only,
   packaged as `data-tamer-parser` (see [python/README.md](python/README.md)).
 

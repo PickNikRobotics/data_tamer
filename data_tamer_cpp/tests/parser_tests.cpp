@@ -2,7 +2,7 @@
 #include "data_tamer_v2/channel.hpp"
 #include "data_tamer_v2/data_tamer.hpp"
 #include "data_tamer_v2/sinks/dummy_sink.hpp"
-#include "../examples/geometry_types.hpp"
+#include "geometry_types.hpp"
 #include "test_sinks.hpp"
 
 #include <gtest/gtest.h>

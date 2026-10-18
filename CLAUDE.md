@@ -52,7 +52,8 @@ under "Unreleased" in `data_tamer_cpp/CHANGELOG.rst`.
     probes in `tests/compile_fail/`; in Linux shared builds, `dlopen_tls_test`, which
     loads libdata_tamer with a plugin through `dlopen()` and counts `malloc()` calls.
     The gtest programs come from `data_tamer_add_gtest()`.
-  - `examples/`: T01 to T04, `mcap_1m_per_sec`, `mcap_reader`, `ros2_publisher` (ROS only).
+  - `examples/`: T01 to T08, the progressive joint-controller tutorial (see its
+    `README.md`); `mcap_1m_per_sec` and `ros2_publisher` (ROS only) are separate demos.
   - `benchmarks/`: built only when Google Benchmark is found.
   - MCAP is not in the tree. Under ROS 2 it is `mcap_vendor`. Otherwise CMake downloads
     the MCAP C++ 2.1.3 release archive of foxglove/mcap (tag `releases/cpp/v2.1.3`,
@@ -116,8 +117,9 @@ ctest --preset debug            # every gtest case is its own ctest entry
 ctest --preset debug -R 'WireFormat'
 ```
 
-Other presets: `release` (adds examples and benchmarks), `asan`, `tsan` (runs the tests
-through `tests/run_under_tsan.sh`). CI runs `asan` and `tsan`.
+Other presets: `release` (adds examples and benchmarks), `asan` (adds examples and runs
+them as tests), `tsan` (runs the tests through `tests/run_under_tsan.sh`).
+CI runs `asan` and `tsan`.
 
 Install check, as the CI `install` job does it (repeat with `-DBUILD_SHARED_LIBS=ON`):
 

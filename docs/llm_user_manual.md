@@ -54,6 +54,9 @@ package finds them on the machine that builds the consumer.
 - A custom `DataSink` or `CustomSerializer` keeps working across `2.x`: their virtual
   interfaces are frozen for 2.x.
 
+The runnable [tutorial series](../data_tamer_cpp/examples/README.md) uses one robot-arm
+controller throughout: start with T01, then add types, rates, real-time use and threads.
+
 ## Mental model
 
 ```mermaid
@@ -1021,7 +1024,7 @@ Threads involved:
 
 ## Reading the data
 
-PlotJuggler (3.8.2 or later) opens the MCAP files of `MCAPSink` and `MCAPRingSink` and
+PlotJuggler (4 or later) opens the MCAP files of `MCAPSink` and `MCAPRingSink` and
 can subscribe to the `ROS2PublisherSink` topics.
 
 The Python decoder uses the standard library only. Install it with
@@ -1046,7 +1049,7 @@ on the library. `DataTamerParser::BuildSchemaFromText()` reads both schema rende
 with bytes left over; its result is `[[nodiscard]]`. `SplitMcapMessage()` splits an MCAP
 message body into mask and payload and throws `std::runtime_error` if the body does not
 match its two lengths. Malformed input throws `std::runtime_error` (`ValueError` in
-Python). `data_tamer_cpp/examples/mcap_reader.cpp` reads an
+Python). `data_tamer_cpp/examples/T08_mcap_reader.cpp` reads an
 MCAP file with it.
 
 Both decoders read 1.x files (schema version 4) and 2.x files; a text of a release before

@@ -1,6 +1,6 @@
 #include "data_tamer_v2/values.hpp"
 #include "data_tamer_v2/custom_types.hpp"
-#include "../examples/geometry_types.hpp"
+#include "geometry_types.hpp"
 
 #include <gtest/gtest.h>
 

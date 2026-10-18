@@ -41,6 +41,7 @@
       "inherits": "base",
       "displayName": "AddressSanitizer + UndefinedBehaviorSanitizer",
       "cacheVariables": {
+        "DATA_TAMER_BUILD_EXAMPLES": "ON",
         "CMAKE_CXX_FLAGS":
             "-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all -g -O1",
         "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address,undefined",
