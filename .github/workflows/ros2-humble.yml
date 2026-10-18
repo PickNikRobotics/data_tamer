@@ -11,4 +11,11 @@ jobs:
       # industrial_ci no longer tags releases (latest tag 0.10.0 is from 2020); pin the
       # commit so its distro defaults change when we choose. master @ 2026-06-01.
       - uses: ros-industrial/industrial_ci@125164b9f1883cdf1858897a7146d1bebf2be5c6
-        env: {ROS_DISTRO: humble, ROS_REPO: main, TARGET_CMAKE_ARGS: "-DDATA_TAMER_WERROR=ON"}
+        env:
+          ROS_DISTRO: humble
+          ROS_REPO: main
+          TARGET_CMAKE_ARGS: "-DDATA_TAMER_WERROR=ON"
+          # After the build and the tests: tools/check_ros_install.sh builds the
+          # find_package(data_tamer 2) consumer against the install space and checks that
+          # the install shares no file with the released data_tamer_cpp 1.x.
+          AFTER_SCRIPT: rosenv tools/check_ros_install.sh

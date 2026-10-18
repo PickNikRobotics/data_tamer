@@ -31,7 +31,8 @@ under "Unreleased" in `data_tamer_cpp/CHANGELOG.rst`.
   installs side by side with the released 1.x package `data_tamer_cpp`: no installed file
   may collide with 1.x (`share/data_tamer_cpp`, `include/data_tamer`,
   `include/data_tamer_parser`, `lib/libdata_tamer.so`), so under ROS the library is
-  `libdata_tamer_v2.so`. CMake target `data_tamer`, exported as
+  `libdata_tamer_v2.so`; the ROS 2 CI jobs compare the install with the released 1.x
+  binary package (`tools/check_ros_install.sh`). CMake target `data_tamer`, exported as
   `data_tamer_v2::data_tamer` under ROS and `data_tamer::data_tamer` (package
   `data_tamer`) otherwise.
   - `include/data_tamer_v2/`: public headers. `channel.hpp` (LogChannel, SnapshotResult),
@@ -74,10 +75,12 @@ under "Unreleased" in `data_tamer_cpp/CHANGELOG.rst`.
   `MIGRATION.md` (1.x to 2.0), `wire_format.md` and its golden vectors in
   `wire_format/vectors/` (`v4/`: a 1.0.4 recording).
 - `tools/`: `check_versions.py` (every version number agrees), `abi_check.sh` (the
-  libabigail comparison) and `abi_probe.cpp` (the consumer side of that comparison).
+  libabigail comparison) and `abi_probe.cpp` (the consumer side of that comparison),
+  `check_ros_install.sh` (the checks of a ROS 2 install, see "Build and test").
 - `.github/workflows/`: plain CMake through conan plus `conan create`, the `install` job
   (static and shared installs, `test_package/` built against each, Ubuntu 22.04 and
-  24.04), one ROS 2 job per distribution (industrial_ci), asan and tsan presets, Python
+  24.04), one ROS 2 job per distribution (industrial_ci; its `AFTER_SCRIPT` runs
+  `tools/check_ros_install.sh` on the install space), asan and tsan presets, Python
   tests and PyPI release, and the `abi` job (libabigail).
 
 ## Build and test
@@ -95,6 +98,14 @@ colcon test-result --verbose
 packages are `<test_depend>` in `package.xml`. Under ROS, MCAP comes from `mcap_vendor`,
 linked PUBLIC, and the install also provides `share/data_tamer/cmake` so that
 `find_package(data_tamer 2)` works there.
+
+The ROS 2 CI jobs then run `tools/check_ros_install.sh` through industrial_ci's
+`AFTER_SCRIPT` (`rosenv tools/check_ros_install.sh`, which sources the install space).
+It builds and runs `test_package/` (`find_package(data_tamer 2)`) against the install,
+and fails when `data_tamer_v2` or `data_tamer_msgs` install a file that the released
+`ros-$ROS_DISTRO-data-tamer-cpp` binary package (downloaded with `apt-get download`, not
+installed) also has: bloom puts both in `/opt/ros/$ROS_DISTRO`. To run it, source the
+workspace (`source install/setup.bash`) and call the script.
 
 Under ROS the whole gtest binary is one ctest entry. Run a subset directly:
 
