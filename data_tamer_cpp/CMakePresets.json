@@ -15,7 +15,7 @@
         "CMAKE_BUILD_TYPE": "Debug",
         "DATA_TAMER_BUILD_ROS": "OFF",
         "DATA_TAMER_BUILD_TESTS": "ON",
-        "DATA_TAMER_BUILD_EXAMPLES": "OFF",
+        "DATA_TAMER_BUILD_EXAMPLES": "ON",
         "DATA_TAMER_BUILD_BENCHMARKS": "OFF",
         "DATA_TAMER_WERROR": "ON",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
@@ -32,8 +32,7 @@
       "displayName": "Release with benchmarks",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "DATA_TAMER_BUILD_BENCHMARKS": "ON",
-        "DATA_TAMER_BUILD_EXAMPLES": "ON"
+        "DATA_TAMER_BUILD_BENCHMARKS": "ON"
       }
     },
     {

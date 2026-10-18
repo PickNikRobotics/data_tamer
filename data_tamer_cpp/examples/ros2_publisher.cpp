@@ -1,69 +1,81 @@
 #include "data_tamer_v2/channel.hpp"
-#include "data_tamer_v2/data_tamer.hpp"
+#include "data_tamer_v2/data_sink.hpp"
 #include "data_tamer_v2/sinks/ros2_publisher_sink.hpp"
+#include "data_tamer_v2/types.hpp"
 
+#include <rclcpp/rclcpp.hpp>
+
+#include <array>
+#include <chrono>
 #include <cmath>
+#include <cstddef>
+#include <memory>
 #include <string>
 
-using namespace DataTamer2;
-
 // Usage: ros2_publisher [--aggregate] [--yaml]
-//   --aggregate  publish SnapshotBatch messages on /test/data_batch (100 snapshots
-//                or 100 ms per message) instead of one Snapshot per sample on /test/data
+//   --aggregate  publish SnapshotBatch on /test/data_batch (100 snapshots or 100 ms)
+//                instead of one Snapshot per sample on /test/data
 //   --yaml       write the schemas as YAML (wire format version 6)
 // python/ros2_subscriber.py decodes either.
+class JointPublisher : public rclcpp::Node
+{
+public:
+  explicit JointPublisher(const DataTamer2::ROS2PublisherOptions& options)
+    : Node("joint_controller")
+  {
+    sink_ = DataTamer2::ROS2PublisherSink::create(*this, "/test", options);
+    channel_ = DataTamer2::LogChannel::create("controller");
+    channel_->addDataSink(sink_);
+    channel_->registerValue("positions", &positions_);
+    channel_->registerValue("velocities", &velocities_);
+    channel_->registerValue("efforts", &efforts_);
+    channel_->startLogging();  // Publish the schema before the timer starts.
+    timer_ = create_wall_timer(std::chrono::milliseconds(5), [this] { sample(); });
+  }
+
+  void stop() { sink_->stop(); }  // Drain queued snapshots and flush a pending batch.
+
+private:
+  void sample()
+  {
+    const double t = cycle_++ * 0.005;
+    for(size_t joint = 0; joint < positions_.size(); ++joint)
+    {
+      const double phase = 4 * t + 0.5 * static_cast<double>(joint);
+      positions_[joint] = std::sin(phase);
+      velocities_[joint] = 4 * std::cos(phase);
+      efforts_[joint] = 0.2 * std::sin(phase);
+    }
+    if(channel_->takeSnapshot() != DataTamer2::SnapshotResult::ok)
+    {
+      RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 1000,
+                           "Snapshot was not accepted by every sink");
+    }
+  }
+
+  // Borrowed values precede the channel; the timer is destroyed before either.
+  std::array<double, 2> positions_{}, velocities_{}, efforts_{};
+  int cycle_ = 0;
+  std::shared_ptr<DataTamer2::SinkWorker> sink_;
+  std::shared_ptr<DataTamer2::LogChannel> channel_;
+  rclcpp::TimerBase::SharedPtr timer_;
+};
+
 int main(int argc, char* argv[])
 {
   rclcpp::init(argc, argv);
-  auto node = std::make_shared<rclcpp::Node>("test_datatamer");
-
-  ROS2PublisherOptions options;
-  for(int i = 1; i < argc; i++)
+  DataTamer2::ROS2PublisherOptions options;
+  for(int i = 1; i < argc; ++i)
   {
     const std::string arg = argv[i];
     options.aggregate |= (arg == "--aggregate");
     if(arg == "--yaml")
     {
-      options.schema_format = SchemaFormat::Yaml;
+      options.schema_format = DataTamer2::SchemaFormat::Yaml;
     }
   }
-  auto ros2_sink = ROS2PublisherSink::create(node, "test", options);
-  ChannelsRegistry::Global().addDefaultSink(ros2_sink);
-
-  // Create (or get) a channel using the global registry (singleton)
-  auto channel = ChannelsRegistry::Global().getChannel("channel");
-
-  auto const vect_size = 100;
-  std::vector<double> real64(vect_size);
-  std::vector<float> real32(vect_size);
-  std::vector<int16_t> int16(vect_size);
-
-  channel->registerValue("real64", &real64);
-  channel->registerValue("real32", &real32);
-  channel->registerValue("int16", &int16);
-
-  int count = 0;
-  double t = 0;
-
-  while(rclcpp::ok())
-  {
-    double S = std::sin(t);
-    for(size_t i = 0; i < vect_size; i++)
-    {
-      const double val = double(i) + S;
-      real64[i] = val;
-      real32[i] = float(val);
-      int16[i] = int16_t(10 * (val));
-    }
-    if(count++ % 500 == 0)
-    {
-      RCLCPP_INFO(node->get_logger(), "snapshots: %d", count);
-    }
-    if(channel->takeSnapshot() != SnapshotResult::ok)
-    {
-      RCLCPP_ERROR(node->get_logger(), "pushing failed");
-    }
-    std::this_thread::sleep_for(std::chrono::milliseconds(5));
-    t += 0.005;
-  }
+  auto node = std::make_shared<JointPublisher>(options);
+  rclcpp::spin(node);
+  node->stop();
+  rclcpp::shutdown();
 }

@@ -1,11 +1,13 @@
-// Flight recorder: keep the last second of data in RAM and write it to an MCAP
-// file only when something goes wrong, plus half a second after the event.
+// T06 Flight recorder
+// You will learn: keep recent joint history in RAM and dump it after a fault.
+// Run: ./T06_flight_recorder then open fault_*.mcap in PlotJuggler
 #include "data_tamer_v2/channel.hpp"
-#include "data_tamer_v2/data_tamer.hpp"
 #include "data_tamer_v2/sinks/mcap_ring_sink.hpp"
 
+#include <array>
 #include <chrono>
 #include <cmath>
+#include <cstddef>
 #include <iostream>
 #include <thread>
 
@@ -25,26 +27,31 @@ int main()
               << " messages) " << dump.error << std::endl;
   });
 
-  auto channel = LogChannel::create("control");
-  double position = 0;
-  double velocity = 0;
-  channel->registerValue("position", &position);
-  channel->registerValue("velocity", &velocity);
+  std::array<double, 2> positions{}, velocities{}, efforts{};
+  auto channel = LogChannel::create("controller");
+  channel->registerValue("positions", &positions);
+  channel->registerValue("velocities", &velocities);
+  channel->registerValue("efforts", &efforts);
   channel->addDataSink(worker);
   channel->startLogging();
 
-  // A 1 kHz control loop; a fault at t = 2 s.
-  for(int i = 0; i < 3000; i++)
+  // A 1 kHz control loop; a fault at t = 1 s.
+  for(int i = 0; i < 1500; i++)
   {
     const double t = i * 0.001;
-    position = std::sin(t);
-    velocity = std::cos(t);
+    for(size_t joint = 0; joint < positions.size(); ++joint)
+    {
+      const double phase = 4 * t + 0.5 * static_cast<double>(joint);
+      positions[joint] = std::sin(phase);
+      velocities[joint] = 4 * std::cos(phase);
+      efforts[joint] = 0.2 * std::sin(phase);
+    }
     (void)channel->tryTakeSnapshot();
-    if(i == 2000)
+    if(i == 1000)
     {
       // Real-time safe: one atomic compare-exchange, no allocation. The result is false
       // when an earlier request is still active, which cannot happen here.
-      (void)recorder.requestDump(500ms);
+      (void)recorder.requestDump(250ms);
     }
     std::this_thread::sleep_for(1ms);
   }

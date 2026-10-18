@@ -4,7 +4,7 @@
 #include "data_tamer_v2/data_tamer.hpp"
 #include "data_tamer_v2/details/snapshot_pool.hpp"
 #include "write_mutex.hpp"
-#include "../examples/geometry_types.hpp"
+#include "geometry_types.hpp"
 #include "alloc_counter.hpp"
 #include "null_sink.hpp"
 

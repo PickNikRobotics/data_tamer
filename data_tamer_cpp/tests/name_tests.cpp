@@ -3,7 +3,7 @@
 #include "data_tamer_v2/names.hpp"
 #include "data_tamer_v2/sinks/dummy_sink.hpp"
 
-#include "../examples/geometry_types.hpp"
+#include "geometry_types.hpp"
 #include "decode_utils.hpp"
 #include "test_sinks.hpp"
 
