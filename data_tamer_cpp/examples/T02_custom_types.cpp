@@ -67,9 +67,9 @@ int main()
   std::vector<robot::JointState> joints(2);
   std::array<double, 2> target_positions{};
   vendor::Vec3 tool_acceleration;
-  auto sink = DataTamer2::MCAPSink::create("T02_joint_states.mcap");
+  auto mcap = DataTamer2::MCAPSink::create("T02_joint_states.mcap");
   auto channel = DataTamer2::LogChannel::create("controller");
-  channel->addDataSink(sink);
+  channel->addDataSink(mcap);
   // Register the vector itself: its elements may move when it grows.
   channel->registerValue("joints", &joints);
   channel->registerValue("target_positions", &target_positions);
@@ -90,5 +90,5 @@ int main()
     channel->takeSnapshot();
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
-  sink->stop();
+  mcap->stop();
 }

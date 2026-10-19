@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <type_traits>
 #include <typeinfo>
 #include <vector>
 
@@ -15,6 +16,8 @@ namespace DataTamer2
 
 class LogChannel;
 class SinkWorker;
+template <typename T>
+class SinkWorkerOf;
 class SnapshotPool;
 struct PoolSlot;
 struct Schema;
@@ -156,10 +159,12 @@ public:
   SinkWorker& operator=(const SinkWorker&) = delete;
 
   /// Build a sink of type T and wrap it: SinkWorker::create<MCAPSink>("out.mcap").
+  /// The handle's sink() is the T (see SinkWorkerOf).
   template <typename T, typename... Args>
-  static std::shared_ptr<SinkWorker> create(Args&&... args)
+  static std::shared_ptr<SinkWorkerOf<T>> create(Args&&... args)
   {
-    return std::make_shared<SinkWorker>(std::make_unique<T>(std::forward<Args>(args)...));
+    return std::make_shared<SinkWorkerOf<T>>(
+        std::make_unique<T>(std::forward<Args>(args)...));
   }
 
   /// Stop accepting snapshots, wait for the callback in progress, deliver everything
@@ -181,7 +186,8 @@ public:
 
   DataSink& sink();
   const DataSink& sink() const;
-  /// Typed access to the owned sink, e.g. worker.as<MCAPSink>().restartRecording(...).
+  /// Typed access to the owned sink, e.g. worker.as<MCAPSink>().restartRecording(...),
+  /// for code that holds only a SinkWorker; a SinkWorkerOf<T> has sink() instead.
   /// Throws std::bad_cast if the sink is not a T.
   template <typename T>
   T& as()
@@ -262,6 +268,34 @@ private:
   static void wake(Pimpl& target) noexcept;
   [[nodiscard]] Pimpl* wakeTarget() noexcept { return _p.get(); }
   std::unique_ptr<Pimpl> _p;
+};
+
+/**
+ * @brief A SinkWorker that owns a T: what SinkWorker::create<T>() and the sinks'
+ * create() return. Its sink() is the T, with no dynamic_cast. It converts to the
+ * std::shared_ptr<SinkWorker> that LogChannel::addDataSink() takes.
+ *
+ *   auto recorder = MCAPRingSink::create(options);
+ *   channel->addDataSink(recorder);
+ *   (void)recorder->sink().requestDump(std::chrono::seconds(2));
+ *
+ * It adds no data member and no virtual function, so it is a SinkWorker in size and
+ * behaviour (stop() and the destructor included). sink() hides SinkWorker::sink() on
+ * purpose: through a SinkWorker it is still the DataSink.
+ */
+template <typename T>
+class SinkWorkerOf : public SinkWorker
+{
+  static_assert(std::is_base_of_v<DataSink, T>, "T must derive from DataSink");
+
+public:
+  explicit SinkWorkerOf(std::unique_ptr<T> sink, Delivery delivery = Delivery::Threaded)
+    : SinkWorker(std::move(sink), delivery)
+  {}
+
+  /// The owned sink. A T by construction, so the cast is static.
+  T& sink() { return static_cast<T&>(SinkWorker::sink()); }
+  const T& sink() const { return static_cast<const T&>(SinkWorker::sink()); }
 };
 
 //--------------------------------------------------

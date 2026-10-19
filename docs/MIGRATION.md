@@ -43,10 +43,10 @@ included.
 | `#include "data_tamer/channel.hpp"` (every header) | `#include "data_tamer_v2/channel.hpp"` |
 | `#include "data_tamer_parser/data_tamer_parser.hpp"` | `#include "data_tamer_v2/data_tamer_parser.hpp"` |
 | `DataTamer::LogChannel`, `namespace DataTamer` | `DataTamer2::LogChannel`, `namespace DataTamer2` |
-| `std::make_shared<MCAPSink>(path)` | `MCAPSink::create(path)`, a `std::shared_ptr<SinkWorker>` |
+| `std::make_shared<MCAPSink>(path)` | `MCAPSink::create(path)`, a `std::shared_ptr<SinkWorkerOf<MCAPSink>>` that converts to `std::shared_ptr<SinkWorker>` |
 | `std::make_shared<ROS2PublisherSink>(node, prefix)` | `ROS2PublisherSink::create(node, prefix)` |
 | `std::make_shared<DummySink>()` | `DummySink::create()` |
-| `sink->setMaxTimeBeforeReset(t)` and other sink methods | `worker->as<MCAPSink>().setMaxTimeBeforeReset(t)` |
+| `sink->setMaxTimeBeforeReset(t)` and other sink methods | `worker->sink().setMaxTimeBeforeReset(t)`; `worker->as<MCAPSink>()` through a plain `SinkWorker` |
 | `MCAPSink::finishQueueAndStop()` | `worker->stop()`, which also closes the file |
 | `class MySink : public DataSinkBase` | `class MySink : public DataSink`, see [custom sinks](#custom-sinks) |
 | `if(!channel->takeSnapshot())` | `if(channel->takeSnapshot() != SnapshotResult::ok)` |
@@ -88,11 +88,13 @@ DataTamer::ChannelsRegistry::Global().addDefaultSink(mcap);
 
 // 2.0
 auto worker = DataTamer2::MCAPSink::create("run.mcap");
-worker->as<DataTamer2::MCAPSink>().setMaxTimeBeforeReset(std::chrono::seconds(60));
+worker->sink().setMaxTimeBeforeReset(std::chrono::seconds(60));
 DataTamer2::ChannelsRegistry::Global().addDefaultSink(worker);
 ```
 
-`as<T>()` throws `std::bad_cast` if the sink is not a `T`. `addDefaultSink()` also
+`worker->sink()` is the `MCAPSink`: `create()` returns a `SinkWorkerOf<MCAPSink>`. Code
+that holds only a `std::shared_ptr<SinkWorker>` uses `worker->as<MCAPSink>()`, which throws
+`std::bad_cast` if the sink is not an `MCAPSink`. `addDefaultSink()` also
 attaches the sink to channels that exist already, so it no longer has to come before
 `getChannel()`. `ROS2PublisherSink::create()` takes an optional `ROS2PublisherOptions`
 third argument. A channel holds at most 8 sinks, and so does the registry as default

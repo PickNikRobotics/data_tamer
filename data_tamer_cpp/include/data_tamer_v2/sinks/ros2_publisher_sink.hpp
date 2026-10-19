@@ -67,9 +67,9 @@ public:
   {}
 
   template <typename NodeT>
-  static std::shared_ptr<SinkWorker> create(NodeT&& nodelike,
-                                            const std::string& topic_prefix,
-                                            const ROS2PublisherOptions& options = {})
+  static std::shared_ptr<SinkWorkerOf<ROS2PublisherSink>>
+  create(NodeT&& nodelike, const std::string& topic_prefix,
+         const ROS2PublisherOptions& options = {})
   {
     return SinkWorker::create<ROS2PublisherSink>(std::forward<NodeT>(nodelike),
                                                  topic_prefix, options);
@@ -78,7 +78,7 @@ public:
   /// Publish the pending batch, if any, and the schema catalog if its last publication
   /// failed. Throws if a publication fails. SinkWorker::stop() calls it after the last
   /// delivery (a throw is then counted in SinkWorker::errors()). Callable from any
-  /// thread, e.g. `worker->as<ROS2PublisherSink>().flush()` after `worker->drain()`.
+  /// thread, e.g. `worker->sink().flush()` after `worker->drain()`.
   void flush();
 
   ~ROS2PublisherSink() override;

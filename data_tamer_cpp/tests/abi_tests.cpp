@@ -65,6 +65,10 @@ TEST(ABI, SinksAreOnlyOnePointerLargerThanTheInterface)
   static_assert(sizeof(SinkWorker) == sizeof(std::unique_ptr<int>), "SinkWorker grew a "
                                                                     "member outside its "
                                                                     "Pimpl");
+  // The typed handle of the factories adds no data member and no virtual function.
+  static_assert(sizeof(SinkWorkerOf<MCAPSink>) == sizeof(SinkWorker));
+  static_assert(alignof(SinkWorkerOf<MCAPSink>) == alignof(SinkWorker));
+  static_assert(!std::is_polymorphic_v<SinkWorkerOf<MCAPSink>>);
   // The types registry lives in the Pimpl too.
   static_assert(sizeof(LogChannel) == sizeof(std::enable_shared_from_this<LogChannel>) +
                                           sizeof(std::unique_ptr<int>),

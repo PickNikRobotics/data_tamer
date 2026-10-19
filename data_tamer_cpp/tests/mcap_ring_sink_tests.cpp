@@ -540,12 +540,14 @@ TEST(MCAPRingSink, DumpWaitingForTheWriterReportsLaterEvictions)
 }
 
 // A request made just before shutdown, with no snapshot left to trigger it:
-// SinkWorker::stop() writes it (DataSink::onStop()).
+// SinkWorker::stop() writes it (DataSink::onStop()). The request goes through the
+// typed handle that create() returns.
 TEST(MCAPRingSink, StopWritesThePendingDump)
 {
   TempBase base("flush");
   auto worker = MCAPRingSink::create(ringOptions(base.path, 100));
-  auto& sink = worker->as<MCAPRingSink>();
+  auto& sink = worker->sink();
+  ASSERT_EQ(&sink, &worker->as<MCAPRingSink>());
   Source source("flush", worker);
   EXPECT_FALSE(sink.flushPendingDump()) << "nothing requested";
   for(int64_t ts = 0; ts <= 300; ts += 10)

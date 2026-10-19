@@ -75,9 +75,9 @@ private:
 int main()
 {
   std::array<double, 2> positions{}, velocities{}, efforts{};
-  auto sink = DataTamer2::SinkWorker::create<CsvSink>("T07_joint_states.csv");
+  auto csv = DataTamer2::SinkWorker::create<CsvSink>("T07_joint_states.csv");
   auto channel = DataTamer2::LogChannel::create("controller");
-  channel->addDataSink(sink);
+  channel->addDataSink(csv);
   channel->registerValue("positions", &positions);
   channel->registerValue("velocities", &velocities);
   channel->registerValue("efforts", &efforts);
@@ -94,7 +94,7 @@ int main()
     channel->takeSnapshot();
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
-  sink->stop();
-  std::cout << "CSV sink errors=" << sink->errors() << '\n';
-  return sink->errors() == 0 ? 0 : 1;
+  csv->stop();
+  std::cout << "CSV sink errors=" << csv->errors() << '\n';
+  return csv->errors() == 0 ? 0 : 1;
 }

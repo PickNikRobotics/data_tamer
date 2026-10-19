@@ -36,8 +36,8 @@ under "Unreleased" in `data_tamer_cpp/CHANGELOG.rst`.
   `data_tamer_v2::data_tamer` under ROS and `data_tamer::data_tamer` (package
   `data_tamer`) otherwise.
   - `include/data_tamer_v2/`: public headers. `channel.hpp` (LogChannel, SnapshotResult),
-    `data_tamer.hpp` (ChannelsRegistry), `data_sink.hpp` (DataSink, SinkWorker, Snapshot,
-    SnapshotRef), `logged_value.hpp`, `names.hpp`, `types.hpp` (Schema, BasicType),
+    `data_tamer.hpp` (ChannelsRegistry), `data_sink.hpp` (DataSink, SinkWorker,
+    SinkWorkerOf, Snapshot, SnapshotRef), `logged_value.hpp`, `names.hpp`, `types.hpp` (Schema, BasicType),
     `custom_types.hpp`, `values.hpp`, `fwd.hpp`, `contrib/SerializeMe.hpp`
     (TypeDefinitionTrait, serialization), `details/` (pool, `WriteTransaction` and the
     guards in `locked_reference.hpp`, `abi.hpp`: public because inline code uses them),

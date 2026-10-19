@@ -24,8 +24,7 @@ std::string NumberedPath(const std::string& path, size_t number);
 /**
  * @brief Saves the snapshots as an MCAP file (https://mcap.dev/). Create it with
  * MCAPSink::create(), attach the returned worker with LogChannel::addDataSink() and
- * reach the methods below through worker->as<MCAPSink>(). They can be called from any
- * thread.
+ * reach the methods below through worker->sink(). They can be called from any thread.
  *
  * SinkWorker::stop() (and the worker's destructor) delivers what is queued and closes
  * the file. A SinkWorker::start() after a stop() records into the next numbered file,
@@ -47,8 +46,8 @@ public:
   explicit MCAPSink(std::string const& filepath, bool do_compression = false);
 
   /// Ready-to-attach sink: SinkWorker::create<MCAPSink>(filepath, do_compression).
-  static std::shared_ptr<SinkWorker> create(std::string const& filepath,
-                                            bool do_compression = false)
+  static std::shared_ptr<SinkWorkerOf<MCAPSink>> create(std::string const& filepath,
+                                                        bool do_compression = false)
   {
     return SinkWorker::create<MCAPSink>(filepath, do_compression);
   }

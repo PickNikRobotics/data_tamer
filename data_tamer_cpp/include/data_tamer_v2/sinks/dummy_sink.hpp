@@ -18,7 +18,10 @@ namespace DataTamer2
 class DummySink : public DataSink
 {
 public:
-  static std::shared_ptr<SinkWorker> create() { return SinkWorker::create<DummySink>(); }
+  static std::shared_ptr<SinkWorkerOf<DummySink>> create()
+  {
+    return SinkWorker::create<DummySink>();
+  }
 
   /// Copy of the latest snapshot delivered.
   Snapshot latestSnapshot() const

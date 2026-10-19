@@ -4,6 +4,7 @@
 #include "data_tamer_v2/channel.hpp"
 #include "data_tamer_v2/data_tamer.hpp"
 #include "data_tamer_v2/sinks/dummy_sink.hpp"
+#include "data_tamer_v2/sinks/mcap_ring_sink.hpp"
 #include "data_tamer_v2/sinks/mcap_sink.hpp"
 #include "mcap_test_utils.hpp"
 #include "test_sinks.hpp"
@@ -18,6 +19,7 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <type_traits>
 #include <typeinfo>
 #include <unordered_map>
 #include <vector>
@@ -613,6 +615,56 @@ TEST(SinkWorkerApi, ConstTypedAccessAndNoexceptCounters)
 
 // The channel announces its schema again when the worker is attached again. The count of
 // the snapshots already delivered must survive it.
+// The factories return a SinkWorkerOf<T>: sink() is the T that as<T>() finds, and
+// through the SinkWorker base it is still the DataSink.
+TEST(SinkWorkerApi, FactoriesReturnATypedHandle)
+{
+  static_assert(std::is_same_v<decltype(SinkWorker::create<DummySink>()),
+                               std::shared_ptr<SinkWorkerOf<DummySink>>>);
+  static_assert(std::is_same_v<decltype(DummySink::create()),
+                               std::shared_ptr<SinkWorkerOf<DummySink>>>);
+  static_assert(std::is_same_v<decltype(MCAPSink::create("x.mcap")),
+                               std::shared_ptr<SinkWorkerOf<MCAPSink>>>);
+  static_assert(std::is_same_v<decltype(MCAPRingSink::create(MCAPRingOptions{})),
+                               std::shared_ptr<SinkWorkerOf<MCAPRingSink>>>);
+
+  auto handle = DummySink::create();
+  static_assert(std::is_same_v<decltype(handle->sink()), DummySink&>);
+  EXPECT_EQ(&handle->sink(), &handle->as<DummySink>());
+
+  const SinkWorkerOf<DummySink>& const_handle = *handle;
+  static_assert(std::is_same_v<decltype(const_handle.sink()), const DummySink&>);
+  EXPECT_EQ(&const_handle.sink(), &handle->sink());
+
+  SinkWorker& base = *handle;
+  static_assert(std::is_same_v<decltype(base.sink()), DataSink&>);
+  EXPECT_EQ(&base.sink(), static_cast<DataSink*>(&handle->sink()));
+}
+
+// A typed handle converts to the shared_ptr<SinkWorker> that channels and containers
+// of workers take.
+TEST(SinkWorkerApi, TypedHandleAttachesAsASinkWorker)
+{
+  auto handle = DummySink::create();
+  double value = 1;
+  auto channel = LogChannel::create("typed");
+  channel->registerValue("value", &value);
+  EXPECT_TRUE(channel->addDataSink(handle));
+  EXPECT_FALSE(channel->addDataSink(handle));  // the same worker
+  EXPECT_EQ(channel->getNumberOfSinks(), 1u);
+  std::vector<std::shared_ptr<SinkWorker>> workers{
+    handle, SinkWorker::create<LifecycleSink>(std::make_shared<Journal>())
+  };
+  EXPECT_EQ(workers[0], handle);
+
+  ASSERT_EQ(channel->takeSnapshot(), SnapshotResult::ok);
+  handle->drain();
+  EXPECT_EQ(handle->sink().schemasCount(), 1u);
+  EXPECT_EQ(handle->delivered(), 1u);
+  channel->removeDataSink(handle);
+  EXPECT_EQ(channel->getNumberOfSinks(), 0u);
+}
+
 TEST(DummySink, SnapshotCountSurvivesTheWorkerBeingAttachedAgain)
 {
   auto sink = manual<DummySink>();

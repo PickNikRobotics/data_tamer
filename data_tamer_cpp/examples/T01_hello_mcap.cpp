@@ -14,10 +14,11 @@ int main()
   double shoulder_position = 0, shoulder_velocity = 0, shoulder_effort = 0;
   double elbow_position = 0, elbow_velocity = 0, elbow_effort = 0;
 
-  // The sink writes the file; the channel takes snapshots and hands them to its sinks.
-  auto sink = DataTamer2::MCAPSink::create("T01_joint_states.mcap");
+  // A worker that owns the sink writing the file (mcap->sink() is the MCAPSink). The
+  // channel takes snapshots and hands them to its sinks.
+  auto mcap = DataTamer2::MCAPSink::create("T01_joint_states.mcap");
   auto channel = DataTamer2::LogChannel::create("controller");
-  channel->addDataSink(sink);
+  channel->addDataSink(mcap);
 
   channel->registerValue("shoulder/position", &shoulder_position);
   channel->registerValue("shoulder/velocity", &shoulder_velocity);
@@ -38,5 +39,5 @@ int main()
     channel->takeSnapshot();  // One sample of every registered value.
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
-  sink->stop();  // Deliver queued snapshots and close the file, including its footer.
+  mcap->stop();  // Deliver queued snapshots and close the file, including its footer.
 }
