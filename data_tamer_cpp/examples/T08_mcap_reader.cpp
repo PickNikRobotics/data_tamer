@@ -1,8 +1,8 @@
 // T08 Reading an MCAP recording
-// You will learn: decode schemas and snapshots, then count samples per time series.
+// You will learn: decode every value of a recording, then count samples per time series.
 // Run: ./T08_mcap_reader [file.mcap] (default: T01's recording), read the counts
 #include "data_tamer_v2/data_tamer_parser.hpp"
-#include <mcap/reader.hpp>
+#include "data_tamer_v2/mcap_reader.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -10,100 +10,36 @@
 #include <map>
 #include <stdexcept>
 #include <string>
-#include <unordered_map>
-#include <vector>
 
 int main(int argc, char** argv)
 {
   const std::string filepath = argc > 1 ? argv[1] : "T01_joint_states.mcap";
 
-  // open the file
-  mcap::McapReader reader;
+  // samples per time series, per channel (the MCAP topic)
+  std::map<std::string, std::map<std::string, size_t>> counts;
+  try
   {
-    auto const res = reader.open(filepath);
-    if(!res.ok())
-    {
-      throw std::runtime_error("Can't open MCAP file");
-    }
+    // in log time order; the values themselves are not used here
+    DataTamer2::ForEachValue(
+        filepath,
+        [&](const std::string& channel, uint64_t /*time*/, const std::string& name,
+            const DataTamerParser::VarNumber& /*value*/) { ++counts[channel][name]; });
+  }
+  catch(const std::runtime_error& e)
+  {
+    // unreadable file, malformed schema or corrupt message: the message says which
+    std::cerr << e.what() << std::endl;
+    return 1;
   }
 
-  // start reading all the schemas and parsing them
-  std::unordered_map<mcap::SchemaId, DataTamerParser::Schema> schemas;
-  // must call this, before accessing the schemas
-  const auto summary = reader.readSummary(mcap::ReadSummaryMethod::NoFallbackScan);
-  if(!summary.ok())
+  for(const auto& [channel, series] : counts)
   {
-    throw std::runtime_error("Cannot read MCAP summary");
-  }
-  for(const auto& [schema_id, mcap_schema] : reader.schemas())
-  {
-    std::string schema_text(reinterpret_cast<const char*>(mcap_schema->data.data()),
-                            mcap_schema->data.size());
-
-    schemas[schema_id] = DataTamerParser::BuildSchemaFromText(schema_text);
-  }
-
-  // count the samples of each time series; the values themselves are not used
-  using MessageCount = std::map<std::string, size_t>;
-  std::map<std::string, MessageCount> message_counts_per_channel;
-
-  // parse all messages
-  size_t skipped = 0;
-  for(const auto& msg : reader.readMessages())
-  {
-    const std::string& channel_name = msg.channel->topic;
-    const auto& dt_schema = schemas.at(msg.schema->id);
-
-    // the callback invoked by ParseSnapshot for each value of the message
-    std::vector<std::string> series;
-    auto callback_number = [&](const std::string& series_name,
-                               const DataTamerParser::VarNumber&) {
-      series.push_back(series_name);
-    };
-
-    std::string problem;  // why the message is corrupt; empty if it decoded
-    try
-    {
-      // the message body holds the active mask and the payload, one after the other
-      auto snapshot = DataTamerParser::SplitMcapMessage(
-          { reinterpret_cast<const uint8_t*>(msg.message.data), msg.message.dataSize });
-      snapshot.timestamp = msg.message.logTime;
-      snapshot.schema_hash = dt_schema.hash;
-
-      if(!DataTamerParser::ParseSnapshot(dt_schema, snapshot, callback_number))
-      {
-        problem = "the payload does not match the schema";
-      }
-    }
-    catch(const std::runtime_error& e)
-    {
-      problem = e.what();
-    }
-    if(!problem.empty())
-    {
-      // report it and go on with the next message
-      ++skipped;
-      std::cerr << channel_name << ": skipped a corrupt message: " << problem
-                << std::endl;
-      continue;
-    }
-
-    auto& message_counts = message_counts_per_channel[channel_name];
-    for(const auto& series_name : series)
-    {
-      ++message_counts[series_name];
-    }
-  }
-
-  // display the counted data samples
-  for(const auto& [channel_name, msg_counts] : message_counts_per_channel)
-  {
-    std::cout << channel_name << ":" << std::endl;
-    for(const auto& [name, count] : msg_counts)
+    std::cout << channel << ":" << std::endl;
+    for(const auto& [name, count] : series)
     {
       std::cout << "   " << name << ":" << count << std::endl;
     }
   }
-  // A corrupt message or an empty recording fails, for scripts and ctest.
-  return (skipped == 0 && !message_counts_per_channel.empty()) ? 0 : 1;
+  // An empty recording fails too, for scripts and ctest.
+  return counts.empty() ? 1 : 0;
 }

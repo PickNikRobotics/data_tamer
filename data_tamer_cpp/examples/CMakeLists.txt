@@ -28,7 +28,6 @@ foreach(TUTORIAL IN LISTS TUTORIALS)
         set_tests_properties(${TUTORIAL} PROPERTIES TIMEOUT 30)
     endif()
 endforeach()
-target_link_libraries(T08_mcap_reader PRIVATE ${DATA_TAMER_MCAP_TARGET})
 
 if(DATA_TAMER_BUILD_TESTS)
     # T08 reads the file T01 writes.

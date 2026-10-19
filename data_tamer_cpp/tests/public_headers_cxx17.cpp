@@ -7,9 +7,11 @@
 #include "data_tamer_v2/channel.hpp"
 #include "data_tamer_v2/custom_types.hpp"
 #include "data_tamer_v2/data_sink.hpp"
+#include "data_tamer_v2/decode.hpp"
 #include "data_tamer_v2/logged_value.hpp"
 #include "data_tamer_v2/names.hpp"
 #include "data_tamer_v2/types.hpp"
+#include "data_tamer_v2/mcap_reader.hpp"
 #include "data_tamer_v2/values.hpp"
 #include "data_tamer_v2/contrib/SerializeMe.hpp"
 #include "data_tamer_v2/details/abi.hpp"
@@ -77,5 +79,8 @@ std::string_view TypeDefinition(Probe& p, AddField& add)
   logged->set(1.0);
   auto tx = channel->scopedWrite();
   channel->addDataSink(DataTamer2::DummySink::create());
+  const DataTamer2::Snapshot snapshot{};
+  [[maybe_unused]] const auto view = ToSnapshotView(snapshot);
+  DataTamer2::ForEachValue("probe.mcap", [](const auto&...) {});
 }
 }  // namespace
