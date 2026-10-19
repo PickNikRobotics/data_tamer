@@ -237,15 +237,19 @@ DATA_TAMER_UPDATE_GOLDEN=1 \
   and `-Werror` with `DATA_TAMER_WERROR=ON` (presets and CI). The MCAP headers are a
   SYSTEM include directory.
 - The real-time path allocates nothing, takes no blocking lock, does no I/O and does not
-  throw. It covers `tryTakeSnapshot()` and what it reaches (`SnapshotPool::tryAcquire`,
-  `WriteMutex::tryLockWithSpin`, `ValuePtr` serialization, `SinkWorker::tryPush` and
-  its per-channel queue, filled by one producer at a time under the channel's write
-  mutex),
-  scalar `LoggedValue::set()`/`get()`, `trySetEnabled()` and
-  `MCAPRingSink::requestDump()`. Tests assert it with `AllocCounter::Scope`
-  (`tests/alloc_counter.hpp`): add one when you touch these paths. `takeSnapshot()` may
-  block and grow a slot; keep the two variants distinct. Nothing is thrown out of the
-  real-time path: `tryTakeSnapshot()` is `noexcept`, and `takeSnapshotImpl()` catches
+  throw. It covers `tryTakeSnapshot()` once logging started and what it reaches
+  (`SnapshotPool::tryAcquire`, `WriteMutex::tryLockWithSpin`, `ValuePtr` serialization,
+  `SinkWorker::tryPush` and its per-channel queue, filled by one producer at a time
+  under the channel's write mutex), scalar `LoggedValue::set()`/`get()`,
+  `trySetEnabled()`, `accepted()` and `MCAPRingSink::requestDump()`. Tests assert it
+  with `AllocCounter::Scope` (`tests/alloc_counter.hpp`): add one when you touch these
+  paths. Before logging started, `tryTakeSnapshot()` without a sink reads the atomic
+  `sink_count` and returns `no_sinks`, real-time as well; with a sink, its first call
+  runs `startLogging()` (a throw returns `start_failed`) and is not real-time, like
+  `takeSnapshot()`: `details::notifyBlockingCall()` reports it to RTSan.
+  `takeSnapshot()` may block and grow a slot; keep the two variants distinct. Nothing is
+  thrown out of the real-time path: `tryTakeSnapshot()` is `noexcept`, and
+  `takeSnapshotImpl()` catches
   around the sizing and serialization of the values, where a serializer may throw (user
   code, or SerializeMe when a container changed size outside `scopedWrite()`), and
   returns `serialize_failed`; `takeSnapshot()` rethrows. That catch, on a fault path, is

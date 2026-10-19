@@ -158,7 +158,6 @@ struct DataTamer2::TypeDefinitionTrait<robot::JointState>
 int main()
 {
   using namespace std::chrono_literals;
-  using DataTamer2::SnapshotResult;
 
   // Registered variables are declared before the channel, so they outlive it.
   std::array<robot::JointState, 4> joints{};
@@ -193,21 +192,9 @@ int main()
     }
     mode->set(i < 1000 ? 0 : 1);
 
-    switch(channel->tryTakeSnapshot())
+    if(!DataTamer2::accepted(channel->tryTakeSnapshot()))  // ok or partial
     {
-      case SnapshotResult::ok:
-        break;
-      case SnapshotResult::partial:           // a sink was stopped
-      case SnapshotResult::rejected:          // every sink was stopped
-      case SnapshotResult::pool_exhausted:    // sinks hold every slot
-      case SnapshotResult::blocked:           // a writer held scopedWrite()
-      case SnapshotResult::oversize:          // payload outgrew the slot
-      case SnapshotResult::serialize_failed:  // a serializer threw
-        ++lost;                               // count, never block or log here
-        break;
-      case SnapshotResult::no_sinks:
-      case SnapshotResult::not_started:
-        break;
+      ++lost;  // count, never block or log here; stats() says why
     }
     cycle_time_ms = std::chrono::duration<double, std::milli>(
                         std::chrono::steady_clock::now() - start)
@@ -288,8 +275,8 @@ per character. Do not log text.
 ### When registration is allowed
 
 All values must be registered before the schema freezes. `startLogging()` freezes it, and so
-does the first `takeSnapshot()` that finds a sink attached (a `takeSnapshot()` without
-sinks returns `no_sinks` and leaves the schema open). After the freeze:
+does the first `takeSnapshot()` or `tryTakeSnapshot()` that finds a sink attached (a
+snapshot without sinks returns `no_sinks` and leaves the schema open). After the freeze:
 
 - registering a new name throws `std::runtime_error` ("can't register new value ... once
   recording started");
@@ -484,8 +471,10 @@ If a sink throws from `onSchema()`, `startLogging()` rethrows and leaves the cha
 queues are allocated last: if that throws (`std::bad_alloc`), the schema stays frozen with
 its pool, nothing is published, and calling `startLogging()` again retries the allocation. `startLogging()` also works without sinks:
 a sink added later receives the schema inside `addDataSink()`. `isLoggingStarted()` reports the
-state. `takeSnapshot()` calls `startLogging()` implicitly, with its allocations and sink
-callbacks, which is why an explicit `startLogging()` belongs outside the control loop.
+state. The first `takeSnapshot()` or `tryTakeSnapshot()` with a sink attached calls
+`startLogging()` implicitly, with its allocations and sink callbacks, which is why an
+explicit `startLogging()` belongs outside the control loop: call it there when the first
+cycle must be real-time too.
 
 ## Taking snapshots
 
@@ -495,8 +484,8 @@ sink receives snapshots in the order they were serialized. `tryTakeSnapshot()` c
 mutex before the pool: a held mutex reports `blocked` even when the pool is also
 exhausted.
 
-`tryTakeSnapshot()` exists to be lock-free: it never blocks on a lock and never allocates,
-and reports every failure as a `SnapshotResult` instead of throwing. Use it on real-time
+`tryTakeSnapshot()` exists to be lock-free: except in the call that starts logging, it
+never blocks on a lock and never allocates, and reports every failure as a `SnapshotResult` instead of throwing. Use it on real-time
 threads; `takeSnapshot()` waits and allocates where `tryTakeSnapshot()` gives up.
 This holds when data_tamer is loaded with `dlopen()` (in a plugin, for example): its one
 thread-local is initial-exec TLS, reserved when the library is loaded, so no warm-up is
@@ -513,7 +502,7 @@ channel stays usable, and the throw has allocated on the calling thread.
 
 | | `takeSnapshot()` | `tryTakeSnapshot()` |
 |---|---|---|
-| Before `startLogging()` | calls `startLogging()` if a sink is attached | returns `not_started` |
+| Before `startLogging()` | returns `no_sinks` without a sink; calls `startLogging()` otherwise, and throws what it throws | returns `no_sinks` without a sink (real-time); otherwise calls `startLogging()`, not real-time, and returns `start_failed` if it throws (the next call retries) |
 | Write mutex held by a writer or another snapshot | spins 2 us, then blocks | spins 2 us, then returns `blocked` |
 | Write mutex held by the calling thread | returns `blocked` | returns `blocked` |
 | Payload larger than the slot | grows the slot (allocates) | returns `oversize` |
@@ -522,10 +511,12 @@ channel stays usable, and the throw has allocated on the calling thread.
 Both return a `SnapshotResult`. The result of `takeSnapshot()` may be ignored: `stats()`
 counts the calls and the `ok` and `partial` results, `pool_exhausted`, `oversize`,
 `serialize_failed` and `blocked` have counters of their own, and `attempts - accepted`
-covers `rejected`, `no_sinks` and `not_started` (see
+covers `rejected`, `no_sinks` and `start_failed` (see
 [Monitoring](#monitoring-one-struct-per-channel-one-per-sink)). The result of
-`tryTakeSnapshot()` is `[[nodiscard]]`: before `startLogging()` it fails on every call
-with `not_started`.
+`tryTakeSnapshot()` is `[[nodiscard]]`, because it gives up where `takeSnapshot()` would
+wait. `accepted(result)` (`channel.hpp`, `constexpr`, real-time safe) is true for `ok` and
+`partial`, the results `stats().accepted` counts: count the others in the loop and read
+`stats()` afterwards for the reason.
 
 | Result | Meaning | What to do |
 |---|---|---|
@@ -533,7 +524,7 @@ with `not_started`.
 | `partial` | Captured, but some sinks refused it because their `SinkWorker` is stopped. | Check `stats().dropped_by_sink`; `start()` the worker or detach it. |
 | `rejected` | Captured, but every sink refused it (every worker stopped). | Same as `partial`. |
 | `no_sinks` | No sink attached; nothing captured. Before `startLogging()` the schema stays open. | Attach a sink. |
-| `not_started` | `tryTakeSnapshot()` before `startLogging()`; nothing captured. | Call `startLogging()` first. |
+| `start_failed` | `tryTakeSnapshot()` called `startLogging()`, which threw (a sink's `onSchema()`, an allocation, a call from a sink callback); nothing captured. `takeSnapshot()` throws instead. | Fix the cause; the next call retries. |
 | `pool_exhausted` | Sinks still hold every pool slot; the sample is lost for every sink. | Raise `setPoolCapacity()`, or fix the slow sink. |
 | `oversize` | `tryTakeSnapshot()`: the payload outgrew the slot. | Raise `setPayloadCapacity()`. |
 | `blocked` | `tryTakeSnapshot()`: a writer or another snapshot held the write mutex past the spin budget. Either variant: the calling thread holds it. | Shorten `scopedWrite()` scopes and pointer guards; release them before a snapshot. |
@@ -561,7 +552,10 @@ that `addDataSink()` takes. Reach the sink's own methods with `worker->sink()`, 
 Through a plain `SinkWorker`, `sink()` is the `DataSink&` and `worker->as<T>()` the `T&`
 (it throws `std::bad_cast` for the wrong type).
 
-- `channel->addDataSink(worker)` attaches a sink and returns `true`. A channel holds at
+- `channel->addDataSink(worker)` attaches a sink and returns `true`. It takes the
+  `SinkWorker`: a `std::shared_ptr` to a bare `DataSink` (`std::make_shared<MCAPSink>(path)`,
+  1.x style) fails to compile with a `static_assert` that names `MCAPSink::create()` and
+  `SinkWorker::create<T>()`; so do `removeDataSink()` and `addDefaultSink()`. A channel holds at
   most eight sinks (a ninth throws `std::runtime_error`). Adding the same sink twice does
   nothing and returns `false`.
 - One sink can serve many channels; each channel's schema reaches it once.
@@ -799,7 +793,7 @@ recorder->stop();
   every message: reliable, transient-local, depth 1, so late subscribers get it. It is
   published when a channel starts logging, from the thread calling `startLogging()` or
   `addDataSink()`. Call `startLogging()` before the control loop, or the first
-  `takeSnapshot()` makes that DDS write.
+  `takeSnapshot()` or `tryTakeSnapshot()` makes that DDS write.
 - `<prefix>/data` (`data_tamer_msgs/Snapshot`) carries one message per snapshot, or
   `<prefix>/data_batch` (`data_tamer_msgs/SnapshotBatch`) carries batches when
   `aggregate` is true.
@@ -877,7 +871,8 @@ Derive from `DataTamer2::DataSink` and implement the two protected callbacks, pl
     ran;
   - `ChannelsRegistry::addDefaultSink()` of that worker when that `addDataSink()` throws
     for one of the registry's channels (the call is undone);
-  - `startLogging()`, and so the first `takeSnapshot()`, of a channel that worker is
+  - `startLogging()`, and so the first `takeSnapshot()` (`tryTakeSnapshot()` returns
+    `start_failed` instead), of a channel that worker is
     attached to, also after a failed start that announced the schema to it (retry
     from another thread).
 
@@ -1059,12 +1054,13 @@ The two extra counters cost the snapshot path two atomic increments (`attempts` 
 
 | Call | Real-time safe | Notes |
 |---|---|---|
-| `tryTakeSnapshot()` | yes | Requires `startLogging()`. `noexcept`. Custom serializers must not allocate, block or throw (a throw returns `serialize_failed`). |
+| `tryTakeSnapshot()` | yes | Except its first call with a sink before `startLogging()`, which starts logging. `noexcept`. Custom serializers must not allocate, block or throw (a throw returns `serialize_failed`). |
 | `takeSnapshot()` | no | Can block on the write mutex, grow a slot, or call `startLogging()`. |
 | scalar `LoggedValue::set()`, `get()` | yes | Wait-free. |
 | non-scalar `LoggedValue::set()`, `get()`, pointer guards | no | Lock the write mutex while a snapshot serializes. |
 | `trySetEnabled()`, `LogChannel::isEnabled()`, `LoggedValue::setEnabled()`, `LoggedValue::isEnabled()` | yes | Lock-free, `noexcept`. `LogChannel::setEnabled()` can throw. |
 | `MCAPRingSink::requestDump()` | yes | One compare-exchange; `noexcept`. |
+| `accepted(SnapshotResult)` | yes | `constexpr`; `noexcept`. |
 | `writeLockContended()`, `writeLockWaitMaxNs()`, `payloadReallocations()`, `droppedOversize()`, `serializeFailures()`, `snapshotAttempts()`, `snapshotsAccepted()`, `poolExhausted()` | yes | Atomic loads; `noexcept`. |
 | `registerValue()`, `createLoggedValue()`, `unregister()`, `LoggedValue` destructor | no | Control mutex; can wait for a snapshot. |
 | `addDataSink()`, `removeDataSink()`, `startLogging()` | no | Control mutex; run sink callbacks. |
@@ -1194,9 +1190,8 @@ with another standard library (`docs/wire_format.md`, section 5).
       without `scopedWrite()`.
 - [ ] Called `setCreateNewFileOnReset(false)` on an `MCAPSink` whose recording you keep:
       every reset truncates the file and discards what it held.
-- [ ] Skipped `startLogging()`: the first `takeSnapshot()` in the loop then allocates and runs
-      sink callbacks (a DDS write for ROS 2), and `tryTakeSnapshot()` returns
-      `not_started` forever.
+- [ ] Skipped `startLogging()`: the first `takeSnapshot()` or `tryTakeSnapshot()` in the
+      loop then allocates and runs sink callbacks (a DDS write for ROS 2).
 - [ ] Used `takeSnapshot()` on a real-time thread: use `tryTakeSnapshot()`.
 - [ ] Ignored `SnapshotResult` and never read `stats()`: drops stay invisible.
 - [ ] Kept the default pool with a sink that stalls longer than it lasts (1 s at 1 kHz for

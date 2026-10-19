@@ -63,7 +63,7 @@ void useResults(const std::shared_ptr<DataTamer2::SnapshotPool>& pool,
   (void)channel.getNumberOfSinks();
 #endif
   // takeSnapshot() may be ignored (stats() counts every outcome); tryTakeSnapshot()
-  // may not: before startLogging() it fails on every call with `not_started`.
+  // may not: it gives up where takeSnapshot() would wait (`blocked`, `oversize`).
   channel.takeSnapshot();
 #ifdef DT_IGNORE_TRY_TAKE_SNAPSHOT
   channel.tryTakeSnapshot();

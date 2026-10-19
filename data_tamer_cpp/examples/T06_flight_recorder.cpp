@@ -32,7 +32,7 @@ int main()
   channel->registerValue("velocities", &velocities);
   channel->registerValue("efforts", &efforts);
   channel->addDataSink(recorder);
-  channel->startLogging();
+  channel->startLogging();  // before the loop, so that every cycle is real-time
 
   // A 1 kHz control loop; a fault at t = 1 s.
   for(int i = 0; i < 1500; i++)

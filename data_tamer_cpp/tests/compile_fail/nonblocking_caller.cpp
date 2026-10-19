@@ -46,6 +46,8 @@ controlCycle(LogChannel& channel, LoggedValue<double>& value, const Registration
 #ifdef DT_STATS
   (void)channel.stats();
 #endif
-  return channel.tryTakeSnapshot();
+  const auto result = channel.tryTakeSnapshot();
+  (void)accepted(result);
+  return result;
 }
 }  // namespace probe

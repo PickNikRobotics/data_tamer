@@ -43,13 +43,13 @@ included.
 | `#include "data_tamer/channel.hpp"` (every header) | `#include "data_tamer_v2/channel.hpp"` |
 | `#include "data_tamer_parser/data_tamer_parser.hpp"` | `#include "data_tamer_v2/data_tamer_parser.hpp"` |
 | `DataTamer::LogChannel`, `namespace DataTamer` | `DataTamer2::LogChannel`, `namespace DataTamer2` |
-| `std::make_shared<MCAPSink>(path)` | `MCAPSink::create(path)`, a `std::shared_ptr<SinkWorkerOf<MCAPSink>>` that converts to `std::shared_ptr<SinkWorker>` |
+| `std::make_shared<MCAPSink>(path)` | `MCAPSink::create(path)`, a `std::shared_ptr<SinkWorkerOf<MCAPSink>>` that converts to `std::shared_ptr<SinkWorker>`; `addDataSink()` of the bare sink fails to compile with a `static_assert` that says so |
 | `std::make_shared<ROS2PublisherSink>(node, prefix)` | `ROS2PublisherSink::create(node, prefix)` |
 | `std::make_shared<DummySink>()` | `DummySink::create()` |
 | `sink->setMaxTimeBeforeReset(t)` and other sink methods | `worker->sink().setMaxTimeBeforeReset(t)`; `worker->as<MCAPSink>()` through a plain `SinkWorker` |
 | `MCAPSink::finishQueueAndStop()` | `worker->stop()`, which also closes the file |
 | `class MySink : public DataSinkBase` | `class MySink : public DataSink`, see [custom sinks](#custom-sinks) |
-| `if(!channel->takeSnapshot())` | `if(channel->takeSnapshot() != SnapshotResult::ok)` |
+| `if(!channel->takeSnapshot())` | `if(!accepted(channel->takeSnapshot()))` (`ok` or `partial`) |
 | `channel->getActiveFlags()` | removed: `channel->isEnabled(id)` or `value->isEnabled()` per value; a sink reads `Snapshot::active_mask` |
 | `std::lock_guard lock(channel->writeMutex())` | `auto tx = channel->scopedWrite()` |
 | `Mutex`, `DataTamer::Mutex` | removed |
@@ -226,10 +226,11 @@ queued the snapshot (delivery comes later, on the worker thread:
 `SinkWorker::delivered()` counts it); the
 [user manual](USER_MANUAL.md#snapshots-are-missing-from-the-recording) lists the other
 values. A plain `channel->takeSnapshot();` still compiles, but
-`if(!channel->takeSnapshot())` doesn't:
+`if(!channel->takeSnapshot())` doesn't. `accepted()` is true when a sink took it (`ok` or
+`partial`):
 
 ```cpp
-if(channel->takeSnapshot() != DataTamer2::SnapshotResult::ok)
+if(!DataTamer2::accepted(channel->takeSnapshot()))
 {
   // count it, or read the totals from channel->stats()
 }
@@ -239,7 +240,7 @@ if(channel->takeSnapshot() != DataTamer2::SnapshotResult::ok)
 (`accepted`: `ok` and `partial`). `pool_exhausted`, `oversize` and `serialize_failed` have
 counters of their own (`pool_exhausted`, `dropped_oversize`, `serialize_failures`), and
 `blocked` is in `write_lock_contended`, with the `takeSnapshot()` calls that waited.
-`rejected`, `no_sinks` and `not_started` have none: `attempts - accepted` covers them with
+`rejected`, `no_sinks` and `start_failed` have none: `attempts - accepted` covers them with
 the others.
 
 `getActiveFlags()` is removed. A sink reads the mask of each snapshot from
@@ -250,8 +251,9 @@ the others.
 the schema to the sinks. The first `takeSnapshot()` calls it for you, so 1.x code needs no
 change. Call it yourself before the loop when the first iteration must be fast, or with
 `ROS2PublisherSink`, which publishes the schemas from `startLogging()`. A real-time loop
-calls the new `tryTakeSnapshot()`, which never blocks or allocates, and requires
-`startLogging()` first (see [Real-time use](USER_MANUAL.md#real-time-use)).
+calls the new `tryTakeSnapshot()`, which never blocks or allocates, except in its first
+call with a sink, which starts logging: call `startLogging()` before the loop when the first
+cycle must be real-time (see [Real-time use](USER_MANUAL.md#real-time-use)).
 
 ## Writing values from other threads
 

@@ -61,7 +61,7 @@ int main()
   for(int cycle = 0; cycle < 1500; ++cycle)
   {
     // This thread reads the raw values only through the snapshot API.
-    if(channel->tryTakeSnapshot() != DataTamer2::SnapshotResult::ok)
+    if(!DataTamer2::accepted(channel->tryTakeSnapshot()))
     {
       ++missed;  // A concurrent transaction can yield blocked; do not retry.
     }

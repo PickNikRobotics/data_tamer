@@ -117,6 +117,17 @@ reads 1.x files.
   schema; the first ``takeSnapshot()`` calls it. ``tryTakeSnapshot()``, for real-time
   threads, never blocks or allocates, also when data_tamer is loaded with ``dlopen()``.
   Several threads may take snapshots of one channel.
+* The first ``tryTakeSnapshot()`` with a sink attached starts logging, like
+  ``takeSnapshot()``, and is not real-time (RealtimeSanitizer reports it): call
+  ``startLogging()`` before the loop when the first cycle must be. Without a sink it
+  returns ``no_sinks``, in real time; if starting throws, ``SnapshotResult::start_failed``, and the next
+  call retries.
+* ``accepted(SnapshotResult)``, ``constexpr`` and real-time safe: true for ``ok`` and
+  ``partial``, what ``stats().accepted`` counts.
+* ``addDataSink()``, ``removeDataSink()`` and ``addDefaultSink()`` given a
+  ``std::shared_ptr`` to a ``DataSink`` (``std::make_shared<MCAPSink>(path)``, as in 1.x)
+  fail with a ``static_assert`` that names ``MCAPSink::create()`` and
+  ``SinkWorker::create<T>()``, instead of a ``shared_ptr`` conversion error.
 * ``tryTakeSnapshot()`` is ``noexcept``: a serializer that throws ends it with
   ``SnapshotResult::serialize_failed``, counted by ``serializeFailures()``;
   ``takeSnapshot()`` lets the exception through, as in 1.x. The library catches it, so
