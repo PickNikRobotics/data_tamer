@@ -133,6 +133,8 @@ reads 1.x files.
   ``RenderSchema()``, ``SchemaFormat::Yaml``.
 * ``DataSink::onStop()`` and ``onStart()``, ``SinkWorker::Delivery::Manual`` (no thread:
   the application calls ``drain()``) and ``ChannelsRegistry::stopAll()``.
+* ``ChannelsRegistry::shutdown()``: ``stopAll()`` then ``clear()``, for the end of
+  ``main()``. Every sink is finished and no channel is left borrowing your variables.
 * ``TypeDefinitionTrait<T>`` describes a type without reopening its namespace (Eigen,
   ...).
 * Real-time checks with Clang 20 or later: the real-time API is declared

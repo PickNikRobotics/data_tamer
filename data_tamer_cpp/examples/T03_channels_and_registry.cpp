@@ -50,7 +50,6 @@ int main()
     controller->takeSnapshot();
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
-  registry.stopAll();
-  // The global registry otherwise keeps channels borrowing our locals after main.
-  registry.clear();
+  // Finishes the file and drops the channels, which borrow our locals.
+  registry.shutdown();
 }
