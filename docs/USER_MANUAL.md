@@ -319,6 +319,10 @@ auto worker = DataTamer2::SinkWorker::create<CountingSink>();
 channel->addDataSink(worker);
 ```
 
+To decode a snapshot there, pass `ToSnapshotView(*snapshot)` (`data_tamer_v2/decode.hpp`)
+to `DataTamerParser::ParseSnapshot()`, as
+[T07_custom_sink.cpp](../data_tamer_cpp/examples/T07_custom_sink.cpp) does.
+
 Keep `onSnapshot()` short: while it holds a snapshot, that slot of the channel's pool stays
 busy for every sink. For slow work, copy the snapshot (`DataTamer2::Snapshot copy =
 *snapshot;`) and hand the copy to your own thread. Override `onStop()` and `onStart()` if
@@ -393,11 +397,29 @@ releases before 0.7.0 (2023) are not readable. To build columns, for pandas for 
 tuples instead of a dict, and is faster still:
 [python/README.md](../python/README.md) shows how.
 
-In C++, copy the single header
+In C++, `data_tamer_v2/mcap_reader.hpp` does the same, with the library linked:
+
+```cpp
+#include "data_tamer_v2/mcap_reader.hpp"
+
+DataTamer2::ForEachValue("run.mcap", [](const std::string& channel, uint64_t timestamp_nsec,
+                                        const std::string& name,
+                                        const DataTamerParser::VarNumber& value) {
+  // value is a std::variant of the basic types
+});
+```
+
+Values come in log time order, and any error (a file that can't be read, a corrupt
+message) throws `std::runtime_error`, whose message names the file and the channel.
+The recording of a process that crashed is read up to its last complete chunk, in the
+order it was written.
+A third argument, a vector of channel names, restricts the channels read;
+`ForEachSnapshot()` hands you each snapshot undecoded instead.
+[T08_mcap_reader.cpp](../data_tamer_cpp/examples/T08_mcap_reader.cpp) uses it.
+
+Without the library, copy the single header
 [data_tamer_parser.hpp](../data_tamer_cpp/include/data_tamer_v2/data_tamer_parser.hpp)
-into your project: it has no dependencies.
-[T08_mcap_reader.cpp](../data_tamer_cpp/examples/T08_mcap_reader.cpp) shows how to use it,
-including `SplitMcapMessage()` and the checks on a corrupt message. The
+into your project: it has no dependencies. The
 format is specified in [wire_format.md](wire_format.md).
 
 ## Building and linking

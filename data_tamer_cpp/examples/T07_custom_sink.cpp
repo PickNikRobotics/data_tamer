@@ -3,6 +3,7 @@
 // Run: ./T07_custom_sink then inspect T07_joint_states.csv (timestamp, name, value)
 #include "data_tamer_v2/channel.hpp"
 #include "data_tamer_v2/data_sink.hpp"
+#include "data_tamer_v2/decode.hpp"
 #include "data_tamer_v2/data_tamer_parser.hpp"
 #include "data_tamer_v2/types.hpp"
 
@@ -42,10 +43,6 @@ protected:
     {
       throw std::runtime_error("CSV snapshot of an unknown schema");
     }
-    DataTamerParser::SnapshotView view;
-    view.schema_hash = snapshot->schema_hash;
-    view.active_mask = { snapshot->active_mask.data(), snapshot->active_mask.size() };
-    view.payload = { snapshot->payload.data(), snapshot->payload.size() };
     const auto write_number = [&](const std::string& name,
                                   const DataTamerParser::VarNumber& value) {
       output_ << snapshot->timestamp.count() << ',' << schema->channel_name << ',' << name
@@ -53,7 +50,7 @@ protected:
       std::visit([&](auto number) { output_ << number; }, value);
       output_ << '\n';
     };
-    if(!DataTamerParser::ParseSnapshot(*schema, view, write_number))
+    if(!DataTamerParser::ParseSnapshot(*schema, ToSnapshotView(*snapshot), write_number))
     {
       throw std::runtime_error("CSV snapshot does not match its schema");
     }

@@ -103,6 +103,8 @@ flowchart LR
 | `MCAPRingSink`, `MCAPRingOptions` | `data_tamer_v2/sinks/mcap_ring_sink.hpp` |
 | `ROS2PublisherSink`, `ROS2PublisherOptions` | `data_tamer_v2/sinks/ros2_publisher_sink.hpp` |
 | `DummySink` (tests) | `data_tamer_v2/sinks/dummy_sink.hpp` |
+| `ToSnapshotView(const Snapshot&)`, for the parser | `data_tamer_v2/decode.hpp` |
+| `ForEachSnapshot()`, `ForEachValue()` (read an MCAP file) | `data_tamer_v2/mcap_reader.hpp` |
 | forward declarations only | `data_tamer_v2/fwd.hpp` |
 
 `data_tamer_v2/data_tamer.hpp` includes `channel.hpp`, which includes `data_sink.hpp`. A
@@ -952,6 +954,11 @@ channel->addDataSink(slow);
 A `Snapshot` holds `schema_hash`, `timestamp`, `active_mask` (one bit per schema field)
 and `payload` (enabled values in schema order). `docs/wire_format.md` specifies the
 layout.
+To decode one in a sink, `ToSnapshotView(*snapshot)` (`data_tamer_v2/decode.hpp`, found
+by argument-dependent lookup) returns the `DataTamerParser::SnapshotView` for
+`ParseSnapshot()`, with the schema from `onSchema()` parsed once
+(`DataTamerParser::SchemaRegistry::add(schema.hash, ToStr(schema))`);
+`data_tamer_cpp/examples/T07_custom_sink.cpp` does it.
 
 ## Sizing for real time
 
@@ -1134,8 +1141,38 @@ on the library. `DataTamerParser::BuildSchemaFromText()` reads both schema rende
 with bytes left over; its result is `[[nodiscard]]`. `SplitMcapMessage()` splits an MCAP
 message body into mask and payload and throws `std::runtime_error` if the body does not
 match its two lengths. Malformed input throws `std::runtime_error` (`ValueError` in
-Python). `data_tamer_cpp/examples/T08_mcap_reader.cpp` reads an
-MCAP file with it.
+Python).
+
+To read an MCAP file in C++ with the library linked, `data_tamer_v2/mcap_reader.hpp`
+(header only, over the MCAP headers that come with the library) is the counterpart of
+`iter_mcap()`:
+
+```cpp
+#include "data_tamer_v2/mcap_reader.hpp"
+
+// callback(topic, timestamp_nsec, name, value) for every value; returns the snapshots
+size_t n = DataTamer2::ForEachValue(
+    "control.mcap",
+    [&](const std::string& topic, uint64_t timestamp, const std::string& name,
+        const DataTamerParser::VarNumber& value) { /* ... */ },
+    { "controller" });  // optional: only these topics
+
+// callback(topic, schema, view): undecoded, view.timestamp and schema_hash filled in
+DataTamer2::ForEachSnapshot("control.mcap", [&](const std::string& topic,
+                                                const DataTamerParser::Schema& schema,
+                                                const DataTamerParser::SnapshotView& view) {
+  // DataTamerParser::ParseSnapshot(schema, view, on_number) ...
+});
+```
+
+Both read one file, in log time order, and skip channels of another message encoding.
+A recording whose process crashed (no summary, maybe a partial last chunk) is read too:
+the snapshots of its complete chunks, in file order, because it has no message index.
+Every error throws `std::runtime_error` with "<path>: <topic>: <reason>": a file that
+can't be opened or is not MCAP, a malformed schema, a corrupt message (`ForEachValue()` also when the payload does not
+match its schema, after the callback saw the values before the error). Exceptions of
+the callback pass unchanged. `data_tamer_cpp/examples/T08_mcap_reader.cpp` uses
+`ForEachValue()`.
 
 Both decoders read 1.x files (schema version 4) and 2.x files; a text of a release before
 0.7.0, which has no `### version:` line, throws. The hash of a 1.x file came from the

@@ -38,6 +38,7 @@ set(DATATAMER_TEST_SOURCES
     serialize_me_api_tests.cpp
     string_encoding_tests.cpp
     mcap_encoding_tests.cpp
+    mcap_reader_tests.cpp
     mcap_ring_sink_tests.cpp
     mcap_sink_reopen_tests.cpp
     mcap_sink_rollover_failure_tests.cpp

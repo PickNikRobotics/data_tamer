@@ -377,7 +377,9 @@ So:
 - update PlotJuggler to 4 or later, which bundles the 2.0 parser (3.x has the 1.x parser
   and rejects 2.0 files);
 - in your own C++ readers, copy the 2.0
-  [data_tamer_v2/data_tamer_parser.hpp](../data_tamer_cpp/include/data_tamer_v2/data_tamer_parser.hpp);
+  [data_tamer_v2/data_tamer_parser.hpp](../data_tamer_cpp/include/data_tamer_v2/data_tamer_parser.hpp),
+  or, with the library linked, read whole files with `ForEachValue()` of
+  `data_tamer_v2/mcap_reader.hpp`;
 - 2.0 readers still read files recorded with 1.x (schema version 4), using the hash the
   file declares. They reject schema texts without a `### version:` line, written by
   releases before 0.7.0 (late 2023), among them the header-less lines of the 0.3 to 0.5

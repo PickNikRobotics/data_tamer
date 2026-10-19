@@ -152,6 +152,13 @@ reads 1.x files.
 * New headers: ``names.hpp`` (``JoinNames()`` and ``IsCanonicalName()`` build and check
   hierarchical names), ``sinks/mcap_encoding.hpp`` (the MCAP encoding of ``MCAPSink``, for
   code that writes data_tamer MCAP files itself) and ``fwd.hpp`` (forward declarations).
+* Decoding in C++ in a few lines: ``data_tamer_v2/mcap_reader.hpp`` reads an MCAP file
+  (``ForEachValue()`` decodes each value, ``ForEachSnapshot()`` hands over each snapshot),
+  in log time order (a crashed recording up to its last complete chunk, in file order),
+  optionally restricted to some topics, with every error a
+  ``std::runtime_error`` naming the file and the topic, like Python's ``iter_mcap()``;
+  ``data_tamer_v2/decode.hpp`` has ``ToSnapshotView()``, the parser's view of a
+  ``Snapshot`` in a custom sink. T07 and T08 use them.
 * Parser: ``SchemaRegistry``, ``ToSnapshotView()`` and ``ForEachSnapshotInBatch()``
   decode the ROS 2 messages without ROS; ``SplitMcapMessage()`` splits an MCAP message.
 * Parser: ``ParseSnapshot()`` decodes several times faster and allocates nothing per

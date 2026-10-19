@@ -236,7 +236,9 @@ reference decoders:
 
 - C++: [data_tamer_parser.hpp](data_tamer_cpp/include/data_tamer_v2/data_tamer_parser.hpp),
   a single header without external dependencies that you can copy into your project.
-  See how it is used in [T08_mcap_reader](data_tamer_cpp/examples/T08_mcap_reader.cpp).
+  With the library linked, `data_tamer_v2/mcap_reader.hpp` reads a whole file in a few
+  lines (`ForEachValue()`, `ForEachSnapshot()`), as
+  [T08_mcap_reader](data_tamer_cpp/examples/T08_mcap_reader.cpp) does.
 - Python: [python/data_tamer_parser.py](python/data_tamer_parser.py), standard library only,
   packaged as `data-tamer-parser` (see [python/README.md](python/README.md)), with
   `parse_snapshot_values()` to build columns for pandas or numpy.
