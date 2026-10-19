@@ -166,4 +166,10 @@ void ChannelsRegistry::clear()
   }
 }
 
+void ChannelsRegistry::shutdown()
+{
+  stopAll();
+  clear();
+}
+
 }  // namespace DataTamer2

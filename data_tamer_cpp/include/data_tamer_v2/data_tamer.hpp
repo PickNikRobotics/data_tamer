@@ -94,6 +94,12 @@ public:
   /// channel defaults. Dropping the last reference to a worker stops it, which can block.
   void clear();
 
+  /// stopAll(), then clear(): every sink the registry reaches has delivered and
+  /// finished, and no channel is left borrowing pointers to your variables. Call it at
+  /// the end of main() for the global registry. getChannel() afterwards creates a
+  /// fresh channel. Never call it from a sink callback.
+  void shutdown();
+
 private:
   struct Pimpl;
   std::unique_ptr<Pimpl> _p;

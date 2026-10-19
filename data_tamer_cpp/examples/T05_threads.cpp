@@ -18,11 +18,13 @@ int main()
   auto sink = DataTamer2::MCAPSink::create("T05_joint_states.mcap");
   auto channel = DataTamer2::LogChannel::create("controller");
   channel->addDataSink(sink);
+  // A value another thread writes: a LoggedValue owns its storage, a scalar is atomic,
+  // and it unregisters itself when destroyed.
+  auto motor_temperature = channel->createLoggedValue<double>("motor_temperature", 25);
+  // Values that must change together stay plain variables, written in scopedWrite().
   channel->registerValue("positions", &positions);
   channel->registerValue("velocities", &velocities);
   channel->registerValue("efforts", &efforts);
-  // A LoggedValue owns its storage and unregisters itself when destroyed.
-  auto motor_temperature = channel->createLoggedValue<double>("motor_temperature", 25);
   channel->startLogging();
 
   std::thread sensor_callback([&] {

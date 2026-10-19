@@ -71,7 +71,7 @@ flowchart LR
 
 - `ChannelsRegistry` (`data_tamer_v2/data_tamer.hpp`) creates channels by name, applies
   default settings and attaches default sinks to them, and stops every sink at shutdown
-  (`stopAll()`). `ChannelsRegistry::Global()` is a process-wide instance. You can also
+  (`shutdown()`). `ChannelsRegistry::Global()` is a process-wide instance. You can also
   create channels directly with `LogChannel::create(name)`.
 - `LogChannel` (`data_tamer_v2/channel.hpp`) holds pointers to registered variables. It
   reads them only when you take a snapshot. One channel is one schema and one rate: use
@@ -228,6 +228,13 @@ The recorded names are `joints/LF/position`, `joints/LF/velocity`, ...,
 
 ## Registering values
 
+Choose by who writes the value:
+
+| Written by | Register it with |
+|---|---|
+| Only the thread that calls `takeSnapshot()` | `registerValue(name, &var)`: borrowed, so `var` must outlive the registration or be unregistered first. |
+| Another thread | `createLoggedValue<T>(name)`: the channel owns it, a scalar is atomic, a non-scalar goes through `getMutablePtr()`. Raw `registerValue()` variables are written inside `scopedWrite()`, which also keeps several values consistent. |
+
 `LogChannel` (`data_tamer_v2/channel.hpp`) offers:
 
 - `registerValue(name, const T* ptr)` for integers, `float`, `double`, `bool`, `char`,
@@ -306,6 +313,8 @@ destroyed, and dereferences it at every snapshot. A dangling pointer is not dete
   location (a container element, a temporary).
 - Prefer `createLoggedValue()` when the value has no natural owner. `LoggedValue` is not
   copyable or movable, so the pointer it registered stays valid.
+- `ChannelsRegistry::Global()` outlives `main()`: its channels keep borrowing the locals
+  of `main()` until `shutdown()` (or `clear()`).
 
 ### Enabling and disabling
 
@@ -595,14 +604,16 @@ calling thread, serialized with the other callbacks. Each sink finishes itself t
   worker accepts snapshots again: `MCAPSink` records into its next numbered file (unless
   `restartRecording()` opened one meanwhile); the other sinks need nothing. It is not
   called when the worker is constructed. A throw is counted in `errors()`.
-- `ChannelsRegistry::stopAll()` stops every sink of a registry in one call.
+- `ChannelsRegistry::stopAll()` stops every sink of a registry in one call;
+  `shutdown()` also drops its channels.
 
 So a program shuts down with one call per worker, or one for the whole registry, and no
 ordering rules:
 
 ```cpp
-// Every default sink and every sink attached to a registry channel, once each.
-DataTamer2::ChannelsRegistry::Global().stopAll();
+// Every default sink and every sink attached to a registry channel, once each; then the
+// channels, which borrow your variables, are dropped. Last line of main().
+DataTamer2::ChannelsRegistry::Global().shutdown();
 ```
 
 ### Registry
@@ -634,6 +645,10 @@ channels it creates, their default sinks and their default settings.
   order, on the calling thread. Sinks of channels made with `LogChannel::create()` are
   reached only if they are default sinks. The sinks stay attached; `start()` resumes one.
 - `clear()` drops the channels, the default sinks and the channel defaults.
+- `shutdown()` is `stopAll()` then `clear()`: every sink it reaches has delivered and
+  finished, and no channel is left borrowing your variables. Call it at the end of
+  `main()` for the global registry; `getChannel()` afterwards creates a fresh channel.
+  Not from a sink callback.
 
 | `ChannelDefaults` field | Applied as |
 |---|---|
@@ -651,7 +666,7 @@ registry.setChannelDefaults(defaults);
 registry.addDefaultSink(DataTamer2::MCAPSink::create("run.mcap"));
 auto channel = registry.getChannel("controller");  // 2000 slots, MCAP attached
 // ... register, startLogging(), log ...
-registry.stopAll();  // run.mcap is complete
+registry.shutdown();  // run.mcap is complete
 ```
 
 ### MCAPSink
@@ -1046,7 +1061,7 @@ The two extra counters cost the snapshot path two atomic increments (`attempts` 
 | `LogChannel::stats()`, `getSchema()` | no | Control mutex. |
 | `SinkWorker::delivered()`, `errors()`, `queueHighWater()` | yes | Relaxed atomic loads; `noexcept`. |
 | `SinkWorker::stats()`, `lastError()` | no | Take a mutex and copy a string (allocates). |
-| `SinkWorker::stop()`, `drain()`, `flushPendingDump()`, `ChannelsRegistry::stopAll()` | no | Block until delivery or writing ends; `stop()` runs `onStop()`. |
+| `SinkWorker::stop()`, `drain()`, `flushPendingDump()`, `ChannelsRegistry::stopAll()`, `shutdown()` | no | Block until delivery or writing ends; `stop()` runs `onStop()`. |
 
 Control operations must stay out of custom serializers, and out of sink callbacks
 where you can (those that would wait for the callback's own worker throw

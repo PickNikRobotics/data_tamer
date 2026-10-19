@@ -1,4 +1,4 @@
-// DataSink::onStop() and onStart(), ChannelsRegistry::stopAll(),
+// DataSink::onStop() and onStart(), ChannelsRegistry::stopAll() and shutdown(),
 // addDefaultSink() on existing channels and ChannelsRegistry::setChannelDefaults(), and
 // the typed access of a SinkWorker and the bookkeeping of a DummySink next to them.
 #include "data_tamer_v2/channel.hpp"
@@ -565,6 +565,33 @@ TEST(ChannelsRegistry, StopAllStopsEverySinkItReachesOnce)
   registry.stopAll();
   EXPECT_EQ(direct_journal->stopCount(), 2);
   EXPECT_EQ(default_journal->stopCount(), 1);
+}
+
+TEST(ChannelsRegistry, ShutdownFinishesTheSinksAndDropsTheChannels)
+{
+  ChannelsRegistry registry;
+  double value = 1.0;
+  auto journal = std::make_shared<Journal>();
+  registry.addDefaultSink(attach<LifecycleSink>(Delivery::Threaded, journal).worker);
+  auto channel = registry.getChannel("controller");
+  channel->registerValue("value", &value);
+  for(int i = 0; i < 5; ++i)
+  {
+    ASSERT_EQ(channel->takeSnapshot(), SnapshotResult::ok);
+  }
+
+  registry.shutdown();
+  {
+    std::lock_guard lock(journal->mutex);
+    EXPECT_EQ(journal->stops, 1);
+    EXPECT_EQ(journal->snapshots_at_stop, 5);
+  }
+  // The registry forgot the channel and the default sink: a fresh channel, no sink.
+  auto fresh = registry.getChannel("controller");
+  EXPECT_NE(fresh, channel);
+  EXPECT_EQ(fresh->getNumberOfSinks(), 0u);
+  registry.shutdown();  // nothing left to do
+  EXPECT_EQ(journal->stopCount(), 1);
 }
 
 //------------------------------------------------------------------------------

@@ -52,6 +52,14 @@ after the freeze, but only with its original type, because it reuses its slot.
 
 ### Lifetime of registered variables
 
+Choose by who writes the value:
+
+| Written by | Register it with |
+|---|---|
+| Only the thread that takes the snapshots | `registerValue("x", &x)`: borrowed, so `x` must outlive the registration or be unregistered first. |
+| Another thread | `createLoggedValue<T>("x")`: the channel owns it. A scalar is atomic; a struct or vector goes through `getMutablePtr()`. Raw `registerValue()` variables are written inside `scopedWrite()`, which also keeps several values consistent. |
+
+See [Writing values from other threads](#writing-values-from-other-threads).
 `registerValue("x", &x)` borrows the pointer and reads it at every snapshot until
 `unregister()` returns or the channel is destroyed. A dangling pointer is not detected, so:
 
@@ -60,7 +68,7 @@ after the freeze, but only with its original type, because it reuses its slot.
   moves them;
 - don't register a member of an object that is later moved or copied.
 
-If a value has no natural owner, let the channel create it:
+If a value has no natural owner, let the channel create it (a `LoggedValue`):
 
 ```cpp
 auto speed = channel->createLoggedValue<double>("speed");  // unregisters in its destructor
@@ -328,11 +336,14 @@ publishes its partial batch.
 worker->stop();
 // or, for every sink of a registry:
 DataTamer2::ChannelsRegistry::Global().stopAll();
+// or, at the end of main(): stopAll(), then drop the channels that borrow your variables
+DataTamer2::ChannelsRegistry::Global().shutdown();
 ```
 
 Destroying the last reference to a running worker stops it too, so the files are complete
 after a normal exit. Call `stop()` where the recording must be complete at a known point,
-or before an exit that skips destructors.
+or before an exit that skips destructors. The global registry outlives `main()`, so its
+channels would keep borrowing the locals of `main()`: end it with `shutdown()`.
 
 ### Registry defaults
 
