@@ -78,8 +78,9 @@ private:
  * @brief Interface implemented by a sink. Only the owning SinkWorker calls the
  * callbacks, and it serializes them, so state they alone touch needs no lock.
  *
- * - onSchema() runs on the thread that calls LogChannel::startLogging() or
- *   addDataSink(), when a channel's schema reaches the sink (again after a re-attach).
+ * - onSchema() runs on the thread that calls LogChannel::startLogging() (also the first
+ *   takeSnapshot() or tryTakeSnapshot() that starts logging) or addDataSink(), when a
+ *   channel's schema reaches the sink (again after a re-attach).
  * - onSnapshot() runs on the worker thread (or in drain()), in the order each channel
  *   took its snapshots. A throw is caught and counted (SinkWorker::errors()).
  * - onStop() runs once per stop, on the thread that calls SinkWorker::stop() (or

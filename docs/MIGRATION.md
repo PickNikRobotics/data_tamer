@@ -25,13 +25,14 @@ included.
    Change the namespace `DataTamer` to `DataTamer2` (`DataTamer2::LogChannel`,
    `using namespace DataTamer2;`). `SerializeMe` and `DataTamerParser` keep their names.
 3. Create sinks with their `create()` function, and port custom sinks to `DataSink`.
-4. Replace `if(!channel->takeSnapshot())` with a check of the `SnapshotResult`.
+4. Replace `if(!channel->takeSnapshot())` with `if(!accepted(channel->takeSnapshot()))`.
 5. In other threads, replace `writeMutex()` with `scopedWrite()`.
 6. Replace `finishQueueAndStop()` and the `*AcceptingSnapshots()` calls with
-   `worker->stop()` and `start()`, or `ChannelsRegistry::Global().stopAll()`. A worker
-   also stops when its last reference goes away (`~SinkWorker` calls `stop()`), as a 1.x
-   sink finished its file in its destructor: call `stop()` where the recording must be
-   complete at a known point.
+   `worker->stop()` and `start()`, or `ChannelsRegistry::Global().stopAll()` (`shutdown()`
+   at the end of `main()`, which also drops the channels that borrow your variables). A
+   worker also stops when its last reference goes away (`~SinkWorker` calls `stop()`), as
+   a 1.x sink finished its file in its destructor: call `stop()` where the recording must
+   be complete at a known point.
 7. Check the [behaviour changes](#behaviour-changes): MCAP files now roll over, the
    pool now drops snapshots, and the ROS 2 QoS changed.
 8. Update every reader of the recorded data: 1.x parsers can't read 2.0 files.
@@ -43,7 +44,7 @@ included.
 | `#include "data_tamer/channel.hpp"` (every header) | `#include "data_tamer_v2/channel.hpp"` |
 | `#include "data_tamer_parser/data_tamer_parser.hpp"` | `#include "data_tamer_v2/data_tamer_parser.hpp"` |
 | `DataTamer::LogChannel`, `namespace DataTamer` | `DataTamer2::LogChannel`, `namespace DataTamer2` |
-| `std::make_shared<MCAPSink>(path)` | `MCAPSink::create(path)`, a `std::shared_ptr<SinkWorkerOf<MCAPSink>>` that converts to `std::shared_ptr<SinkWorker>`; `addDataSink()` of the bare sink fails to compile with a `static_assert` that says so |
+| `std::make_shared<MCAPSink>(path)` | `MCAPSink::create(path)`, a `std::shared_ptr<SinkWorkerOf<MCAPSink>>` that converts to `std::shared_ptr<SinkWorker>`; `addDataSink()`, `removeDataSink()` or `addDefaultSink()` of the bare sink fails to compile with a `static_assert` that says so |
 | `std::make_shared<ROS2PublisherSink>(node, prefix)` | `ROS2PublisherSink::create(node, prefix)` |
 | `std::make_shared<DummySink>()` | `DummySink::create()` |
 | `sink->setMaxTimeBeforeReset(t)` and other sink methods | `worker->sink().setMaxTimeBeforeReset(t)`; `worker->as<MCAPSink>()` through a plain `SinkWorker` |
@@ -101,9 +102,10 @@ third argument. A channel holds at most 8 sinks, and so does the registry as def
 sinks: a ninth throws `std::runtime_error`.
 
 To stop a sink, call `worker->stop()`, or `ChannelsRegistry::Global().stopAll()` for every
-sink of the registry. `stop()` delivers what is queued, then finishes the sink: `MCAPSink`
-closes its file. `worker->start()` resumes, and `MCAPSink` continues in its next numbered
-file. `MCAPSink::restartRecording()` still opens a new file, but it no longer resumes a
+sink of the registry. At the end of `main()`, `ChannelsRegistry::Global().shutdown()` does
+`stopAll()` and then drops the channels. `stop()` delivers what is queued, then finishes
+the sink: `MCAPSink` closes its file. `worker->start()` resumes, and `MCAPSink` continues
+in its next numbered file. `MCAPSink::restartRecording()` still opens a new file, but it no longer resumes a
 stopped worker: call `worker->start()` after it.
 
 ### Custom sinks
@@ -240,8 +242,8 @@ if(!DataTamer2::accepted(channel->takeSnapshot()))
 (`accepted`: `ok` and `partial`). `pool_exhausted`, `oversize` and `serialize_failed` have
 counters of their own (`pool_exhausted`, `dropped_oversize`, `serialize_failures`), and
 `blocked` is in `write_lock_contended`, with the `takeSnapshot()` calls that waited.
-`rejected`, `no_sinks` and `start_failed` have none: `attempts - accepted` covers them with
-the others.
+`rejected` and `no_sinks` have none (nor `start_failed`, which only `tryTakeSnapshot()`
+returns): `attempts - accepted` covers them with the others.
 
 `getActiveFlags()` is removed. A sink reads the mask of each snapshot from
 `Snapshot::active_mask`; the application asks `channel->isEnabled(id)`, or
@@ -323,7 +325,8 @@ several threads, do it inside `scopedWrite()`.
   functions keep working.
 - `getPointerType()` is removed.
 
-As in 1.x, registering a new name after the first snapshot throws.
+As in 1.x, registering a new name after `startLogging()` or the first snapshot with a sink
+throws.
 
 ## Behaviour changes
 
@@ -399,8 +402,8 @@ The parser header changed too:
 - `SnapshotView::schema_hash` is `uint64_t`.
 - The header needs a little-endian host and no longer includes `<iostream>`.
 - New: `SplitMcapMessage()` splits an MCAP message into mask and payload, and
-  `SchemaRegistry`, `ToSnapshotView()` and `ForEachSnapshotInBatch()` decode the ROS 2
-  messages.
+  `SchemaRegistry`, `DataTamerParser::ToSnapshotView()` of a ROS 2 message and
+  `ForEachSnapshotInBatch()` decode the ROS 2 messages.
 
 Python has a decoder now, `pip install "data-tamer-parser[mcap]"` (see
 [Reading the data](USER_MANUAL.md#reading-the-data)).

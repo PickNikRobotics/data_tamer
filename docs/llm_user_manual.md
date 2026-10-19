@@ -93,10 +93,10 @@ flowchart LR
 
 | You need | Include |
 |---|---|
-| `LogChannel`, `LoggedValue`, `JoinNames`, `SnapshotResult` | `data_tamer_v2/channel.hpp` |
+| `LogChannel`, `LoggedValue`, `JoinNames`, `SnapshotResult`, `accepted()` | `data_tamer_v2/channel.hpp` |
 | The accessors of a `LoggedValue` you already hold | `data_tamer_v2/logged_value.hpp` (creating one needs `channel.hpp`) |
 | `ChannelsRegistry`, and everything `channel.hpp` provides | `data_tamer_v2/data_tamer.hpp` |
-| `DataSink`, `SinkWorker`, `Snapshot`, `SnapshotRef` | `data_tamer_v2/data_sink.hpp` |
+| `DataSink`, `SinkWorker`, `SinkWorkerOf`, `Snapshot`, `SnapshotRef` | `data_tamer_v2/data_sink.hpp` |
 | `Schema`, `ToStr(schema)`, `SchemaFormat` | `data_tamer_v2/types.hpp` |
 | `TypeDefinitionTrait` | `data_tamer_v2/custom_types.hpp` (also pulled in by `channel.hpp`) |
 | `MCAPSink` | `data_tamer_v2/sinks/mcap_sink.hpp` |
@@ -105,6 +105,8 @@ flowchart LR
 | `DummySink` (tests) | `data_tamer_v2/sinks/dummy_sink.hpp` |
 | `ToSnapshotView(const Snapshot&)`, for the parser | `data_tamer_v2/decode.hpp` |
 | `ForEachSnapshot()`, `ForEachValue()` (read an MCAP file) | `data_tamer_v2/mcap_reader.hpp` |
+| `mcap_encoding::AddChannel()`, `WriteSnapshot()` (write data_tamer MCAP files yourself) | `data_tamer_v2/sinks/mcap_encoding.hpp` |
+| `DataTamerParser::BuildSchemaFromText()`, `ParseSnapshot()` (no library needed) | `data_tamer_v2/data_tamer_parser.hpp` |
 | forward declarations only | `data_tamer_v2/fwd.hpp` |
 
 `data_tamer_v2/data_tamer.hpp` includes `channel.hpp`, which includes `data_sink.hpp`. A
@@ -327,15 +329,15 @@ to change what is recorded at run time.
 The thread that calls `takeSnapshot()` can write registered variables directly. Other
 threads must follow these rules:
 
-- A variable registered with `registerValue()` is written only inside
-  `auto tx = channel->scopedWrite();`. The snapshot thread reads it without any lock of
-  its own.
 - A scalar `LoggedValue<T>` (`LoggedValue<T>::kAtomic`: arithmetic, `bool`, `char` or
   enum, at most 8 bytes, lock-free atomic) stores a `std::atomic<T>`: `set()` and `get()`
   are wait-free relaxed operations.
 - A non-scalar `LoggedValue<T>` (a struct, a vector) takes the channel's write mutex in
   `set()` and `get()`. `getMutablePtr()` and `getConstPtr()` return guards that hold the
   mutex while they live. All of these nest inside a `scopedWrite()` on the same thread.
+- A variable registered with `registerValue()` is written only inside
+  `auto tx = channel->scopedWrite();`. The snapshot thread reads it without any lock of
+  its own.
 
 Each value is captured untorn, but two separate writes can land in different snapshots.
 To keep several values consistent with each other (a position and the velocity computed
@@ -511,7 +513,7 @@ channel stays usable, and the throw has allocated on the calling thread.
 Both return a `SnapshotResult`. The result of `takeSnapshot()` may be ignored: `stats()`
 counts the calls and the `ok` and `partial` results, `pool_exhausted`, `oversize`,
 `serialize_failed` and `blocked` have counters of their own, and `attempts - accepted`
-covers `rejected`, `no_sinks` and `start_failed` (see
+covers `rejected` and `no_sinks` (and `start_failed` of `tryTakeSnapshot()`; see
 [Monitoring](#monitoring-one-struct-per-channel-one-per-sink)). The result of
 `tryTakeSnapshot()` is `[[nodiscard]]`, because it gives up where `takeSnapshot()` would
 wait. `accepted(result)` (`channel.hpp`, `constexpr`, real-time safe) is true for `ok` and
@@ -577,9 +579,10 @@ Through a plain `SinkWorker`, `sink()` is the `DataSink&` and `worker->as<T>()` 
 - `SinkWorker::stats()` returns `delivered`, `errors`, `last_error` and `queue_high_water`;
   `errors` counts `onSnapshot()`, `onStop()` and `onStart()` calls that threw and
   `last_error` is the last message (see "Monitoring").
-- `SinkWorker(std::unique_ptr<DataSink>, Delivery::Threaded)` builds a worker by hand, to
-  choose `Delivery::Manual` (no thread: you call `drain()`). There is no queue size to
-  set.
+- `std::make_shared<SinkWorkerOf<T>>(std::make_unique<T>(...), SinkWorker::Delivery::Manual)`
+  builds a worker by hand, to choose `Delivery::Manual` (no thread: you call `drain()`),
+  and keeps the typed `sink()`; `SinkWorker(std::unique_ptr<DataSink>, Delivery)` is the
+  untyped form. There is no queue size to set.
 
 ### Shutdown
 
@@ -819,13 +822,13 @@ options.aggregate = true;
 options.max_batch_size = 50;
 options.max_batch_delay = std::chrono::milliseconds(50);
 options.data_qos = rclcpp::QoS(rclcpp::KeepLast(20)).reliable();
-auto ros_sink = ROS2PublisherSink::create(node, "/robot/logs", options);
-channel->addDataSink(ros_sink);
+auto publisher = ROS2PublisherSink::create(node, "/robot/logs", options);
+channel->addDataSink(publisher);
 ```
 
 There is no timer: a partial batch waits for the next snapshot, for
-`ros_sink->sink().flush()` (callable from any thread, throws if a publish
-fails) or for `worker->stop()`, which flushes after the last delivery. The batch delay
+`publisher->sink().flush()` (callable from any thread, throws if a publish
+fails) or for `publisher->stop()`, which flushes after the last delivery. The batch delay
 is measured on the steady clock when snapshots arrive, not with snapshot timestamps.
 
 ### DummySink
@@ -1067,7 +1070,7 @@ The two extra counters cost the snapshot path two atomic increments (`attempts` 
 | `LogChannel::stats()`, `getSchema()` | no | Control mutex. |
 | `SinkWorker::delivered()`, `errors()`, `queueHighWater()` | yes | Relaxed atomic loads; `noexcept`. |
 | `SinkWorker::stats()`, `lastError()` | no | Take a mutex and copy a string (allocates). |
-| `SinkWorker::stop()`, `drain()`, `flushPendingDump()`, `ChannelsRegistry::stopAll()`, `shutdown()` | no | Block until delivery or writing ends; `stop()` runs `onStop()`. |
+| `SinkWorker::stop()`, `drain()`, `flushPendingDump()`, `ChannelsRegistry::stopAll()`, `ChannelsRegistry::shutdown()` | no | Block until delivery or writing ends; `stop()` runs `onStop()`. |
 
 Control operations must stay out of custom serializers, and out of sink callbacks
 where you can (those that would wait for the callback's own worker throw
@@ -1086,18 +1089,19 @@ scalars and rejects the other types. Mark the user's real-time function
 - `-fsanitize=realtime` on the user's executable (RTSan, Clang 20 or later) aborts at
   the first allocation, lock or system call made under that function, inside data_tamer
   and custom serializers too, with a prebuilt library as well, and at a call of
-  `takeSnapshot()`. On Linux (ELF) only, data_tamer tells RTSan about the calls the
-  real-time path makes on purpose (releasing the write mutex, waking a sleeping sink
-  worker or a waiting control operation or `stop()`), so they are not reported; on
-  other platforms (macOS) RTSan reports the release of the write mutex in the first
-  `tryTakeSnapshot()`. `RTSAN_OPTIONS=halt_on_error=0` reports every distinct stack
+  `takeSnapshot()` or of the `tryTakeSnapshot()` that starts logging. On Linux (ELF)
+  only, data_tamer tells RTSan about the calls the real-time path makes on purpose
+  (releasing the write mutex, waking a sleeping sink worker or a waiting control
+  operation or `stop()`), so they are not reported; on other platforms (macOS) RTSan
+  reports the release of the write mutex in the first `tryTakeSnapshot()`. `RTSAN_OPTIONS=halt_on_error=0` reports every distinct stack
   instead of aborting at the first.
 
 Threads involved:
 
 - your snapshot threads: serialize values and push references, one at a time per channel;
 - one worker thread per `SinkWorker`: runs `onSnapshot()` (MCAP writes, ROS publishes);
-- the thread calling `startLogging()` or `addDataSink()`: runs `onSchema()`;
+- the thread calling `startLogging()`, `addDataSink()` or the first snapshot that starts
+  logging: runs `onSchema()`;
 - the `MCAPRingSink` writer thread: writes dump files and runs the dump callback.
 
 ## Reading the data
@@ -1151,7 +1155,7 @@ size_t n = DataTamer2::ForEachValue(
     "control.mcap",
     [&](const std::string& topic, uint64_t timestamp, const std::string& name,
         const DataTamerParser::VarNumber& value) { /* ... */ },
-    { "controller" });  // optional: only these topics
+    { "control" });  // optional: only these topics
 
 // callback(topic, schema, view): undecoded, view.timestamp and schema_hash filled in
 DataTamer2::ForEachSnapshot("control.mcap", [&](const std::string& topic,
@@ -1164,9 +1168,10 @@ DataTamer2::ForEachSnapshot("control.mcap", [&](const std::string& topic,
 Both read one file, in log time order, and skip channels of another message encoding.
 A recording whose process crashed (no summary, maybe a partial last chunk) is read too:
 the snapshots of its complete chunks, in file order, because it has no message index.
-Every error throws `std::runtime_error` with "<path>: <topic>: <reason>": a file that
-can't be opened or is not MCAP, a malformed schema, a corrupt message (`ForEachValue()` also when the payload does not
-match its schema, after the callback saw the values before the error). Exceptions of
+Every error throws `std::runtime_error` with "<path>: <topic>: <reason>" (no topic for a
+file it can't open or read): a file that can't be opened or is not MCAP, a malformed
+schema, a corrupt message (`ForEachValue()` also when the payload does not match its
+schema, after the callback saw the values before the error). Exceptions of
 the callback pass unchanged. `data_tamer_cpp/examples/T08_mcap_reader.cpp` uses
 `ForEachValue()`.
 
@@ -1202,7 +1207,8 @@ with another standard library (`docs/wire_format.md`, section 5).
 - [ ] Released the last `LoggedValue` `shared_ptr`, or called `unregister()`, on a
       real-time thread.
 - [ ] Called `requestDump()` just before exit and let the process end without
-      `stop()` (or `stopAll()`, or destroying the worker): the dump is never written.
+      `stop()` (or `ChannelsRegistry::shutdown()` or `stopAll()`, or destroying the
+      worker): the dump is never written.
 - [ ] Logged strings: the wire format has none.
 - [ ] Called `setEnabled()` with an id that may be stale on a real-time thread: use
       `trySetEnabled()`.

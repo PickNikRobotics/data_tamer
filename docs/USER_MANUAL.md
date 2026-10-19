@@ -165,9 +165,9 @@ snapshot thread waits for them.
 
 ## Real-time use
 
-`tryTakeSnapshot()` exists to be lock-free: it never blocks on a lock and never
-allocates, so a real-time loop can call it every cycle. Do the work that allocates before
-the loop, and call `tryTakeSnapshot()` inside it:
+`tryTakeSnapshot()` exists to be lock-free: once logging started, it never blocks on a
+lock and never allocates, so a real-time loop can call it every cycle. Do the work that
+allocates before the loop, and call `tryTakeSnapshot()` inside it:
 
 ```cpp
 // before the loop, on a normal thread
@@ -418,7 +418,8 @@ DataTamer2::ForEachValue("run.mcap", [](const std::string& channel, uint64_t tim
 ```
 
 Values come in log time order, and any error (a file that can't be read, a corrupt
-message) throws `std::runtime_error`, whose message names the file and the channel.
+message) throws `std::runtime_error`, whose message names the file and, where there is
+one, the channel.
 The recording of a process that crashed is read up to its last complete chunk, in the
 order it was written.
 A third argument, a vector of channel names, restricts the channels read;
@@ -516,8 +517,8 @@ Another thread writes them separately. Write them in one
 
 The sink was never stopped: the process ended without `stop()` and without destroying the
 worker (a crash, a signal, `std::exit()` with the worker in a local variable), so the file
-has no summary and footer. Call `worker->stop()` or `registry.stopAll()` before such an
-exit.
+has no summary and footer. Call `worker->stop()` or `registry.stopAll()`
+(`registry.shutdown()` at the end of `main()`) before such an exit.
 
 ### The flight recorder wrote no file
 

@@ -35,7 +35,8 @@ under "Unreleased" in `data_tamer_cpp/CHANGELOG.rst`.
   binary package (`tools/check_ros_install.sh`). CMake target `data_tamer`, exported as
   `data_tamer_v2::data_tamer` under ROS and `data_tamer::data_tamer` (package
   `data_tamer`) otherwise.
-  - `include/data_tamer_v2/`: public headers. `channel.hpp` (LogChannel, SnapshotResult),
+  - `include/data_tamer_v2/`: public headers. `channel.hpp` (LogChannel, SnapshotResult,
+    `accepted()`),
     `data_tamer.hpp` (ChannelsRegistry), `data_sink.hpp` (DataSink, SinkWorker,
     SinkWorkerOf, Snapshot, SnapshotRef), `logged_value.hpp`, `names.hpp`, `types.hpp`
     (Schema, BasicType), `custom_types.hpp`, `values.hpp`, `fwd.hpp`, `decode.hpp`
