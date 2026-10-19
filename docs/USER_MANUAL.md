@@ -46,7 +46,7 @@ character.
 ### When you can register
 
 Register everything before the first snapshot. The schema freezes at `channel->startLogging()`,
-or at the first `takeSnapshot()` that finds a sink attached, and registering a new name
+or at the first `takeSnapshot()` or `tryTakeSnapshot()` that finds a sink attached, and registering a new name
 after that throws `std::runtime_error`. A name you unregistered can be registered again
 after the freeze, but only with its original type, because it reuses its slot.
 
@@ -174,12 +174,18 @@ the loop, and call `tryTakeSnapshot()` inside it:
 channel->startLogging();  // freeze the schema, allocate, announce to the sinks
 
 // inside the loop
-const auto result = channel->tryTakeSnapshot();
-if(result != DataTamer2::SnapshotResult::ok)
+if(!DataTamer2::accepted(channel->tryTakeSnapshot()))  // ok or partial
 {
   ++snapshot_failures;  // count it, report it from another thread
 }
 ```
+
+Without a sink, `tryTakeSnapshot()` returns `no_sinks`, in real time. Without
+`startLogging()`, the first `tryTakeSnapshot()` with a sink attached calls it, as
+`takeSnapshot()` does: that call allocates and runs the sinks' `onSchema()`, so it is not
+real-time (RealtimeSanitizer reports it), and if it fails it returns `start_failed` and
+the next call tries again. Call `startLogging()` before the loop when the first cycle must
+be real-time too.
 
 Where `takeSnapshot()` would wait for a writer or grow a slot, `tryTakeSnapshot()` gives up
 and returns `blocked` or `oversize`. It reports every failure as a `SnapshotResult` and
@@ -302,7 +308,9 @@ subscriber loses old messages instead of growing the publisher's memory.
 ### Writing your own sink
 
 Derive from `DataTamer2::DataSink`, implement `onSchema()` and `onSnapshot()`, and wrap it in
-a `SinkWorker`, which owns the thread that calls them:
+a `SinkWorker`, which owns the thread that calls them. `addDataSink()` takes the worker,
+not the sink: `channel->addDataSink(std::make_shared<CountingSink>())` fails to compile with
+a message that says so.
 
 ```cpp
 class CountingSink : public DataTamer2::DataSink
@@ -473,7 +481,7 @@ Check what `takeSnapshot()` or `tryTakeSnapshot()` returns:
 | `oversize` | A vector outgrew the slot (`tryTakeSnapshot()` only). | Raise `setPayloadCapacity()`. |
 | `blocked` | A writer or another snapshot held the write mutex too long (`tryTakeSnapshot()`), or the calling thread holds it itself (both). | Shorten `scopedWrite()` scopes; release guards before a snapshot. |
 | `serialize_failed` | A serializer threw inside `tryTakeSnapshot()` (`takeSnapshot()` lets the exception through): a custom serializer failed, or another thread changed a vector without `scopedWrite()`, so it no longer fit. | Fix the serializer; write shared variables inside `scopedWrite()`. |
-| `not_started` | `startLogging()` was not called (`tryTakeSnapshot()` only). | Call it before the loop. |
+| `start_failed` | The first `tryTakeSnapshot()` called `startLogging()`, which threw (a sink's `onSchema()`, an allocation); `takeSnapshot()` throws instead. | Fix the sink; the next call retries. |
 
 For totals over time, read the counters from a non real-time thread:
 
@@ -524,8 +532,8 @@ history the ring holds now.
 
 ### The first iteration of the control loop is slow
 
-The first `takeSnapshot()` called `startLogging()`: it allocated the pool and called the
-sinks, which for ROS 2 means a DDS write. Call `channel->startLogging()` before the loop.
+The first `takeSnapshot()` or `tryTakeSnapshot()` called `startLogging()`: it allocated
+the pool and called the sinks, which for ROS 2 means a DDS write. Call `channel->startLogging()` before the loop.
 
 ### `dlopen()` fails with "cannot allocate memory in static TLS block"
 

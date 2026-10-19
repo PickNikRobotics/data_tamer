@@ -152,7 +152,9 @@ SnapshotResult cycle(const Loop& loop) noexcept [[clang::nonblocking]]
   {
     (void)loop.ring->requestDump();
   }
-  return loop.channel->tryTakeSnapshot();
+  const auto result = loop.channel->tryTakeSnapshot();
+  (void)accepted(result);
+  return result;
 }
 
 /// Runs `count` cycles on a new thread, as a control loop does, and counts the results.
@@ -194,11 +196,12 @@ SnapshotResult holdSnapshotWhile(const Loop& loop, Op op)
 }
 }  // namespace
 
-TEST(RealtimeSanitizer, NothingIsReportedBeforeStartLogging)
+// Logging disabled by configuration: no sink is ever attached.
+TEST(RealtimeSanitizer, NothingIsReportedWithoutSinks)
 {
   Loop loop;
-  loop.channel->addDataSink(DataTamerTest::manual<DummySink>());
-  EXPECT_EQ(count(runCycles(loop, 100), SnapshotResult::not_started), 100);
+  EXPECT_EQ(count(runCycles(loop, 100), SnapshotResult::no_sinks), 100);
+  EXPECT_FALSE(loop.channel->isLoggingStarted());
 }
 
 TEST(RealtimeSanitizer, NothingIsReportedWithAManualSink)
@@ -341,6 +344,19 @@ TEST(RealtimeSanitizerDeathTest, TakeSnapshotIsReported)
         (void)blockingSnapshot(*loop.channel);
       },
       "blocking function `DataTamer2::LogChannel::takeSnapshot`");
+}
+
+// Before startLogging() it is not real-time: the first call starts logging.
+TEST(RealtimeSanitizerDeathTest, TryTakeSnapshotBeforeStartLoggingIsReported)
+{
+  DataTamerTest::useThreadsafeDeathTests();
+  EXPECT_DEATH(
+      {
+        Loop loop;
+        loop.channel->addDataSink(DataTamerTest::manual<DummySink>());
+        (void)cycle(loop);
+      },
+      "blocking function `DataTamer2::LogChannel::tryTakeSnapshot`");
 }
 
 TEST(RealtimeSanitizerDeathTest, NonScalarLoggedValueSetIsReported)

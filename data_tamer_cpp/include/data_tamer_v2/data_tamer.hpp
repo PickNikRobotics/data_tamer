@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <memory>
 #include <string>
+#include <type_traits>
 
 // The umbrella header: ChannelsRegistry plus LogChannel, LoggedValue and the sink
 // interface (channel.hpp includes data_sink.hpp). A header that only names these types
@@ -70,6 +71,16 @@ public:
   /// the call is undone, the sink is not a default sink and the exception propagates.
   /// At most eight default sinks: another throws std::runtime_error.
   void addDefaultSink(std::shared_ptr<SinkWorker> sink);
+
+  /// A DataSink is not attached directly: this overload only makes the error readable.
+  template <typename T, std::enable_if_t<details::kIsBareDataSink<T>, bool> = true>
+  void addDefaultSink(const std::shared_ptr<T>&)
+  {
+    static_assert(!details::kIsBareDataSink<T>, "addDefaultSink() takes a SinkWorker: "
+                                                "create the sink with "
+                                                "MCAPSink::create(...) or "
+                                                "SinkWorker::create<YourSink>(...)");
+  }
 
   /// Sets the defaults for the channels getChannel() creates after this call; existing
   /// channels are not changed. Throws std::invalid_argument if the pool is set both as

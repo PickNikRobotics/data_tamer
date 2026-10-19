@@ -58,8 +58,9 @@ enum class SnapshotResult : uint8_t
   /// No sink is attached: nothing captured. Before startLogging() the schema stays
   /// open.
   no_sinks,
-  /// tryTakeSnapshot() before startLogging(): nothing captured.
-  not_started,
+  /// tryTakeSnapshot(): starting logging failed (a sink's onSchema() or an allocation
+  /// threw), so nothing is captured; the next call retries. takeSnapshot() throws instead.
+  start_failed,
   /// Sinks still hold every pool slot, so the sample is lost (see poolExhausted()).
   pool_exhausted,
   /// tryTakeSnapshot(): the payload outgrew the slot (see droppedOversize()).
@@ -72,17 +73,25 @@ enum class SnapshotResult : uint8_t
   serialize_failed
 };
 
+/// True if at least one sink took the snapshot (`ok` or `partial`), as Stats::accepted
+/// counts: `if(!accepted(channel->tryTakeSnapshot())) ++missed;`. Real-time safe.
+[[nodiscard]] constexpr bool
+accepted(SnapshotResult result) noexcept DATA_TAMER_NONBLOCKING
+{
+  return result == SnapshotResult::ok || result == SnapshotResult::partial;
+}
+
 /**
  * @brief Records the values registered in it as one snapshot per takeSnapshot() call
  * and hands each snapshot to its sinks. Get channels from
  * ChannelsRegistry::getChannel(); use one channel per rate or logical group.
  *
  * Register every value (registerValue(), createLoggedValue()) before startLogging(),
- * which the first takeSnapshot() with a sink attached calls. Several threads may take
- * snapshots; they take turns on the write mutex. Registration, unregister(), sink
- * changes and startLogging() are control operations that can block, some until a
- * snapshot in progress ends: never call them from a serializer (from a sink callback,
- * see DataSink).
+ * which the first takeSnapshot() or tryTakeSnapshot() with a sink attached calls.
+ * Several threads may take snapshots; they take turns on the write mutex.
+ * Registration, unregister(), sink changes and startLogging() are control operations
+ * that can block, some until a snapshot in progress ends: never call them from a
+ * serializer (from a sink callback, see DataSink).
  */
 class LogChannel : public std::enable_shared_from_this<LogChannel>
 {
@@ -210,12 +219,31 @@ public:
    */
   bool addDataSink(std::shared_ptr<SinkWorker> sink);
 
+  /// A DataSink is not attached directly: this overload only makes the error readable.
+  template <typename T, std::enable_if_t<details::kIsBareDataSink<T>, bool> = true>
+  bool addDataSink(const std::shared_ptr<T>&)
+  {
+    static_assert(!details::kIsBareDataSink<T>, "addDataSink() takes a SinkWorker: "
+                                                "create the sink with "
+                                                "MCAPSink::create(...) or "
+                                                "SinkWorker::create<YourSink>(...)");
+    return false;
+  }
+
   /**
    * @brief Detaches a sink. Snapshots already queued on it are still delivered.
    * Does nothing if the sink is not attached. Waits for a snapshot in progress: not
    * real-time safe.
    */
   void removeDataSink(std::shared_ptr<SinkWorker> sink);
+
+  /// A DataSink is never attached: this overload only makes the error readable.
+  template <typename T, std::enable_if_t<details::kIsBareDataSink<T>, bool> = true>
+  void removeDataSink(const std::shared_ptr<T>&)
+  {
+    static_assert(!details::kIsBareDataSink<T>, "removeDataSink() takes the SinkWorker "
+                                                "that addDataSink() was given");
+  }
 
   /// Number of attached sinks.
   [[nodiscard]] size_t getNumberOfSinks() const;
@@ -256,8 +284,15 @@ public:
   /**
    * @brief Lock-free takeSnapshot() for real-time threads: it never blocks or
    * allocates. Where takeSnapshot() would wait or allocate, it returns `blocked` (a
-   * writer or another snapshot holds the mutex), `oversize` (the payload outgrew its
-   * slot) or `not_started` (call startLogging() before the loop).
+   * writer or another snapshot holds the mutex) or `oversize` (the payload outgrew its
+   * slot). accepted() tells whether a sink took the snapshot.
+   *
+   * Before logging started, it returns `no_sinks` without a sink, real-time too, and
+   * the schema stays open. The first call with a sink calls startLogging(), like
+   * takeSnapshot(), which allocates and runs the sinks' onSchema(): that call is not
+   * real-time (RealtimeSanitizer reports it). If it throws, the result is
+   * `start_failed` and the next call retries. Call startLogging() before the loop
+   * when the first cycle must be real-time too.
    *
    * It never throws: an exception from a serializer (a CustomSerializer, the define()
    * or TypeDefinition() of a custom type, or SerializeMe's own check when a container
@@ -267,8 +302,9 @@ public:
    * serializer terminates the program, as in any noexcept function. Marked
    * [[clang::nonblocking]] (DATA_TAMER_NONBLOCKING), like the rest of the real-time API.
    */
-  [[nodiscard]] SnapshotResult tryTakeSnapshot(
-      std::chrono::nanoseconds timestamp = NsecSinceEpoch()) noexcept DATA_TAMER_NONBLOCKING;
+  [[nodiscard]] SnapshotResult
+  tryTakeSnapshot(std::chrono::nanoseconds timestamp = NsecSinceEpoch()) noexcept
+      DATA_TAMER_NONBLOCKING;
 
   /// A copy of the channel's schema. Takes the control mutex: not real-time safe.
   [[nodiscard]] Schema getSchema() const;

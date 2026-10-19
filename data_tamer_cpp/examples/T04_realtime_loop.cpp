@@ -1,5 +1,5 @@
 // T04 Preparing a real-time loop
-// You will learn: prepare outside the loop, count snapshot results, and read stats.
+// You will learn: prepare outside the loop, count missed snapshots, and read stats.
 // Run: ./T04_realtime_loop then open T04_joint_states.mcap in PlotJuggler
 #include "data_tamer_v2/channel.hpp"
 #include "data_tamer_v2/sinks/mcap_sink.hpp"
@@ -22,9 +22,10 @@ int main()
   channel->registerValue("velocities", &velocities);
   channel->registerValue("efforts", &efforts);
   // On this normal thread: freeze the schema, allocate, and announce to sinks.
+  // The first tryTakeSnapshot() would do it otherwise, not in real time.
   channel->startLogging();
 
-  uint64_t missed = 0, partial = 0;
+  uint64_t missed = 0;
   // A portable timing simulation; a robot would use its controller's scheduler.
   auto next_cycle = std::chrono::steady_clock::now();
   for(int cycle = 0; cycle < 1500; ++cycle)
@@ -39,22 +40,9 @@ int main()
     }
     // takeSnapshot() may wait for a writer or grow a slot. This call gives up.
     // Count failures: printing, retrying or allocating here would delay control.
-    switch(channel->tryTakeSnapshot())
+    if(!DataTamer2::accepted(channel->tryTakeSnapshot()))
     {
-      case DataTamer2::SnapshotResult::ok:  // Every sink accepted the snapshot.
-        break;
-      case DataTamer2::SnapshotResult::partial:  // Some stopped sinks refused it.
-        ++partial;
-        break;
-      case DataTamer2::SnapshotResult::rejected:          // Every sink stopped.
-      case DataTamer2::SnapshotResult::no_sinks:          // No sink attached.
-      case DataTamer2::SnapshotResult::not_started:       // Preparation was skipped.
-      case DataTamer2::SnapshotResult::pool_exhausted:    // Sinks hold every slot.
-      case DataTamer2::SnapshotResult::oversize:          // Payload outgrew a slot.
-      case DataTamer2::SnapshotResult::blocked:           // A writer holds the mutex.
-      case DataTamer2::SnapshotResult::serialize_failed:  // A serializer threw.
-        ++missed;
-        break;
+      ++missed;
     }
     next_cycle += std::chrono::milliseconds(1);
     std::this_thread::sleep_until(next_cycle);
@@ -64,10 +52,12 @@ int main()
   // stats() can lock and allocate: monitor from a normal thread, or after the loop.
   const auto channel_stats = channel->stats();
   const auto sink_stats = mcap->stats();
-  std::cout << "missed=" << missed << " partial=" << partial
-            << " accepted=" << channel_stats.accepted
+  // Why snapshots were missed; attempts - accepted counts every reason.
+  std::cout << "missed=" << missed
+            << " not_accepted=" << channel_stats.attempts - channel_stats.accepted
             << " pool_exhausted=" << channel_stats.pool_exhausted
             << " oversize=" << channel_stats.dropped_oversize
+            << " serialize_failures=" << channel_stats.serialize_failures
             << " sink_errors=" << sink_stats.errors << '\n';
   return sink_stats.errors == 0 ? 0 : 1;
 }

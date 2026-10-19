@@ -68,6 +68,13 @@ struct Flaky
 {
   uint64_t value = 0;
 };
+
+class SchemaRefusingSink : public DataSink
+{
+public:
+  void onSchema(const Schema&) override { throw std::runtime_error("no schema"); }
+  void onSnapshot(const SnapshotRef&) override {}
+};
 }  // namespace
 
 TEST(ChannelStats, CountersMatchEveryResultOfAScriptedSequence)
@@ -84,18 +91,24 @@ TEST(ChannelStats, CountersMatchEveryResultOfAScriptedSequence)
 
   std::map<SnapshotResult, uint64_t> seen;
   uint64_t calls = 0;
+  uint64_t accepted_calls = 0;
   const auto expect = [&](SnapshotResult got, SnapshotResult want) {
     EXPECT_EQ(got, want);
     ++seen[got];
     ++calls;
+    accepted_calls += accepted(got) ? 1 : 0;
     const auto stats = channel->stats();
     EXPECT_EQ(stats.attempts, calls);
     EXPECT_EQ(stats.accepted, seen[SnapshotResult::ok] + seen[SnapshotResult::partial]);
+    EXPECT_EQ(stats.accepted, accepted_calls);  // accepted() is what Stats counts
   };
 
   expect(channel->takeSnapshot(), SnapshotResult::no_sinks);
+  auto refusing = manual<SchemaRefusingSink>();
+  channel->addDataSink(refusing);
+  expect(channel->tryTakeSnapshot(), SnapshotResult::start_failed);
+  channel->removeDataSink(refusing);
   channel->addDataSink(a);
-  expect(channel->tryTakeSnapshot(), SnapshotResult::not_started);
   expect(channel->takeSnapshot(), SnapshotResult::ok);  // starts logging
 
   channel->addDataSink(b);
@@ -137,7 +150,7 @@ TEST(ChannelStats, CountersMatchEveryResultOfAScriptedSequence)
   // Every result of the script was exercised, and the counters add up.
   for(auto result :
       { SnapshotResult::ok, SnapshotResult::partial, SnapshotResult::rejected,
-        SnapshotResult::no_sinks, SnapshotResult::not_started,
+        SnapshotResult::no_sinks, SnapshotResult::start_failed,
         SnapshotResult::pool_exhausted, SnapshotResult::oversize, SnapshotResult::blocked,
         SnapshotResult::serialize_failed })
   {
@@ -426,16 +439,6 @@ TEST(ChannelStats, RefusedLastPushWhileAnotherSinkAcceptsIsPartial)
   }
   EXPECT_EQ(first.worker->stats().delivered, 3u);
 }
-
-namespace
-{
-class SchemaRefusingSink : public DataSink
-{
-public:
-  void onSchema(const Schema&) override { throw std::runtime_error("no schema"); }
-  void onSnapshot(const SnapshotRef&) override {}
-};
-}  // namespace
 
 TEST(ChannelStats, ACallThatThrowsCountsAsAnAttemptOnly)
 {

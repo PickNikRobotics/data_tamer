@@ -275,6 +275,9 @@ struct LogChannel::Pimpl
   static constexpr size_t kMaxSinks = LogChannel::kMaxSinks;
   std::array<std::unique_ptr<SinkLink>, kMaxSinks> sinks;
   std::array<std::atomic<SinkLink*>, kMaxSinks> published_sinks{};
+  // Links in `sinks`, for tryTakeSnapshot() before logging started: it reads it
+  // without control_mutex. Written with control_mutex held, by countSinks().
+  std::atomic<size_t> sink_count{ 0 };
   // Workers addDataSink() is announcing to with control_mutex released: another
   // addDataSink() of one of them waits on `announced` (with control_mutex).
   std::vector<const SinkWorker*> announcing;
@@ -293,6 +296,15 @@ struct LogChannel::Pimpl
         function(*link);
       }
     }
+  }
+
+  // Caller holds control_mutex, after a change of `sinks`.
+  void countSinks()
+  {
+    sink_count.store(
+        size_t(std::count_if(sinks.begin(), sinks.end(),
+                             [](const auto& link) { return link != nullptr; })),
+        std::memory_order_release);
   }
 
   // Slot of the link to `worker`, kMaxSinks if it is not attached. Caller
@@ -674,6 +686,7 @@ bool LogChannel::addDataSink(std::shared_ptr<SinkWorker> sink)
     }
   }
   _p->sinks[*free_slot] = std::move(link);
+  _p->countSinks();
   // Before logging starts, startLogging() gives the link its queue and publishes it.
   if(_p->logging_started.load(std::memory_order_relaxed))
   {
@@ -684,6 +697,7 @@ bool LogChannel::addDataSink(std::shared_ptr<SinkWorker> sink)
     catch(...)
     {
       _p->sinks[*free_slot].reset();  // no queue: not attached
+      _p->countSinks();
       throw;
     }
   }
@@ -706,6 +720,7 @@ void LogChannel::removeDataSink(std::shared_ptr<SinkWorker> sink)
     _p->published_sinks[i].store(nullptr, std::memory_order_seq_cst);
     _p->waitQuiescent();
     removed = std::move(_p->sinks[i]);
+    _p->countSinks();
     // Detach before unlocking: an addDataSink() of the same worker on another
     // thread then attaches its new queue after this detach, and the worker
     // delivers the old queue first (per-channel order).
@@ -1135,7 +1150,28 @@ SnapshotResult LogChannel::tryTakeSnapshot(std::chrono::nanoseconds timestamp) n
   _p->attempts.fetch_add(1, std::memory_order_relaxed);
   if(!_p->logging_started.load(std::memory_order_acquire))
   {
-    return SnapshotResult::not_started;
+    if(_p->sink_count.load(std::memory_order_acquire) == 0)
+    {
+      return SnapshotResult::no_sinks;  // nothing to deliver to: stay open
+    }
+#if defined(DATA_TAMER_HAS_NONBLOCKING)
+#pragma clang diagnostic push
+    // Not real-time, as in takeSnapshot(): the first call with a sink starts logging.
+    // RTSan reports it in a [[clang::nonblocking]] caller.
+#pragma clang diagnostic ignored "-Wfunction-effects"
+#endif
+    details::notifyBlockingCall("DataTamer2::LogChannel::tryTakeSnapshot");
+    try
+    {
+      startLogging();
+    }
+    catch(...)
+    {
+      return SnapshotResult::start_failed;  // the next call retries
+    }
+#if defined(DATA_TAMER_HAS_NONBLOCKING)
+#pragma clang diagnostic pop
+#endif
   }
   return takeSnapshotImpl(timestamp, true);
 }

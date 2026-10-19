@@ -104,7 +104,7 @@ TEST(ChannelCapacity, StartLoggingWithoutSinkReservesAndRejectsSetters)
   channel->setPayloadCapacity(0);  // Automatic minimum remains valid.
   // Without sinks nothing is captured and nothing is frozen.
   EXPECT_EQ(channel->takeSnapshot(), SnapshotResult::no_sinks);
-  EXPECT_EQ(channel->tryTakeSnapshot(), SnapshotResult::not_started);
+  EXPECT_EQ(channel->tryTakeSnapshot(), SnapshotResult::no_sinks);
   EXPECT_FALSE(channel->isLoggingStarted());
   channel->setPoolCapacity(2);
   channel->startLogging();  // An explicit start freezes even without sinks.

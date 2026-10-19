@@ -322,6 +322,12 @@ data_tamer_compile_fail_test(fixed_size_of_an_undescribed_type_is_rejected
 data_tamer_compile_fail_test(serializer_is_not_built_from_a_name_implicitly
     custom_serializer_constructor.cpp DT_IMPLICIT_NAME
     REGEX "conversion from|no viable conversion|cannot convert")
+foreach(case ADD_DATA_SINK REMOVE_DATA_SINK ADD_DEFAULT_SINK)
+    string(TOLOWER ${case} case_name)
+    data_tamer_compile_fail_test(${case_name}_of_a_data_sink_explains_the_fix
+        data_sink_not_a_worker.cpp DT_${case}
+        REGEX "\\(\\) takes (a|the) SinkWorker")
+endforeach()
 foreach(case VALUE VECTOR MEMBER LOGGED)
     string(TOLOWER ${case} case_name)
     data_tamer_compile_fail_test(long_double_${case_name}_is_rejected

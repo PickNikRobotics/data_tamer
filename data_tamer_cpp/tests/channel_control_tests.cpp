@@ -7,6 +7,7 @@
 #include "test_sinks.hpp"
 
 #include <gtest/gtest.h>
+#include <array>
 #include <cstring>
 #include <functional>
 #include <future>
@@ -157,6 +158,78 @@ TEST(ChannelControl, WithoutSinksNothingFreezesUntilStartLogging)
   EXPECT_THROW(channel->registerValue("later", &value), std::runtime_error);
   EXPECT_EQ(channel->takeSnapshot(), SnapshotResult::no_sinks);
   channel->startLogging();  // idempotent
+}
+
+TEST(ChannelControl, FirstTryTakeSnapshotStartsLoggingThenAllocatesNothing)
+{
+  auto channel = LogChannel::create("control");
+  auto sink = controlSink();
+  uint64_t value = 42;
+  channel->registerValue("value", &value);
+  channel->addDataSink(sink);
+  EXPECT_EQ(channel->tryTakeSnapshot(), SnapshotResult::ok);
+  EXPECT_TRUE(channel->isLoggingStarted());
+  EXPECT_EQ(sink->registrations, 1u);
+  std::array<SnapshotResult, 3> results{};
+  {
+    DataTamerTest::AllocCounter::Scope scope;
+    for(auto& result : results)
+    {
+      result = channel->tryTakeSnapshot();
+    }
+    EXPECT_EQ(scope.allocations(), 0u);
+  }
+  for(const auto result : results)
+  {
+    EXPECT_EQ(result, SnapshotResult::ok);
+  }
+  sink.drain();
+  EXPECT_EQ(sink->snapshots.size(), 4u);
+  checkPayloads(*sink, 1);
+}
+
+TEST(ChannelControl, TryTakeSnapshotWithoutSinksKeepsTheSchemaOpenAndAllocatesNothing)
+{
+  auto channel = LogChannel::create("control");
+  uint64_t value = 42;
+  channel->registerValue("value", &value);
+  std::array<SnapshotResult, 3> results{};
+  {
+    DataTamerTest::AllocCounter::Scope scope;
+    for(auto& result : results)
+    {
+      result = channel->tryTakeSnapshot();
+    }
+    EXPECT_EQ(scope.allocations(), 0u);
+  }
+  for(const auto result : results)
+  {
+    EXPECT_EQ(result, SnapshotResult::no_sinks);
+  }
+  EXPECT_FALSE(channel->isLoggingStarted());
+  channel->registerValue("late", &value);  // still allowed
+  auto sink = controlSink();
+  channel->addDataSink(sink);  // seen by the next call, which starts logging
+  EXPECT_EQ(channel->tryTakeSnapshot(), SnapshotResult::ok);
+  sink.drain();
+  EXPECT_EQ(sink->snapshots.size(), 1u);
+}
+
+TEST(ChannelControl, TryTakeSnapshotRetriesAFailedStart)
+{
+  auto channel = LogChannel::create("control");
+  auto sink = controlSink();
+  uint64_t value = 42;
+  channel->registerValue("value", &value);
+  channel->addDataSink(sink);
+  sink->reject_schema = true;
+  EXPECT_EQ(channel->tryTakeSnapshot(), SnapshotResult::start_failed);
+  EXPECT_FALSE(channel->isLoggingStarted());
+  sink->reject_schema = false;
+  EXPECT_EQ(channel->tryTakeSnapshot(), SnapshotResult::ok);
+  EXPECT_EQ(sink->registrations, 1u);
+  sink.drain();
+  EXPECT_EQ(sink->snapshots.size(), 1u);
 }
 
 TEST(ChannelControl, StaleIdCannotResurrectDetachedValueAndTypesRemainChecked)

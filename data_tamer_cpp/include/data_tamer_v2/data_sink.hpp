@@ -103,7 +103,8 @@ private:
  * - stop(), start() and drain() of that worker;
  * - addDataSink() of it to a channel whose schema is frozen, or while another thread
  *   attaches it to the same channel; addDefaultSink() when that addDataSink() throws;
- * - startLogging(), and so the first takeSnapshot(), of a channel it is attached to.
+ * - startLogging(), and so the first takeSnapshot(), of a channel it is attached to
+ *   (the first tryTakeSnapshot() returns `start_failed` instead).
  * Operations that wait only for other workers or for a snapshot in progress work.
  * Not detected: cycles through another worker, and a race with a concurrent start.
  * Keep control operations out of callbacks where you can.
@@ -297,6 +298,15 @@ public:
   T& sink() { return static_cast<T&>(SinkWorker::sink()); }
   const T& sink() const { return static_cast<const T&>(SinkWorker::sink()); }
 };
+
+namespace details
+{
+/// A DataSink not wrapped in a SinkWorker: the functions that take a SinkWorker have an
+/// overload for it that only fails with a static_assert that says what to do.
+template <typename T>
+inline constexpr bool kIsBareDataSink =
+    std::is_base_of_v<DataSink, T> && !std::is_base_of_v<SinkWorker, T>;
+}  // namespace details
 
 //--------------------------------------------------
 
