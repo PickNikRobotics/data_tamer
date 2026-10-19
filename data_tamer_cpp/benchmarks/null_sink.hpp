@@ -10,7 +10,10 @@ namespace DataTamer2
 class NullSink : public DataSink
 {
 public:
-  static std::shared_ptr<SinkWorker> create() { return SinkWorker::create<NullSink>(); }
+  static std::shared_ptr<SinkWorkerOf<NullSink>> create()
+  {
+    return SinkWorker::create<NullSink>();
+  }
   void onSchema(Schema const&) override {}
   void onSnapshot(const SnapshotRef&) override {}
 };

@@ -45,9 +45,10 @@ visualize your logs offline or in real-time.
 
 - **Serialization schema is created at run-time**: no need to do code generation.
 - **Suitable for real-time applications**: very low latency (on the side of the callee);
-  `tryTakeSnapshot()` neither blocks nor allocates. With Clang 20 or later, the
-  real-time API is `[[clang::nonblocking]]`, so `-Wfunction-effects` and
-  RealtimeSanitizer check your control loop.
+  once logging started (`startLogging()` before the loop), `tryTakeSnapshot()` neither
+  blocks nor allocates. With Clang 20 or later, the real-time API is
+  `[[clang::nonblocking]]`, so `-Wfunction-effects` and RealtimeSanitizer check your
+  control loop.
 - **Multi-sink architecture**: recorded data can be forwarded to multiple "backends".
 - **Very low serialization overhead**, in the order of 1 bit per traced value.
 - The user can enable/disable traced variables at run-time.
@@ -231,8 +232,8 @@ cmake --build build/Release --parallel
 
 # How to deserialize data recorded with DataTamer
 
-The format is specified in [docs/wire_format.md](docs/wire_format.md), and there are two
-reference decoders:
+The format is specified in [docs/wire_format.md](docs/wire_format.md), and there are three
+decoders:
 
 - C++: [data_tamer_parser.hpp](data_tamer_cpp/include/data_tamer_v2/data_tamer_parser.hpp),
   a single header without external dependencies that you can copy into your project.
@@ -242,5 +243,8 @@ reference decoders:
 - Python: [python/data_tamer_parser.py](python/data_tamer_parser.py), standard library only,
   packaged as `data-tamer-parser` (see [python/README.md](python/README.md)), with
   `parse_snapshot_values()` to build columns for pandas or numpy.
+- TypeScript: [`@data-tamer/parser`](data_tamer_foxglove/README.md), no runtime
+  dependencies, which the [Foxglove extension](data_tamer_foxglove/extension/README.md)
+  bundles.
 
-Both read the files of data_tamer 1.x and 2.x, but not those of releases before 0.7.0.
+All three read the files of data_tamer 1.x and 2.x, but not those of releases before 0.7.0.

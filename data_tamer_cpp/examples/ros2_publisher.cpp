@@ -23,9 +23,9 @@ public:
   explicit JointPublisher(const DataTamer2::ROS2PublisherOptions& options)
     : Node("joint_controller")
   {
-    sink_ = DataTamer2::ROS2PublisherSink::create(*this, "/test", options);
+    publisher_ = DataTamer2::ROS2PublisherSink::create(*this, "/test", options);
     channel_ = DataTamer2::LogChannel::create("controller");
-    channel_->addDataSink(sink_);
+    channel_->addDataSink(publisher_);
     channel_->registerValue("positions", &positions_);
     channel_->registerValue("velocities", &velocities_);
     channel_->registerValue("efforts", &efforts_);
@@ -33,7 +33,8 @@ public:
     timer_ = create_wall_timer(std::chrono::milliseconds(5), [this] { sample(); });
   }
 
-  void stop() { sink_->stop(); }  // Drain queued snapshots and flush a pending batch.
+  // Drain queued snapshots and flush a pending batch.
+  void stop() { publisher_->stop(); }
 
 private:
   void sample()
@@ -56,7 +57,7 @@ private:
   // Borrowed values precede the channel; the timer is destroyed before either.
   std::array<double, 2> positions_{}, velocities_{}, efforts_{};
   int cycle_ = 0;
-  std::shared_ptr<DataTamer2::SinkWorker> sink_;
+  std::shared_ptr<DataTamer2::SinkWorkerOf<DataTamer2::ROS2PublisherSink>> publisher_;
   std::shared_ptr<DataTamer2::LogChannel> channel_;
   rclcpp::TimerBase::SharedPtr timer_;
 };

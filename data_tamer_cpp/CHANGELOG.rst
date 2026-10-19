@@ -29,17 +29,19 @@ reads 1.x files.
   ``DummySink::create()`` or ``SinkWorker::create<T>()``, which return a
   ``std::shared_ptr<SinkWorkerOf<T>>``: a ``SinkWorker`` whose ``sink()`` is the ``T``
   (static cast, no ``dynamic_cast``), converting to the ``std::shared_ptr<SinkWorker>``
-  that ``addDataSink()`` and ``addDefaultSink()`` take. Earlier 2.0 development versions
-  returned ``std::shared_ptr<SinkWorker>``; code that stores the result with ``auto``
-  compiles unchanged, and ``worker->as<T>()`` still reaches the sink of a plain
-  ``SinkWorker``.
+  that ``addDataSink()`` and ``addDefaultSink()`` take. ``worker->as<T>()`` reaches the
+  sink through a plain ``SinkWorker`` (``std::bad_cast`` for the wrong type). Passing
+  ``std::make_shared<MCAPSink>(path)``, as in 1.x, to ``addDataSink()``,
+  ``removeDataSink()`` or ``addDefaultSink()`` fails with a ``static_assert`` that names
+  ``MCAPSink::create()`` and ``SinkWorker::create<T>()``.
   ``LogChannel::addDataSink()`` takes the worker and returns ``bool`` (``false`` if it was
   attached already). ``MCAPSink::finishQueueAndStop()`` is removed (``worker->stop()``),
   ``restartRecording()`` no longer resumes a stopped worker, and ``DummySink`` has
   accessors (``latestSnapshot()``, ``schema(hash)``, ...) instead of public members.
 * ``Snapshot`` has no ``channel_name`` (use ``Schema::channel_name``, matched by
   ``schema_hash``), and ``schema_hash`` is ``uint64_t``. ``DataSnapshot`` is removed.
-* ``takeSnapshot()`` returns a ``SnapshotResult`` instead of ``bool``.
+* ``takeSnapshot()`` returns a ``SnapshotResult`` instead of ``bool`` (``accepted(result)``
+  replaces the ``bool``).
   ``getActiveFlags()`` is removed: ``isEnabled(id)`` in the application,
   ``Snapshot::active_mask`` in a sink.
 * ``LogChannel::writeMutex()`` and the ``Mutex`` alias are removed: another thread writes
@@ -107,27 +109,16 @@ reads 1.x files.
 
 **New**
 
-* Foxglove extension in ``data_tamer_foxglove/extension/`` for ROS 2 topics and
-  rosbag2 recordings: decoded snapshots with header timestamps, schema catalogs,
-  batch inspection, and packaged ``.foxe`` release artifacts.
-* TypeScript snapshot decoder in ``data_tamer_foxglove/``, with schema versions
-  4/5/6, bounded compiled layouts, nested objects and ROS 2 message helpers.
-
 * ``LogChannel::startLogging()`` freezes the schema, allocates the pool and announces the
-  schema; the first ``takeSnapshot()`` calls it. ``tryTakeSnapshot()``, for real-time
-  threads, never blocks or allocates, also when data_tamer is loaded with ``dlopen()``.
-  Several threads may take snapshots of one channel.
-* The first ``tryTakeSnapshot()`` with a sink attached starts logging, like
-  ``takeSnapshot()``, and is not real-time (RealtimeSanitizer reports it): call
-  ``startLogging()`` before the loop when the first cycle must be. Without a sink it
-  returns ``no_sinks``, in real time; if starting throws, ``SnapshotResult::start_failed``, and the next
-  call retries.
+  schema; the first ``takeSnapshot()`` or ``tryTakeSnapshot()`` with a sink attached
+  calls it. ``tryTakeSnapshot()``, for real-time threads, never blocks or allocates once
+  logging started, also when data_tamer is loaded with ``dlopen()``; the call that starts
+  logging is not real-time (RealtimeSanitizer reports it), so call ``startLogging()``
+  before the loop. Without a sink it returns ``no_sinks``, in real time; if starting
+  throws, ``start_failed``, and the next call retries. Several threads may take snapshots
+  of one channel.
 * ``accepted(SnapshotResult)``, ``constexpr`` and real-time safe: true for ``ok`` and
   ``partial``, what ``stats().accepted`` counts.
-* ``addDataSink()``, ``removeDataSink()`` and ``addDefaultSink()`` given a
-  ``std::shared_ptr`` to a ``DataSink`` (``std::make_shared<MCAPSink>(path)``, as in 1.x)
-  fail with a ``static_assert`` that names ``MCAPSink::create()`` and
-  ``SinkWorker::create<T>()``, instead of a ``shared_ptr`` conversion error.
 * ``tryTakeSnapshot()`` is ``noexcept``: a serializer that throws ends it with
   ``SnapshotResult::serialize_failed``, counted by ``serializeFailures()``;
   ``takeSnapshot()`` lets the exception through, as in 1.x. The library catches it, so
@@ -148,9 +139,10 @@ reads 1.x files.
 * A YAML rendering of the schema (wire format version 6): ``ToYaml()``,
   ``RenderSchema()``, ``SchemaFormat::Yaml``.
 * ``DataSink::onStop()`` and ``onStart()``, ``SinkWorker::Delivery::Manual`` (no thread:
-  the application calls ``drain()``) and ``ChannelsRegistry::stopAll()``.
-* ``ChannelsRegistry::shutdown()``: ``stopAll()`` then ``clear()``, for the end of
-  ``main()``. Every sink is finished and no channel is left borrowing your variables.
+  the application calls ``drain()``).
+* ``ChannelsRegistry::stopAll()`` and ``shutdown()`` (``stopAll()`` then ``clear()``, for
+  the end of ``main()``: every sink is finished and no channel is left borrowing your
+  variables).
 * ``TypeDefinitionTrait<T>`` describes a type without reopening its namespace (Eigen,
   ...).
 * Real-time checks with Clang 20 or later: the real-time API is declared
@@ -170,8 +162,9 @@ reads 1.x files.
   ``std::runtime_error`` naming the file and the topic, like Python's ``iter_mcap()``;
   ``data_tamer_v2/decode.hpp`` has ``ToSnapshotView()``, the parser's view of a
   ``Snapshot`` in a custom sink. T07 and T08 use them.
-* Parser: ``SchemaRegistry``, ``ToSnapshotView()`` and ``ForEachSnapshotInBatch()``
-  decode the ROS 2 messages without ROS; ``SplitMcapMessage()`` splits an MCAP message.
+* Parser: ``SchemaRegistry``, ``DataTamerParser::ToSnapshotView()`` of a ROS 2 message and
+  ``ForEachSnapshotInBatch()`` decode the ROS 2 messages without ROS;
+  ``SplitMcapMessage()`` splits an MCAP message.
 * Parser: ``ParseSnapshot()`` decodes several times faster and allocates nothing per
   value (``benchmarks/parser_benchmark.cpp`` measures it); its depth limit no longer
   depends on the order of the fields.
@@ -179,6 +172,11 @@ reads 1.x files.
   ``parse_snapshot()`` compiles each schema and active mask into ``struct`` formats,
   5 to 15 times faster than a value-by-value walk; ``parse_snapshot_values()`` returns
   names and values as tuples, for column-oriented code.
+* Foxglove extension in ``data_tamer_foxglove/extension/`` for ROS 2 topics and
+  rosbag2 recordings: decoded snapshots with header timestamps, schema catalogs,
+  batch inspection, and packaged ``.foxe`` release artifacts.
+* TypeScript snapshot decoder in ``data_tamer_foxglove/``, with schema versions
+  4/5/6, bounded compiled layouts, nested objects and ROS 2 message helpers.
 * Tutorials ``T01`` to ``T08``, run by ctest; ``docs/USER_MANUAL.md``,
   ``docs/llm_user_manual.md``, ``docs/MIGRATION.md`` and the wire format specification
   ``docs/wire_format.md``, with golden vectors.
@@ -222,14 +220,12 @@ reads 1.x files.
   exported getters, so their structs can grow. ``ROS2PublisherSink`` also follows the
   rclcpp ABI. Header defaults apply to rebuilt consumers only, Pimpl defaults to old
   binaries too.
-* ``SinkWorkerOf<T>`` adds no data member and no virtual function to ``SinkWorker``
-  (pinned in ``tests/abi_tests.cpp``). The factories that return it are inline
-  templates or inline functions in the headers (``SinkWorker::create<T>()``,
-  ``MCAPSink::create()``, ``MCAPRingSink::create()``, ``DummySink::create()``,
-  ``ROS2PublisherSink::create()``): no exported symbol changes.
-* One version number for the library, the ROS packages, conan and the Python decoder,
-  checked by ``tools/check_versions.py``. Pushing a tag ``X.Y.Z`` creates the GitHub
-  release, whose notes are this section (``tools/release_notes.py``).
+* ``SinkWorkerOf<T>`` has the layout of ``SinkWorker`` (pinned in
+  ``tests/abi_tests.cpp``), and the factories that return it are inline.
+* One version number for the library, the ROS packages, conan, the Python and TypeScript
+  decoders and the Foxglove extension, checked by ``tools/check_versions.py``. Pushing a
+  tag ``X.Y.Z`` creates the GitHub release, whose notes are this section
+  (``tools/release_notes.py``).
 
 1.0.4 (2026-07-26)
 ------------------

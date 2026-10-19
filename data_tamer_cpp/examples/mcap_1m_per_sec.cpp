@@ -84,8 +84,8 @@ void WritingThread(const std::string& channel_name)
 int main()
 {
   // Sinks added by default reach every channel of the registry.
-  auto mcap_sink = MCAPSink::create("test_1M.mcap");
-  ChannelsRegistry::Global().addDefaultSink(mcap_sink);
+  auto mcap = MCAPSink::create("test_1M.mcap");
+  ChannelsRegistry::Global().addDefaultSink(mcap);
 
   // Each thread logs 301 values (three vectors of 100 and a color) at 1 kHz for
   // 10 seconds: about 12 million data points in total.
@@ -100,5 +100,5 @@ int main()
   {
     writers[i].join();
   }
-  ChannelsRegistry::Global().stopAll();  // close test_1M.mcap
+  ChannelsRegistry::Global().shutdown();  // close test_1M.mcap and drop the channels
 }

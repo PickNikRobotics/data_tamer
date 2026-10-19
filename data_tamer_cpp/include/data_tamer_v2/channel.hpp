@@ -59,7 +59,8 @@ enum class SnapshotResult : uint8_t
   /// open.
   no_sinks,
   /// tryTakeSnapshot(): starting logging failed (a sink's onSchema() or an allocation
-  /// threw), so nothing is captured; the next call retries. takeSnapshot() throws instead.
+  /// threw, or the call came from a callback of an attached sink), so nothing is
+  /// captured; the next call retries. takeSnapshot() throws instead.
   start_failed,
   /// Sinks still hold every pool slot, so the sample is lost (see poolExhausted()).
   pool_exhausted,
@@ -282,10 +283,10 @@ public:
   SnapshotResult takeSnapshot(std::chrono::nanoseconds timestamp = NsecSinceEpoch());
 
   /**
-   * @brief Lock-free takeSnapshot() for real-time threads: it never blocks or
-   * allocates. Where takeSnapshot() would wait or allocate, it returns `blocked` (a
-   * writer or another snapshot holds the mutex) or `oversize` (the payload outgrew its
-   * slot). accepted() tells whether a sink took the snapshot.
+   * @brief Lock-free takeSnapshot() for real-time threads: once logging started, it
+   * never blocks or allocates. Where takeSnapshot() would wait or allocate, it returns
+   * `blocked` (a writer or another snapshot holds the mutex) or `oversize` (the payload
+   * outgrew its slot). accepted() tells whether a sink took the snapshot.
    *
    * Before logging started, it returns `no_sinks` without a sink, real-time too, and
    * the schema stays open. The first call with a sink calls startLogging(), like
