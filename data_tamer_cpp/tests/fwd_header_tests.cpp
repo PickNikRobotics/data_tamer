@@ -37,6 +37,8 @@ std::shared_ptr<DataTamer2::LogChannel> makeChannel();
 void takesRegistry(DataTamer2::ChannelsRegistry& registry);
 void takesSink(std::shared_ptr<DataTamer2::DataSink> sink);
 void takesWorker(const std::shared_ptr<DataTamer2::SinkWorker>& worker);
+void takesTypedWorker(
+    const std::shared_ptr<DataTamer2::SinkWorkerOf<DataTamer2::DataSink>>& worker);
 void takesSchema(const DataTamer2::Schema& schema);
 void takesSnapshot(const DataTamer2::Snapshot& snapshot);
 void takesSnapshotRef(const DataTamer2::SnapshotRef& snapshot);

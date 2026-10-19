@@ -20,9 +20,8 @@ int main()
   options.filepath = "fault.mcap";  // dumps: fault_1.mcap, fault_2.mcap, ...
   options.window = 1s;
   options.capacity_bytes = 4 * 1024 * 1024;
-  auto worker = MCAPRingSink::create(options);
-  auto& recorder = worker->as<MCAPRingSink>();
-  recorder.setDumpCallback([](const MCAPRingDump& dump) {
+  auto recorder = MCAPRingSink::create(options);
+  recorder->sink().setDumpCallback([](const MCAPRingDump& dump) {
     std::cout << (dump.ok ? "wrote " : "failed ") << dump.path << " (" << dump.messages
               << " messages) " << dump.error << std::endl;
   });
@@ -32,7 +31,7 @@ int main()
   channel->registerValue("positions", &positions);
   channel->registerValue("velocities", &velocities);
   channel->registerValue("efforts", &efforts);
-  channel->addDataSink(worker);
+  channel->addDataSink(recorder);
   channel->startLogging();
 
   // A 1 kHz control loop; a fault at t = 1 s.
@@ -51,13 +50,13 @@ int main()
     {
       // Real-time safe: one atomic compare-exchange, no allocation. The result is false
       // when an earlier request is still active, which cannot happen here.
-      (void)recorder.requestDump(250ms);
+      (void)recorder->sink().requestDump(250ms);
     }
     std::this_thread::sleep_for(1ms);
   }
 
   // Deliver what is queued, then write a dump requested just before shutdown, if
   // any, and wait for the writer.
-  worker->stop();
+  recorder->stop();
   return 0;
 }

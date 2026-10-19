@@ -15,9 +15,9 @@
 int main()
 {
   std::array<double, 2> positions{}, velocities{}, efforts{};
-  auto sink = DataTamer2::MCAPSink::create("T05_joint_states.mcap");
+  auto mcap = DataTamer2::MCAPSink::create("T05_joint_states.mcap");
   auto channel = DataTamer2::LogChannel::create("controller");
-  channel->addDataSink(sink);
+  channel->addDataSink(mcap);
   // A value another thread writes: a LoggedValue owns its storage, a scalar is atomic,
   // and it unregisters itself when destroyed.
   auto motor_temperature = channel->createLoggedValue<double>("motor_temperature", 25);
@@ -69,9 +69,9 @@ int main()
     std::this_thread::sleep_until(next_cycle);
   }
   sensor_callback.join();  // No callback can access locals during their destruction.
-  sink->stop();
-  std::cout << "snapshot failures=" << missed << " sink errors=" << sink->errors()
+  mcap->stop();
+  std::cout << "snapshot failures=" << missed << " sink errors=" << mcap->errors()
             << '\n';
   // LoggedValue destruction unregisters here, on the normal thread after the loop.
-  return sink->errors() == 0 ? 0 : 1;
+  return mcap->errors() == 0 ? 0 : 1;
 }

@@ -27,7 +27,12 @@ reads 1.x files.
   ``sinks/mcap_encoding.hpp``.
 * Sinks are created with ``MCAPSink::create()``, ``ROS2PublisherSink::create()``,
   ``DummySink::create()`` or ``SinkWorker::create<T>()``, which return a
-  ``std::shared_ptr<SinkWorker>``; ``worker->as<T>()`` reaches the sink.
+  ``std::shared_ptr<SinkWorkerOf<T>>``: a ``SinkWorker`` whose ``sink()`` is the ``T``
+  (static cast, no ``dynamic_cast``), converting to the ``std::shared_ptr<SinkWorker>``
+  that ``addDataSink()`` and ``addDefaultSink()`` take. Earlier 2.0 development versions
+  returned ``std::shared_ptr<SinkWorker>``; code that stores the result with ``auto``
+  compiles unchanged, and ``worker->as<T>()`` still reaches the sink of a plain
+  ``SinkWorker``.
   ``LogChannel::addDataSink()`` takes the worker and returns ``bool`` (``false`` if it was
   attached already). ``MCAPSink::finishQueueAndStop()`` is removed (``worker->stop()``),
   ``restartRecording()`` no longer resumes a stopped worker, and ``DummySink`` has
@@ -199,6 +204,11 @@ reads 1.x files.
   exported getters, so their structs can grow. ``ROS2PublisherSink`` also follows the
   rclcpp ABI. Header defaults apply to rebuilt consumers only, Pimpl defaults to old
   binaries too.
+* ``SinkWorkerOf<T>`` adds no data member and no virtual function to ``SinkWorker``
+  (pinned in ``tests/abi_tests.cpp``). The factories that return it are inline
+  templates or inline functions in the headers (``SinkWorker::create<T>()``,
+  ``MCAPSink::create()``, ``MCAPRingSink::create()``, ``DummySink::create()``,
+  ``ROS2PublisherSink::create()``): no exported symbol changes.
 * One version number for the library, the ROS packages, conan and the Python decoder,
   checked by ``tools/check_versions.py``. Pushing a tag ``X.Y.Z`` creates the GitHub
   release, whose notes are this section (``tools/release_notes.py``).

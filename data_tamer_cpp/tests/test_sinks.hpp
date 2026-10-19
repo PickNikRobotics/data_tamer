@@ -25,7 +25,8 @@ struct Attached
 
   template <typename... Args>
   explicit Attached(Args&&... args)
-    : Attached(DataTamer2::SinkWorker::create<T>(std::forward<Args>(args)...))
+    : Attached(std::shared_ptr<DataTamer2::SinkWorker>(
+          DataTamer2::SinkWorker::create<T>(std::forward<Args>(args)...)))
   {}
 
   T* operator->() const { return sink; }

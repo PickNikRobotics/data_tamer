@@ -26,5 +26,7 @@ struct Snapshot;
 
 template <typename T>
 class LoggedValue;
+template <typename T>
+class SinkWorkerOf;
 
 }  // namespace DataTamer2

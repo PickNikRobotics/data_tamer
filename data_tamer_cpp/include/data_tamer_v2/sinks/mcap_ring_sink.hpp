@@ -84,11 +84,10 @@ struct MCAPRingStats
  *   MCAPRingOptions options;
  *   options.filepath = "fault.mcap";
  *   options.window = std::chrono::seconds(5);
- *   auto worker = MCAPRingSink::create(options);
- *   channel->addDataSink(worker);
- *   auto& recorder = worker->as<MCAPRingSink>();
+ *   auto recorder = MCAPRingSink::create(options);
+ *   channel->addDataSink(recorder);
  *   ...
- *   (void)recorder.requestDump(std::chrono::seconds(2));  // any thread, RT-safe
+ *   (void)recorder->sink().requestDump(std::chrono::seconds(2));  // any thread, RT-safe
  *
  * Content. The trigger is the first snapshot delivered after the request, and all times
  * are snapshot timestamps, so a dump behaves the same in simulation, replay and on
@@ -119,7 +118,7 @@ public:
   MCAPRingSink& operator=(const MCAPRingSink&) = delete;
 
   /// Ready-to-attach sink: SinkWorker::create<MCAPRingSink>(options).
-  static std::shared_ptr<SinkWorker> create(MCAPRingOptions options)
+  static std::shared_ptr<SinkWorkerOf<MCAPRingSink>> create(MCAPRingOptions options)
   {
     return SinkWorker::create<MCAPRingSink>(std::move(options));
   }

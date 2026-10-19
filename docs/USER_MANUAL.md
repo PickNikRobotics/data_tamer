@@ -222,8 +222,10 @@ time. Both must be called before `startLogging()`.
 ## Sinks
 
 A sink is created with its `create()` function, which returns a
-`std::shared_ptr<SinkWorker>`. Attach it to one or more channels with `addDataSink()`, and
-reach the sink's own functions with `worker->as<SinkType>()`.
+`std::shared_ptr<SinkWorkerOf<SinkType>>`: a `SinkWorker` that owns the sink. Attach it to
+one or more channels with `addDataSink()`, and reach the sink's own functions with
+`worker->sink()`. Code that holds only a `std::shared_ptr<SinkWorker>` uses
+`worker->as<SinkType>()`, which throws `std::bad_cast` for the wrong type.
 
 ### Recording to MCAP files
 
@@ -239,7 +241,7 @@ By default `MCAPSink` starts a new numbered file every 10 minutes (`run.mcap`,
 it:
 
 ```cpp
-auto& sink = worker->as<DataTamer2::MCAPSink>();
+auto& sink = worker->sink();
 sink.setMaxTimeBeforeReset(std::chrono::seconds(0));  // one file, never reset
 // or: sink.setCreateNewFileOnReset(false);           // keep only the last 10 minutes
 ```
@@ -262,11 +264,11 @@ DataTamer2::MCAPRingOptions options;
 options.filepath = "fault.mcap";            // fault_1.mcap, fault_2.mcap, ...
 options.window = std::chrono::seconds(5);   // history before the trigger
 options.capacity_bytes = size_t(64) << 20;  // the sink uses about twice this
-auto worker = DataTamer2::MCAPRingSink::create(options);
-channel->addDataSink(worker);
+auto recorder = DataTamer2::MCAPRingSink::create(options);
+channel->addDataSink(recorder);
 
 // from any thread, real-time ones included: keep also 2 s after the trigger
-(void)worker->as<DataTamer2::MCAPRingSink>().requestDump(std::chrono::seconds(2));
+(void)recorder->sink().requestDump(std::chrono::seconds(2));
 ```
 
 The dump covers `[trigger - window, trigger + post_trigger]` in snapshot time, so it

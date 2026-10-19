@@ -86,7 +86,8 @@ flowchart LR
   is the only bound.
 - `SinkWorker` (`data_tamer_v2/data_sink.hpp`) owns one `DataSink`, the queues of the
   channels attached to it and the thread that calls `onSnapshot()`. Channels take sinks
-  as `std::shared_ptr<SinkWorker>`.
+  as `std::shared_ptr<SinkWorker>`. `SinkWorkerOf<T>`, what the `create()` helpers return,
+  is a `SinkWorker` whose `sink()` is the `T`.
 
 ## Headers
 
@@ -552,8 +553,11 @@ timestamp (counted in the worker's `errors()`, neither written nor stored). A ti
 
 ## Sinks
 
-The `create()` helpers return a `std::shared_ptr<SinkWorker>`. Reach the sink's own
-methods with `worker->as<T>()`, which throws `std::bad_cast` for the wrong type.
+The `create()` helpers (`MCAPSink::create()`, `SinkWorker::create<T>()`, ...) return a
+`std::shared_ptr<SinkWorkerOf<T>>`, which converts to the `std::shared_ptr<SinkWorker>`
+that `addDataSink()` takes. Reach the sink's own methods with `worker->sink()`, a `T&`.
+Through a plain `SinkWorker`, `sink()` is the `DataSink&` and `worker->as<T>()` the `T&`
+(it throws `std::bad_cast` for the wrong type).
 
 - `channel->addDataSink(worker)` attaches a sink and returns `true`. A channel holds at
   most eight sinks (a ninth throws `std::runtime_error`). Adding the same sink twice does
@@ -721,17 +725,16 @@ MCAPRingOptions ring_options;
 ring_options.filepath = "fault.mcap";
 ring_options.window = 5s;
 ring_options.capacity_bytes = size_t(16) << 20;
-auto ring = MCAPRingSink::create(ring_options);
-auto& recorder = ring->as<MCAPRingSink>();
-recorder.setDumpCallback([](const MCAPRingDump& dump) {
+auto recorder = MCAPRingSink::create(ring_options);
+recorder->sink().setDumpCallback([](const MCAPRingDump& dump) {
   std::printf("%s %s %zu messages truncated=%d %s\n", dump.ok ? "wrote" : "FAILED",
               dump.path.c_str(), dump.messages, dump.truncated, dump.error.c_str());
 });
-channel->addDataSink(ring);
+channel->addDataSink(recorder);
 // ... in the loop, from any thread, real-time ones included:
-(void)recorder.requestDump(10ms);  // also keep 10 ms after the trigger
+(void)recorder->sink().requestDump(10ms);  // also keep 10 ms after the trigger
 // ... at shutdown: delivers what is queued, then writes a pending request
-ring->stop();
+recorder->stop();
 ```
 
 - Memory: the ring and a second buffer of the same size, for the dump being written, are
@@ -825,7 +828,7 @@ channel->addDataSink(ros_sink);
 ```
 
 There is no timer: a partial batch waits for the next snapshot, for
-`worker->as<ROS2PublisherSink>().flush()` (callable from any thread, throws if a publish
+`ros_sink->sink().flush()` (callable from any thread, throws if a publish
 fails) or for `worker->stop()`, which flushes after the last delivery. The batch delay
 is measured on the steady clock when snapshots arrive, not with snapshot timestamps.
 

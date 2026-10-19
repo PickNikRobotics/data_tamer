@@ -15,9 +15,9 @@
 int main()
 {
   std::array<double, 2> positions{}, velocities{}, efforts{};
-  auto sink = DataTamer2::MCAPSink::create("T04_joint_states.mcap");
+  auto mcap = DataTamer2::MCAPSink::create("T04_joint_states.mcap");
   auto channel = DataTamer2::LogChannel::create("controller");
-  channel->addDataSink(sink);
+  channel->addDataSink(mcap);
   channel->registerValue("positions", &positions);
   channel->registerValue("velocities", &velocities);
   channel->registerValue("efforts", &efforts);
@@ -60,10 +60,10 @@ int main()
     std::this_thread::sleep_until(next_cycle);
   }
 
-  sink->stop();
+  mcap->stop();
   // stats() can lock and allocate: monitor from a normal thread, or after the loop.
   const auto channel_stats = channel->stats();
-  const auto sink_stats = sink->stats();
+  const auto sink_stats = mcap->stats();
   std::cout << "missed=" << missed << " partial=" << partial
             << " accepted=" << channel_stats.accepted
             << " pool_exhausted=" << channel_stats.pool_exhausted

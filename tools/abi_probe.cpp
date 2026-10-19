@@ -20,6 +20,7 @@
 #include "data_tamer_v2/values.hpp"
 
 #include <array>
+#include <chrono>
 #include <memory>
 #include <optional>
 #include <string>
@@ -144,9 +145,13 @@ uint64_t probeStats(const LogChannel& channel, const SinkWorker& worker,
 {
   return channel.stats().attempts + worker.stats().delivered + ring.stats().dumps_written;
 }
-std::shared_ptr<SinkWorker> probeRingSink(MCAPRingOptions options)
+std::shared_ptr<SinkWorkerOf<MCAPRingSink>> probeRingSink(MCAPRingOptions options)
 {
   return MCAPRingSink::create(std::move(options));
+}
+bool probeTypedHandle(const std::shared_ptr<SinkWorkerOf<MCAPRingSink>>& recorder)
+{
+  return recorder->sink().requestDump(std::chrono::seconds(1));
 }
 std::shared_ptr<SinkWorker> probeSinks(const std::string& path)
 {
