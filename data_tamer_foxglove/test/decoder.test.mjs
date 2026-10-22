@@ -31,6 +31,42 @@ for(const format of ['txt', 'yaml'])
       assert.equal(decodeMessage(s, mask, payload).points[0].x, 4);
     });
   }
+test('golden strings: a char[] is one string, a char[N] stays per character', () => {
+  const s = parseSchema(text('schema_strings.txt'), { verifyHash: true });
+  const expected = JSON.parse(text('expected.json')).strings;
+  const mask = bytes('snapshot_strings.mask'),
+        payload = bytes('snapshot_strings.payload');
+  const out = decodeFlat(s, mask, payload);
+  assert.deepEqual(out.names, Object.keys(expected));
+  assert.deepEqual(
+      out.values,
+      Object.entries(expected).map(
+          ([name, v]) => name.startsWith('fixed') ? v.charCodeAt(0) : v));
+  const message = decodeMessage(s, mask, payload);
+  assert.equal(message.utf8, 'Z\u00fcrich \u2713');
+  assert.equal(message.invalid, 'a\ufffdb');
+  assert.deepEqual(message.labels, [{ id: 1, text: 'x' }, { id: 2, text: '' }]);
+  assert.deepEqual(message.fixed, [97, 98, 99]);
+  const chars = decodeFlat(s, mask, payload, { stringsAsText: false });
+  assert.equal(chars.names[0], 'ascii[0]');
+  assert.equal(chars.values[0], 'd'.charCodeAt(0));
+  assert.ok(!chars.names.includes('empty'));
+  assert.deepEqual(
+      decodeMessage(s, mask, payload, { stringsAsText: false }).labels[0].text, [120]);
+});
+test('a string keeps its BOM and NUL, and may change length between snapshots', () => {
+  const s = schema('char[] s\nuint8 after');
+  const encode = b => Uint8Array.from([b.length, 0, 0, 0, ...b, 7]);
+  for(const [input, expected] of [
+          [[0xef, 0xbb, 0xbf, 0x61, 0, 0x62], '\ufeffa\0b'], [[], ''],
+          [[0x61, 0xff], 'a\ufffd'], [[0x68, 0x69], 'hi']])
+    assert.deepEqual(
+        decodeFlat(s, Uint8Array.of(3), encode(input)),
+        { names: ['s', 'after'], values: [expected, 7] });
+  error(
+      'truncated',
+      () => decodeFlat(s, Uint8Array.of(1), Uint8Array.of(3, 0, 0, 0, 0x61)));
+});
 test('nested YAML and text preserve fields and hash', () => {
   for(const name of ['schema_nested.txt', 'schema_nested.yaml'])
   {

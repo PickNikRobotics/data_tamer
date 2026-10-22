@@ -21,7 +21,9 @@ For a `ROS2PublisherSink` prefix `/robot`:
 | `/robot/data` | `data_tamer_msgs/msg/Snapshot` | `data_tamer.Snapshot` | `{ header, channel, values }` |
 | `/robot/data_batch` | `data_tamer_msgs/msg/SnapshotBatch` | `data_tamer.SnapshotBatch` | `{ snapshots: [{ header, channel, values }, ...] }` |
 
-Select the converted schema in the panel. Catalog hashes are decimal strings;
+Select the converted schema in the panel. A `std::string` value is a string field
+(`.values.label`); a fixed `std::array<char, N>` is an array of byte values. Catalog
+hashes are decimal strings;
 `fields` counts top-level fields before expanding arrays/custom types. `errors`
 counts rejected entries in that catalog message; valid entries still register
 and appear. The channel comes from the schema text.

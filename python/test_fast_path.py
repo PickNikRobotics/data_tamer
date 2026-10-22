@@ -27,31 +27,34 @@ def normalized(values: dict) -> list:
             for name, v in values.items()]
 
 
-def outcome(decode, *args):
+def outcome(decode, *args, **kwargs):
     """("returns", normalized items) or ("raises", exception type, message)."""
     try:
-        values = decode(*args)
+        values = decode(*args, **kwargs)
     except Exception as err:  # what must agree is the type and the message
         return ("raises", type(err).__name__, str(err))
     return ("returns", normalized(values))
 
 
-def values_as_dict(schema, mask, payload) -> dict:
-    names, values = dt.parse_snapshot_values(schema, mask, payload)
+def values_as_dict(schema, mask, payload, strings_as_text=True) -> dict:
+    names, values = dt.parse_snapshot_values(schema, mask, payload,
+                                             strings_as_text=strings_as_text)
     assert type(names) is tuple and type(values) is tuple, (type(names), type(values))
     assert len(names) == len(values) == len(set(names)), (names, values)
     return dict(zip(names, values))
 
 
-def disagreement(schema, mask, payload, reference_schema=None):
+def disagreement(schema, mask, payload, reference_schema=None, strings_as_text=True):
     """None if both entry points agree with the reference, twice (compiling, then cached);
     else a description."""
-    expected = outcome(dt._parse_snapshot_reference, reference_schema or schema, mask, payload)
+    expected = outcome(dt._parse_snapshot_reference, reference_schema or schema, mask, payload,
+                       strings_as_text)
     for attempt in range(2):
         for decode in (parse_snapshot, values_as_dict):
-            got = outcome(decode, schema, mask, payload)
+            got = outcome(decode, schema, mask, payload, strings_as_text=strings_as_text)
             if got != expected:
-                return (f"{decode.__name__} (attempt {attempt}) gave {got}, the reference "
+                return (f"{decode.__name__} (attempt {attempt}, strings_as_text="
+                        f"{strings_as_text}) gave {got}, the reference "
                         f"{expected}, for mask {bytes(mask).hex()} payload {bytes(payload).hex()}")
     return None
 
@@ -168,8 +171,9 @@ class RandomizedSchemas(unittest.TestCase):
             reference = copy.deepcopy(schema)
             for _ in range(4):
                 for mask, payload in variants(rng, *snapshot(rng, schema)):
-                    problem = disagreement(schema, mask, payload, reference)
-                    self.assertIsNone(problem, f"{problem}\nschema: {schema}")
+                    for text in (True, False):
+                        problem = disagreement(schema, mask, payload, reference, text)
+                        self.assertIsNone(problem, f"{problem}\nschema: {schema}")
                     try:
                         dt._parse_snapshot_reference(reference, mask, payload)
                         decoded += 1
@@ -214,6 +218,14 @@ class GoldenVectors(unittest.TestCase):
             for mask, payload in variants(rng, *snapshot(rng, schema, enabled=0.5)):
                 self.assertIsNone(disagreement(schema, mask, payload))
 
+    def test_strings(self):
+        schema = dt.parse_schema(read("schema_strings.txt").decode())
+        mask, payload = read("snapshot_strings.mask"), read("snapshot_strings.payload")
+        for strings_as_text in (True, False):
+            for end in range(len(payload) + 1):
+                self.assertIsNone(disagreement(schema, mask, payload[:end],
+                                               strings_as_text=strings_as_text))
+
     def test_recording_104(self):
         try:
             from mcap.reader import make_reader
@@ -238,12 +250,12 @@ class ExistingTests(unittest.TestCase):
         import test_robustness
         calls, problems = [], []
 
-        def checked(schema, mask, payload):
+        def checked(schema, mask, payload, *, strings_as_text=True):
             calls.append(None)
-            problem = disagreement(schema, mask, payload)
+            problem = disagreement(schema, mask, payload, strings_as_text=strings_as_text)
             if problem:
                 problems.append(problem)
-            return parse_snapshot(schema, mask, payload)
+            return parse_snapshot(schema, mask, payload, strings_as_text=strings_as_text)
 
         suite = unittest.TestSuite(unittest.defaultTestLoader.loadTestsFromModule(module)
                                    for module in (test_data_tamer_parser, test_robustness))
@@ -324,9 +336,38 @@ class EdgeCases(unittest.TestCase):
                 "char k\nuint8 v\n")
         payload = b"abc" + b"d\x03\0\0\0\xe9f\0" + b"\x02\0\0\0" + b"x\x01y\x02"
         self.assert_agrees(text, b"\x0f", payload)
-        values = dt.parse_snapshot(dt.parse_schema(HEADER + text), b"\x0f", payload)
-        self.assertEqual(values["s[0]"], "\u00e9")
+        schema = dt.parse_schema(HEADER + text)
+        for strings_as_text in (True, False):
+            self.assertIsNone(disagreement(schema, b"\x0f", payload,
+                                           strings_as_text=strings_as_text))
+        values = dt.parse_snapshot(schema, b"\x0f", payload)
+        self.assertEqual(values["s"], "\ufffdf\0")  # 0xe9 alone is not UTF-8
+        self.assertEqual(values["cs[2]"], "d")  # a fixed array stays per character
         self.assertEqual(values["ns[1]/k"], "y")
+        chars = dt.parse_snapshot(schema, b"\x0f", payload, strings_as_text=False)
+        self.assertEqual([chars[f"s[{i}]"] for i in range(3)], ["\u00e9", "f", "\0"])
+
+    def test_strings_inside_custom_types(self):
+        # a string member walks a vector of structs, and compiles in a struct or an array
+        text = (f"Named[] ns\nNamed one\nNamed[2] two\n{SEPARATOR}\nMSG: Named\n"
+                "uint8 v\nchar[] s\n")
+        named = lambda v, s: bytes([v]) + struct.pack("<I", len(s)) + s
+        payload = (struct.pack("<I", 2) + named(1, b"ab") + named(2, b"")
+                   + named(3, "\u00fc".encode()) + named(4, b"x") + named(5, b"yz"))
+        schema = dt.parse_schema(HEADER + text)
+        for strings_as_text in (True, False):
+            self.assertIsNone(disagreement(schema, b"\x07", payload,
+                                           strings_as_text=strings_as_text))
+            for end in range(len(payload)):
+                self.assertIsNone(disagreement(schema, b"\x07", payload[:end],
+                                               strings_as_text=strings_as_text))
+        self.assertEqual(dt.parse_snapshot(schema, b"\x07", payload),
+                         {"ns[0]/v": 1, "ns[0]/s": "ab", "ns[1]/v": 2, "ns[1]/s": "",
+                          "one/v": 3, "one/s": "\u00fc", "two[0]/v": 4, "two[0]/s": "x",
+                          "two[1]/v": 5, "two[1]/s": "yz"})
+        self.assertEqual([op[0] for op in schema._plans[b"\x07"].ops],
+                         [dt._WALK, dt._FIXED, dt._TEXT, dt._CHECK, dt._FIXED, dt._TEXT,
+                          dt._FIXED, dt._TEXT])
 
     def test_field_too_large_for_the_budget_is_walked_and_later_ones_compile(self):
         # q runs out of budget at its second array, p at its first element: what they
@@ -375,17 +416,24 @@ class Columns(unittest.TestCase):
     def test_consecutive_snapshots_of_one_layout_share_their_names(self):
         schema = dt.parse_schema(self.TEXT)
         names, values = dt.parse_snapshot_values(schema, b"\x07", self.payload(2, 1))
-        self.assertEqual(names, ("x", "v[0]", "v[1]", "p/a", "p/s[0]"))
+        self.assertEqual(names, ("x", "v[0]", "v[1]", "p/a", "p/s"))
         self.assertEqual(values, (0.0, 0.0, 0.0, 1, "z"))
         again, _ = dt.parse_snapshot_values(schema, b"\x07", bytearray(self.payload(2, 1)))
         self.assertIs(again, names)
+        # a string of another length is one value all the same: the layout stays
+        again, values = dt.parse_snapshot_values(schema, b"\x07", self.payload(2, 4))
+        self.assertIs(again, names)
+        self.assertEqual(values[-1], "zzzz")
+        chars, _ = dt.parse_snapshot_values(schema, b"\x07", self.payload(2, 2),
+                                            strings_as_text=False)
+        self.assertEqual(chars, ("x", "v[0]", "v[1]", "p/a", "p/s[0]", "p/s[1]"))
         longer, _ = dt.parse_snapshot_values(schema, b"\x07", self.payload(3, 1))
         self.assertEqual(len(longer), 6)
         back, _ = dt.parse_snapshot_values(schema, b"\x07", self.payload(2, 1))
         self.assertEqual(back, names)  # one layout is kept: another tuple, equal
         self.assertIs(dt.parse_snapshot_values(schema, b"\x07", self.payload(2, 1))[0], back)
         self.assertEqual(dt.parse_snapshot_values(schema, b"\x04", b"\x01\0\0\0\0"),
-                         (("p/a",), (1,)))
+                         (("p/a", "p/s"), (1, "")))  # an empty string is a value
         self.assertEqual(dt.parse_snapshot_values(schema, b"\0", b""), ((), ()))
 
     def test_fixed_layout_names_are_the_plan_names(self):
@@ -424,9 +472,10 @@ class Columns(unittest.TestCase):
         try:
             schema = dt.parse_schema(self.TEXT)
             for v in (1, 2, 15, 30, 3, 15):  # v and p/s keep 10 names each
-                names, values = dt.parse_snapshot_values(schema, b"\x07", self.payload(v, 9))
+                names, values = dt.parse_snapshot_values(schema, b"\x07", self.payload(v, 9),
+                                                         strings_as_text=False)
                 self.assertEqual(len(names), v + 11)
-                plan = schema._plans[b"\x07"]
+                plan = schema._char_plans[b"\x07"]
                 self.assertLessEqual(len(plan.last[1][0]), 20)
                 vectors = [op[1] for op in plan.ops if op[0] == dt._VECTOR]
                 self.assertLessEqual(sum(len(vector.names) for vector in vectors), 20)
@@ -440,9 +489,9 @@ class Caches(unittest.TestCase):
         compiled = []
         compile_plan = dt._compile
 
-        def counted(schema, mask):
+        def counted(schema, mask, text):
             compiled.append(mask)
-            return compile_plan(schema, mask)
+            return compile_plan(schema, mask, text)
 
         dt._compile = counted
         try:
@@ -490,7 +539,8 @@ class Caches(unittest.TestCase):
         for clone in (copy.copy(schema), copy.deepcopy(schema),
                       pickle.loads(pickle.dumps(schema))):
             self.assertEqual(clone, schema)
-            self.assertEqual((clone._min_sizes, clone._plans, clone._masks), ({}, {}, {}))
+            self.assertEqual((clone._min_sizes, clone._plans, clone._masks, clone._char_plans,
+                              clone._char_masks), ({}, {}, {}, {}, {}))
             self.assertEqual(dt.parse_snapshot(clone, mask, payload), expected)
         self.assertIs(copy.copy(schema).fields, schema.fields)
         self.assertEqual(dataclasses.asdict(schema)["channel_name"], schema.channel_name)

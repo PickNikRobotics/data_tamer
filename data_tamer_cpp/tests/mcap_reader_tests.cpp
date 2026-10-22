@@ -20,6 +20,7 @@
 #include <fstream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <tuple>
 #include <utility>
 #include <variant>
@@ -144,6 +145,43 @@ TEST(McapReader, ForEachValueDecodesInLogTimeOrder)
     { "a", 30, "x", 3 },
   };
   EXPECT_EQ(readValues(path), expected);
+}
+
+// With a string callback, a std::string comes as one value; the numbers come as before.
+TEST(McapReader, ForEachValueWithAStringCallbackPassesStringsAsText)
+{
+  DataTamerTest::ScratchDir dir("mcap_reader");
+  const std::string path = dir.file("strings.mcap");
+  {
+    auto sink = manual<MCAPSink>(path);
+    auto channel = LogChannel::create("s");
+    std::string label = "first";
+    int32_t x = 7;
+    channel->registerValue("label", &label);
+    channel->registerValue("x", &x);
+    channel->addDataSink(sink);
+    EXPECT_EQ(channel->takeSnapshot(nanoseconds(10)), SnapshotResult::ok);
+    label.clear();
+    EXPECT_EQ(channel->takeSnapshot(nanoseconds(20)), SnapshotResult::ok);
+    sink.worker->stop();
+  }
+  std::vector<Value> numbers;
+  std::vector<std::tuple<std::string, uint64_t, std::string, std::string>> strings;
+  const size_t count = ForEachValue(
+      path,
+      [&](const std::string& topic, uint64_t timestamp, const std::string& name,
+          const DataTamerParser::VarNumber& value) {
+        numbers.emplace_back(topic, timestamp, name, toDouble(value));
+      },
+      [&](const std::string& topic, uint64_t timestamp, const std::string& name,
+          std::string_view text) { strings.emplace_back(topic, timestamp, name, text); },
+      { "s" });
+  EXPECT_EQ(count, 2u);
+  EXPECT_EQ(numbers, (std::vector<Value>{ { "s", 10, "x", 7 }, { "s", 20, "x", 7 } }));
+  EXPECT_EQ(strings, (decltype(strings){ { "s", 10, "label", "first" },
+                                         { "s", 20, "label", "" } }));
+  // Without one, the characters come one by one, as numbers.
+  EXPECT_EQ(readValues(path).size(), 5u + 1u + 1u);
 }
 
 TEST(McapReader, ForEachSnapshotFillsTimestampAndHash)

@@ -104,7 +104,8 @@ int main()
 
 ## How to register custom types
 
-Containers such as `std::vector` and `std::array` work out of the box, including
+`std::string` values are recorded as text, and containers such as `std::vector` and
+`std::array` work out of the box, including
 containers of your own types. Describe a struct in its own namespace:
 
 ```cpp

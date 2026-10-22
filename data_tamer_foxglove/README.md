@@ -37,6 +37,11 @@ Numbers and names:
 
 - Bool is numeric 0/1; char is its byte value. int64/uint64 become JS numbers,
   exact through 2^53. Hashes remain `bigint`.
+- A `char[]` field (a C++ `std::string`) is one string: UTF-8, invalid bytes
+  replaced by U+FFFD, a leading BOM kept. `decodeFlat`, `decodeMessage`,
+  `decodeSnapshotMsg` and `decodeSnapshotBatch` take `{ stringsAsText: false }`
+  as a last argument to get one byte value per character instead. A fixed
+  `char[N]` is always per character.
 - Float32 widens to binary64. Every non-NaN bit pattern, including -0, is exact;
   NaNs are equivalent regardless of payload, sign or signaling bit.
 - Flat results retain payload order. Duplicate names keep their first position

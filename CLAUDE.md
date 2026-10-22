@@ -85,7 +85,9 @@ under "Unreleased" in `data_tamer_cpp/CHANGELOG.rst`.
   fall back to the walker for what they do not compile. The caches are bounded: at most
   `_MAX_PLANS` masks per schema (the walker decodes further ones), `_PLAN_BUDGET` values
   per plan, and `_MAX_CACHED_NAMES` names per plan for its vectors and its last layout.
-  `test_fast_path.py` checks them against it, values and error messages: random schemas,
+  `strings_as_text` (a `char[]` as one `str`, the default) has its own plans
+  (`Schema._char_plans`, `_char_masks` for `False`), and the walker takes it too.
+  `test_fast_path.py` checks them against it in both modes, values and error messages: random schemas,
   the golden vectors, the 1.0.4 recording and every decode of the other tests.
   `benchmark_decode.py` times the three.
 - `data_tamer_foxglove/`: strict ESM TypeScript snapshot decoder, no runtime dependencies;

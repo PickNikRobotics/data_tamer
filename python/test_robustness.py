@@ -14,11 +14,38 @@ HEADER = "### version: 5\n### hash: 0\n### channel_name: c\n\n"
 
 
 class StringMembers(unittest.TestCase):
-    def test_string_member_decodes_as_a_char_vector(self):
-        # the C++ writer sends a std::string as char[]: a uint32 count, then the characters
-        text = HEADER + f"Named n\n{SEPARATOR}\nMSG: Named\nuint8 tag\nchar[] name\n"
-        values = dt.parse_snapshot(dt.parse_schema(text), b"\x01", bytes([1, 3, 0, 0, 0]) + b"abc")
-        self.assertEqual(values, {"n/tag": 1, "n/name[0]": "a", "n/name[1]": "b", "n/name[2]": "c"})
+    # the C++ writer sends a std::string as char[]: a uint32 count, then the characters
+    TEXT = HEADER + f"Named n\n{SEPARATOR}\nMSG: Named\nuint8 tag\nchar[] name\n"
+
+    def decode(self, characters: bytes, **kwargs) -> dict:
+        payload = bytes([1]) + struct.pack("<I", len(characters)) + characters
+        return dt.parse_snapshot(dt.parse_schema(self.TEXT), b"\x01", payload, **kwargs)
+
+    def test_string_member_decodes_as_text(self):
+        self.assertEqual(self.decode(b"abc"), {"n/tag": 1, "n/name": "abc"})
+        self.assertEqual(self.decode(b""), {"n/tag": 1, "n/name": ""})
+
+    def test_text_is_utf8_with_invalid_bytes_replaced(self):
+        self.assertEqual(self.decode("Zürich ✓".encode())["n/name"], "Zürich ✓")
+        self.assertEqual(self.decode(b"a\xffb\xc3")["n/name"], "a\ufffdb\ufffd")
+        self.assertEqual(self.decode(b"\xef\xbb\xbfa\0b")["n/name"], "\ufeffa\0b")  # BOM kept
+
+    def test_string_member_decodes_as_a_char_vector_on_request(self):
+        self.assertEqual(self.decode(b"abc", strings_as_text=False),
+                         {"n/tag": 1, "n/name[0]": "a", "n/name[1]": "b", "n/name[2]": "c"})
+        self.assertEqual(self.decode(b"", strings_as_text=False), {"n/tag": 1})
+
+    def test_string_longer_than_the_payload_is_rejected(self):
+        payload = bytes([1]) + struct.pack("<I", 4) + b"abc"
+        for strings_as_text in (True, False):
+            with self.assertRaisesRegex(ValueError, "^payload truncated$"):
+                dt.parse_snapshot(dt.parse_schema(self.TEXT), b"\x01", payload,
+                                  strings_as_text=strings_as_text)
+
+    def test_field_names_list_a_string_once(self):
+        schema = dt.parse_schema(self.TEXT)
+        self.assertEqual(schema.field_names(), ["n/tag", "n/name"])
+        self.assertEqual(schema.field_names(strings_as_text=False), ["n/tag", "n/name[]"])
 
 
 class Booleans(unittest.TestCase):

@@ -375,7 +375,9 @@ is set. What changed:
   1.x parser reject version 5 with "Wrong SCHEMA_VERSION", and the optional YAML
   rendering (`SchemaFormat::Yaml`, version 6) with "Unexpected line: fields:".
 - A `std::string`, registered or inside a custom type, is written as a `uint32` count and
-  its characters. 1.x wrote a 16-bit length that no reader decoded.
+  its characters. 1.x wrote a 16-bit length that no reader decoded. `ParseSnapshot()` and
+  `ForEachValue()` still pass it one character at a time, unless you give them a string
+  callback; the Python and TypeScript decoders return it as text.
 
 So:
 
@@ -404,6 +406,8 @@ The parser header changed too:
 - New: `SplitMcapMessage()` splits an MCAP message into mask and payload, and
   `SchemaRegistry`, `DataTamerParser::ToSnapshotView()` of a ROS 2 message and
   `ForEachSnapshotInBatch()` decode the ROS 2 messages.
+- New: `ParseSnapshot(schema, view, callback_number, callback_string)` passes each
+  `std::string` (`char[]`) to `callback_string(name, std::string_view)` as one value.
 
 Python has a decoder now, `pip install "data-tamer-parser[mcap]"` (see
 [Reading the data](USER_MANUAL.md#reading-the-data)).

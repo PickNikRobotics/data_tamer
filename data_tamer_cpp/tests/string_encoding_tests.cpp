@@ -7,9 +7,14 @@
 
 #include <gtest/gtest.h>
 
+#include <array>
 #include <cstdint>
 #include <map>
+#include <stdexcept>
 #include <string>
+#include <string_view>
+#include <utility>
+#include <variant>
 #include <vector>
 
 // The schema describes a std::string as `char[]`: a uint32 count and that many chars
@@ -28,6 +33,33 @@ std::string_view TypeDefinition(Named& p, AddField& add)
   add("tag", &p.tag);
   add("name", &p.name);
   return "Named";
+}
+
+/// What the parser reads from `snapshot`, with a string callback: the numbers, and the
+/// strings as text, by name.
+struct Decoded
+{
+  std::map<std::string, double> numbers;
+  std::map<std::string, std::string> strings;
+};
+
+Decoded decodeWithStrings(const DataTamer2::LogChannel& channel,
+                          const DataTamer2::Snapshot& snapshot)
+{
+  const auto schema =
+      DataTamerParser::BuildSchemaFromText(DataTamer2::ToStr(channel.getSchema()));
+  Decoded out;
+  const bool complete = DataTamerParser::ParseSnapshot(
+      schema, DataTamerTest::viewOf(snapshot),
+      [&](const std::string& name, const DataTamerParser::VarNumber& number) {
+        out.numbers[name] = std::visit([](const auto& x) { return double(x); }, number);
+      },
+      [&](const std::string& name, std::string_view text) {
+        EXPECT_EQ(out.strings.count(name), 0u) << name;
+        out.strings[name] = std::string(text);
+      });
+  EXPECT_TRUE(complete) << "bytes are left after the last field";
+  return out;
 }
 }  // namespace
 
@@ -112,4 +144,98 @@ TEST(StringEncoding, SerializeMeRejectsALengthLargerThanTheBytesThatFollow)
   SerializeMe::SpanBytesConst in(buffer.data(), buffer.size());
   std::string decoded;
   EXPECT_THROW(SerializeMe::DeserializeFromBuffer(in, decoded), std::runtime_error);
+}
+
+// With a string callback, the parser passes a std::string as one value, empty or not,
+// at the top level, in a custom type and in a vector of them. A std::array<char, N> is
+// a fixed char[N]: it stays one number per character.
+TEST(StringEncoding, ParserWithAStringCallbackPassesAStringAsOneValue)
+{
+  DataTamerTest::Recording recording;
+  std::string text = "Z\xc3\xbcrich";  // passed as written: UTF-8 here
+  std::string empty;
+  Named named;
+  named.name = "abc";
+  std::vector<Named> list(2);
+  list[1].name = "x";
+  std::array<char, 2> fixed = { 'o', 'k' };
+  recording.channel->registerValue("text", &text);
+  recording.channel->registerValue("empty", &empty);
+  recording.channel->registerValue("n", &named);
+  recording.channel->registerValue("list", &list);
+  recording.channel->registerValue("fixed", &fixed);
+
+  const auto snapshot = recording.snapshot();
+  const auto decoded = decodeWithStrings(*recording.channel, snapshot);
+  const std::map<std::string, std::string> strings = { { "text", "Z\xc3\xbcrich" },
+                                                       { "empty", "" },
+                                                       { "n/name", "abc" },
+                                                       { "list[0]/name", "" },
+                                                       { "list[1]/name", "x" } };
+  EXPECT_EQ(decoded.strings, strings);
+  const std::map<std::string, double> numbers = { { "n/tag", 1 },
+                                                  { "list[0]/tag", 1 },
+                                                  { "list[1]/tag", 1 },
+                                                  { "fixed[0]", 'o' },
+                                                  { "fixed[1]", 'k' } };
+  EXPECT_EQ(decoded.numbers, numbers);
+}
+
+// A string is read at each snapshot: its length may change from one to the next.
+TEST(StringEncoding, StringChangesLengthBetweenSnapshots)
+{
+  DataTamerTest::Recording recording;
+  std::string text = "short";
+  recording.channel->registerValue("text", &text);
+  for(const std::string value : { "short", "a longer string", "", "x" })
+  {
+    text = value;
+    const auto snapshot = recording.snapshot();
+    EXPECT_EQ(snapshot.payload.size(), 4 + value.size());
+    EXPECT_EQ(decodeWithStrings(*recording.channel, snapshot).strings.at("text"), value);
+  }
+}
+
+// The text points into the payload: the bytes as written, '\0' included.
+TEST(StringEncoding, StringCallbackGetsAViewOfThePayload)
+{
+  DataTamerParser::Schema schema;
+  schema.fields.push_back({ "s", DataTamerParser::BasicType::CHAR, "char", true, 0 });
+  const std::vector<uint8_t> mask = { 1 };
+  const std::vector<uint8_t> payload = { 3, 0, 0, 0, 'a', 0, 0xff };
+  const DataTamerParser::SnapshotView view{
+    0, 0, { mask.data(), mask.size() }, { payload.data(), payload.size() }
+  };
+  std::string_view seen;
+  const auto no_number = [](const std::string& name, const DataTamerParser::VarNumber&) {
+    ADD_FAILURE() << name;
+  };
+  ASSERT_TRUE(DataTamerParser::ParseSnapshot(
+      schema, view, no_number, [&](const std::string& name, std::string_view text) {
+        EXPECT_EQ(name, "s");
+        seen = text;
+      }));
+  EXPECT_EQ(static_cast<const void*>(seen.data()), payload.data() + 4);
+  EXPECT_EQ(seen, std::string_view("a\0\xff", 3));
+}
+
+TEST(StringEncoding, StringLongerThanThePayloadThrows)
+{
+  DataTamerParser::Schema schema;
+  schema.fields.push_back({ "s", DataTamerParser::BasicType::CHAR, "char", true, 0 });
+  const std::vector<uint8_t> mask = { 1 };
+  for(const auto& payload : { std::vector<uint8_t>{ 4, 0, 0, 0, 'a', 'b', 'c' },
+                              std::vector<uint8_t>{ 1, 0, 0 } })
+  {
+    const DataTamerParser::SnapshotView view{
+      0, 0, { mask.data(), mask.size() }, { payload.data(), payload.size() }
+    };
+    bool called = false;
+    EXPECT_THROW(std::ignore = DataTamerParser::ParseSnapshot(
+                     schema, view,
+                     [](const std::string&, const DataTamerParser::VarNumber&) {},
+                     [&](const std::string&, std::string_view) { called = true; }),
+                 std::runtime_error);
+    EXPECT_FALSE(called);
+  }
 }

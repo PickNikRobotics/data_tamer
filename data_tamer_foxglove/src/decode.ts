@@ -4,12 +4,20 @@ import { basicSizes, MAX_SCHEMA_DEPTH, type Field, type Schema } from './schema.
 // Cached names are bounded separately from plans; basic-vector runs reuse a plan
 // across counts, with a larger names cache to avoid cycling through 9+ lengths.
 export const CACHE_LIMITS = Object.freeze({masks:16, layouts:8, vectorLayouts:32, names:65536});
-export interface FlatSnapshot { names: readonly string[]; values: number[] }
-export type MessageValue = number | Message | MessageValue[];
+/** A char[] field (a std::string) is one string unless stringsAsText is false. */
+export interface DecodeOptions { stringsAsText?: boolean }
+export type Value = number | string;
+export interface FlatSnapshot { names: readonly string[]; values: Value[] }
+export type MessageValue = Value | Message | MessageValue[];
 export interface Message { [key: string]: MessageValue }
 type Key = string | number;
 const typeCodes: Readonly<Record<string, number>> = Object.assign(Object.create(null),
   Object.fromEntries(Object.keys(basicSizes).map((name,i)=>[name,i])));
+// A char[] read as text: its uint32 length is the 4 bytes before its offset.
+const TEXT=12;
+// UTF-8 with U+FFFD for invalid bytes, as Python's "replace"; a leading BOM is text too.
+const utf8=new TextDecoder('utf-8',{ignoreBOM:true});
+const isText=(f: Field): boolean=>f.type==='char' && f.count===0;
 function numberAt(view: DataView, p: number, code: number): number {
   switch(code) {
     case 0:return +(view.getUint8(p)!==0);
@@ -25,6 +33,10 @@ function numberAt(view: DataView, p: number, code: number): number {
     default:return view.getFloat64(p,true);
   }
 }
+function valueAt(view: DataView, p: number, code: number): Value {
+  if(code!==TEXT) return numberAt(view,p,code);
+  return utf8.decode(new Uint8Array(view.buffer,view.byteOffset+p,view.getUint32(p-4,true)));
+}
 type Leaf = {name: string; code: number; offset: number; keys: Key[]};
 type Run = {field: Field; keys: Key[]; code: number; size: number};
 type ValueRun = {code: number; size: number; offset: number; count: number};
@@ -38,13 +50,15 @@ type Plan = {
   runs?: Run[]; vectors: Map<string, Layout>;
 };
 type State = {
-  plans: Map<string, Plan>; sizes: Map<string, readonly [number, number]>;
+  text: boolean; plans: Map<string, Plan>; sizes: Map<string, readonly [number, number]>;
   lastMask?: Uint8Array; lastPlan?: Plan; paths: WeakMap<Field, Key[]>;
 };
-const states = new WeakMap<Schema, State>();
-function stateFor(schema: Schema): State {
-  let state=states.get(schema);
-  if(!state) {state={plans:new Map(),sizes:new Map(),paths:new WeakMap()};states.set(schema,state);}
+// Per schema, one for each stringsAsText: their plans and layouts differ.
+const states = [new WeakMap<Schema, State>(), new WeakMap<Schema, State>()] as const;
+function stateFor(schema: Schema, options: DecodeOptions = {}): State {
+  const text=options.stringsAsText!==false, map=states[+text];
+  let state=map.get(schema);
+  if(!state) {state={text,plans:new Map(),sizes:new Map(),paths:new WeakMap()};map.set(schema,state);}
   return state;
 }
 function planFor(schema: Schema, mask: Uint8Array, state: State): Plan {
@@ -64,7 +78,7 @@ function planFor(schema: Schema, mask: Uint8Array, state: State): Plan {
     plan={fields,short:mask.length*8<n,layouts:[],retained:0,vectors:new Map()};
     // Runs cover the common basic-vector messages. Nested/custom vectors use the
     // general walker; names that might collide keep its duplicate-name handling.
-    if(fields.some(f=>f.count===0) && fields.every(f=>basicSizes[f.type] && !f.name.includes('['))
+    if(fields.some(f=>f.count===0) && fields.every(f=>basicSizes[f.type] && !f.name.includes('[') && !(state.text && isText(f)))
         && new Set(fields.map(f=>f.name)).size===fields.length)
       plan.runs=fields.map(field=>({field,keys:fieldKeys(field,state),code:typeCodes[field.type],size:basicSizes[field.type]}));
     if(state.plans.size===CACHE_LIMITS.masks) state.plans.delete(state.plans.keys().next().value!);
@@ -165,6 +179,11 @@ function compileLayout(schema: Schema, plan: Plan, view: DataView, state: State)
   function walk(f: Field,prefix: string,parentKeys: Key[],depth: number): void {
     if(depth>MAX_SCHEMA_DEPTH) fail('too_deep','custom types nested too deeply');
     const name=prefix?prefix+'/'+f.name:f.name,keys=[...parentKeys,...fieldKeys(f,state)];
+    if(state.text && isText(f)) {
+      check(4);countOffsets.push(pos);const length=view.getUint32(pos,true);counts.push(length);pos+=4;
+      check(length);leaves.push({name,code:TEXT,offset:pos,keys});pos+=length;
+      return;
+    }
     let count=f.count??1;
     if(f.count===0) {
       check(4);countOffsets.push(pos);count=view.getUint32(pos,true);counts.push(count);pos+=4;
@@ -196,8 +215,8 @@ function compileLayout(schema: Schema, plan: Plan, view: DataView, state: State)
   for(const leaf of unique.values()) {names.push(leaf.name);paths.push(leaf.keys);offsets.push(leaf.offset);codes.push(leaf.code);}
   return retain(plan,{names:Object.freeze(names),paths,offsets,codes:Uint8Array.from(codes),doubles:codes.every(c=>c===11),counts,countOffsets,size:pos,retained:leaves.length+counts.length});
 }
-function getLayout(schema: Schema, mask: Uint8Array, view: DataView): Layout {
-  const state=stateFor(schema),plan=planFor(schema,mask,state);
+function getLayout(schema: Schema, mask: Uint8Array, view: DataView, options?: DecodeOptions): Layout {
+  const state=stateFor(schema,options),plan=planFor(schema,mask,state);
   if(plan.runs) return vectorLayout(plan,view);
   for(let i=plan.layouts.length-1;i>=0;--i) {
     const layout=plan.layouts[i];if(layout.size!==view.byteLength)continue;
@@ -208,8 +227,8 @@ function getLayout(schema: Schema, mask: Uint8Array, view: DataView): Layout {
   return compileLayout(schema,plan,view,state);
 }
 function viewOf(payload: Uint8Array): DataView {return new DataView(payload.buffer,payload.byteOffset,payload.byteLength);}
-function readValues(layout: Layout,view: DataView): number[] {
-  const out=new Array<number>(layout.names.length);
+function readValues(layout: Layout,view: DataView): Value[] {
+  const out=new Array<Value>(layout.names.length);
   if(layout.runs) {
     let index=0;
     for(const run of layout.runs) {
@@ -219,11 +238,11 @@ function readValues(layout: Layout,view: DataView): number[] {
       else while(index<end) {out[index++]=numberAt(view,p,run.code);p+=run.size;}
     }
   } else if(layout.doubles) for(let i=0;i<out.length;++i)out[i]=view.getFloat64(layout.offsets[i],true);
-  else for(let i=0;i<out.length;++i)out[i]=numberAt(view,layout.offsets[i],layout.codes[i]);
+  else for(let i=0;i<out.length;++i)out[i]=valueAt(view,layout.offsets[i],layout.codes[i]);
   return out;
 }
-export function decodeFlat(schema: Schema,mask: Uint8Array,payload: Uint8Array): FlatSnapshot {
-  const view=viewOf(payload),layout=getLayout(schema,mask,view);return {names:layout.names,values:readValues(layout,view)};
+export function decodeFlat(schema: Schema,mask: Uint8Array,payload: Uint8Array,options?: DecodeOptions): FlatSnapshot {
+  const view=viewOf(payload),layout=getLayout(schema,mask,view,options);return {names:layout.names,values:readValues(layout,view)};
 }
 type ObjectNode={array:boolean;children:Map<Key,ObjectNode|number>};
 type ObjectRow={parent:number;key:Key;size:number;keys:Key[];indices:number[]};
@@ -275,13 +294,13 @@ function materialize(rows: ObjectRow[],view: DataView,layout: Layout): Message {
       setOwn(out,row.keys[j],view.getFloat64(layout.offsets[row.indices[j]],true));
     else for(let j=0;j<row.keys.length;++j) {
       const index=row.indices[j];
-      setOwn(out,row.keys[j],numberAt(view,layout.offsets[index],layout.codes[index]));
+      setOwn(out,row.keys[j],valueAt(view,layout.offsets[index],layout.codes[index]));
     }
   }
   return containers[0];
 }
-export function decodeMessage(schema: Schema,mask: Uint8Array,payload: Uint8Array): Message {
-  const view=viewOf(payload),layout=getLayout(schema,mask,view);
+export function decodeMessage(schema: Schema,mask: Uint8Array,payload: Uint8Array,options?: DecodeOptions): Message {
+  const view=viewOf(payload),layout=getLayout(schema,mask,view,options);
   return materialize(layout.rows??=objectPlan(layout),view,layout);
 }
 /** Returns zero-copy views into body. */
@@ -293,8 +312,8 @@ export function splitMcapMessage(body: Uint8Array): {activeMask:Uint8Array;paylo
   return {activeMask:body.subarray(4,maskEnd),payload:body.subarray(start,end)};
 }
 /** Test-only cache counters; deliberately absent from the package exports. */
-export function cacheStats(schema: Schema): Readonly<{masks:number;layouts:number;names:number}> {
-  let layouts=0,names=0;const state=states.get(schema);
+export function cacheStats(schema: Schema, options?: DecodeOptions): Readonly<{masks:number;layouts:number;names:number}> {
+  let layouts=0,names=0;const state=states[+(options?.stringsAsText!==false)].get(schema);
   for(const plan of state?.plans.values()??[]) {layouts+=plan.layouts.length;names+=plan.retained;}
   return {masks:state?.plans.size??0,layouts,names};
 }

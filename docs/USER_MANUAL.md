@@ -39,9 +39,21 @@ examples of a small robot arm, from a first MCAP recording to real-time logging 
 `registerValue(name, &variable)` accepts integers, `float`, `double`, `bool`, `char`,
 enums, `std::atomic` of those, `std::vector`, `std::array` and your own types (see
 [custom types](#custom-types)). It returns a `RegistrationID`. Integers are recorded by
-size and signedness, so `long long` works; `long double` is not supported, use `double`. The wire format has no
-string type, so don't log text: a `std::string` would be recorded as one number per
-character.
+size and signedness, so `long long` works; `long double` is not supported, use `double`.
+
+A `std::string` works too, registered or as a member of a custom type. It's recorded as
+its length and its bytes, read at every snapshot, so it can change length from one
+snapshot to the next. The decoders return it as one text value: a `str` in Python, a
+string in TypeScript and Foxglove, a `std::string_view` in C++ when you pass a string
+callback (see [Reading the data](#reading-the-data)). Two things to know:
+
+- `tryTakeSnapshot()` doesn't grow its slot. Call `setPayloadCapacity()` with room for the
+  longest string, or the snapshot returns `oversize`.
+- Write a string that another thread reads inside `scopedWrite()`, like a vector.
+- Clang 18 and older can't compile the registration of a `std::string`: they lack the
+  relaxed template template matching that Clang 19 turns on by default. GCC works.
+
+A `std::array<char, N>` stays N separate characters: it's more often raw bytes than text.
 
 ### When you can register
 
@@ -417,6 +429,14 @@ DataTamer2::ForEachValue("run.mcap", [](const std::string& channel, uint64_t tim
 });
 ```
 
+A `std::string` comes to that callback one character at a time. To get it as one value,
+pass a second callback, which receives `(channel, timestamp_nsec, name, std::string_view
+text)` for each string; `DataTamerParser::ParseSnapshot()` takes the same extra callback,
+without the channel and timestamp. The text is the bytes as written, not checked to be
+UTF-8. Python and TypeScript decode a string as UTF-8, with invalid bytes replaced by
+U+FFFD; `strings_as_text=False` (Python) and `{ stringsAsText: false }` (TypeScript)
+give one value per character instead.
+
 Values come in log time order, and any error (a file that can't be read, a corrupt
 message) throws `std::runtime_error`, whose message names the file and, where there is
 one, the channel.
@@ -564,7 +584,8 @@ the same sinks.
 
 ### Can I log strings?
 
-No. The wire format has no string type.
+Yes, `std::string` values and members (see [What you can register](#what-you-can-register)).
+For real-time snapshots, size `setPayloadCapacity()` for the longest one.
 
 ### Does disabling a value save space?
 

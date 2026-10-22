@@ -168,6 +168,14 @@ reads 1.x files.
 * Parser: ``ParseSnapshot()`` decodes several times faster and allocates nothing per
   value (``benchmarks/parser_benchmark.cpp`` measures it); its depth limit no longer
   depends on the order of the fields.
+* Strings: a ``std::string`` (``char[]`` on the wire) decodes as one text value.
+  ``ParseSnapshot()`` and ``ForEachValue()`` take an optional string callback that gets
+  a ``std::string_view`` into the payload; without it, they pass one character at a time,
+  as before. The Python decoder returns a ``str`` and the TypeScript decoder and the
+  Foxglove extension a string, as UTF-8 with invalid bytes replaced by U+FFFD;
+  ``strings_as_text=False`` and ``{ stringsAsText: false }`` give one value per
+  character. A fixed ``std::array<char, N>`` stays per character. The wire format is
+  unchanged; ``docs/wire_format/vectors/`` has a strings vector.
 * Python decoder, standard library only: ``pip install "data-tamer-parser[mcap]"``.
   ``parse_snapshot()`` compiles each schema and active mask into ``struct`` formats,
   5 to 15 times faster than a value-by-value walk; ``parse_snapshot_values()`` returns

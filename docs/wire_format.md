@@ -55,9 +55,14 @@ A field has a type, a name and an optional container shape.
 | vector of structs | `Point3D[] pts` | `uint32` count, then each struct |
 | array of structs | `Pose[3] poses` | 3 structs, no count |
 
-There are no strings, no alignment padding, no separators and no per-field tags.
+There is no string type, no alignment padding, no separators and no per-field tags.
 A C++ `std::string` is registered as `char[]`: a `uint32` count, then that many bytes,
-with no terminator and no charset.
+with no terminator and no charset. A decoder can present a dynamic `char[]` as one text
+value instead of one value per byte. The reference decoders read it as UTF-8 and
+replace each invalid byte sequence with U+FFFD, as the Unicode standard recommends
+(Python's `"replace"`, the WHATWG `TextDecoder`), and keep a leading byte order mark;
+the C++ parser hands over the bytes unchecked. A fixed `char[N]` (a
+`std::array<char, N>`) stays N values.
 All multi-byte numbers are **little-endian**.
 Decoders need not preserve NaN payload bits or signaling NaNs; -0.0 and every non-NaN bit pattern must be exact.
 
@@ -316,7 +321,8 @@ which holds nothing to skip and decodes as empty.
 
 Flattened series names, as produced by the reference decoders and PlotJuggler:
 nested fields join with `/`, container elements append `[i]`:
-`pose/position/x`, `vec[2]`, `points[1]/z`.
+`pose/position/x`, `vec[2]`, `points[1]/z`. A `char[]` presented as text has the
+field's name, without an index, also when it is empty.
 `Schema.field_names()` in the Python decoder lists these names from the schema
 alone; the length of a dynamic vector is only known per message, so it lists
 its elements once with empty brackets (`vec[]`, `points[]/z`).
@@ -490,4 +496,8 @@ floats compared bit-exactly), split both `.mcap_message` bodies into the same
 mask and payload bytes, and reject a payload with trailing bytes or a schema
 with another version or without one. A decoder that reads version 4 also decodes
 `v4/recorded_1.0.4.mcap` to `v4/expected.tsv`, matching each schema by its
-declared hash and rejecting the messages marked `!undecodable`.
+declared hash and rejecting the messages marked `!undecodable`. A decoder that
+presents `char[]` as text decodes `snapshot_strings.*` with `schema_strings.txt` to the
+`strings` entry of `expected.json`: one `char[]` empty, one UTF-8, one invalid UTF-8,
+and `char[]` members in a vector of a custom type, next to a `char[3]` that stays per
+character.

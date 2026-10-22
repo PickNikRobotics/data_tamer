@@ -160,6 +160,19 @@ template <typename NumberCallback>
 [[nodiscard]] bool ParseSnapshot(const Schema& schema, SnapshotView snapshot,
                                  const NumberCallback& callback_number);
 
+/// ParseSnapshot() that decodes each "char[]" field, as a std::string is written, as one
+/// value: it calls
+///   callback_string(const std::string& name, std::string_view text)
+/// once, also when the string is empty, instead of callback_number once per character
+/// ("label" rather than "label[0]", "label[1]", ...). `text` is the bytes as written: no
+/// terminator, and not checked to be UTF-8. It points into the payload, so it is valid
+/// as long as the payload: copy it to keep it longer. A fixed "char[N]"
+/// (std::array<char, N>) still goes to callback_number per character.
+template <typename NumberCallback, typename StringCallback>
+[[nodiscard]] bool ParseSnapshot(const Schema& schema, SnapshotView snapshot,
+                                 const NumberCallback& callback_number,
+                                 const StringCallback& callback_string);
+
 //---------------------------------------------------------
 // Helpers for the data_tamer_msgs messages of ROS2PublisherSink. They are templates on
 // the message type, so this header needs no ROS: any type with the same fields works.
@@ -1436,18 +1449,40 @@ struct DecodeState
   std::string name;  // the name of the value being decoded
 };
 
+/// The callback_string of a ParseSnapshot() call that has none: "char[]" fields go to
+/// callback_number per character.
+struct NoStringCallback
+{
+};
+
 /// Decodes `field`. The first `parent_size` characters of `state.name` are its parent's
 /// name (none at the top level), the rest is scratch.
-template <typename NumberCallback>
+template <typename NumberCallback, typename StringCallback>
 void ParseSnapshotRecursive(const TypeField& field, const Schema& schema,
                             BufferSpan& buffer, const NumberCallback& callback_number,
-                            DecodeState& state, size_t parent_size, int depth = 0)
+                            const StringCallback& callback_string, DecodeState& state,
+                            size_t parent_size, int depth = 0)
 {
   CheckDepth(depth);
   uint32_t vect_size = field.array_size;
   if(field.is_vector && field.array_size == 0)
   {
     vect_size = Deserialize<uint32_t>(buffer);
+  }
+  if constexpr(!std::is_same_v<StringCallback, NoStringCallback>)
+  {
+    if(field.type == BasicType::CHAR && field.is_vector && field.array_size == 0)
+    {
+      if(vect_size > buffer.size)
+      {
+        throw std::runtime_error("DataTamerParser: payload truncated");
+      }
+      const std::string_view text(reinterpret_cast<const char*>(buffer.data), vect_size);
+      buffer.trimFront(vect_size);
+      SetFieldName(state.name, parent_size, field.field_name);
+      callback_string(std::as_const(state.name), text);
+      return;
+    }
   }
   if(field.is_vector)
   {
@@ -1495,8 +1530,8 @@ void ParseSnapshotRecursive(const TypeField& field, const Schema& schema,
       const size_t size = name.size();
       for(const auto& sub_field : *sub_fields)
       {
-        ParseSnapshotRecursive(sub_field, schema, buffer, callback_number, state, size,
-                               depth + 1);
+        ParseSnapshotRecursive(sub_field, schema, buffer, callback_number,
+                               callback_string, state, size, depth + 1);
       }
     }
   };
@@ -1528,6 +1563,14 @@ template <typename NumberCallback>
 [[nodiscard]] inline bool ParseSnapshot(const Schema& schema, SnapshotView snapshot,
                                         const NumberCallback& callback_number)
 {
+  return ParseSnapshot(schema, snapshot, callback_number, detail::NoStringCallback{});
+}
+
+template <typename NumberCallback, typename StringCallback>
+[[nodiscard]] inline bool ParseSnapshot(const Schema& schema, SnapshotView snapshot,
+                                        const NumberCallback& callback_number,
+                                        const StringCallback& callback_string)
+{
   if(schema.hash != snapshot.schema_hash)
   {
     return false;
@@ -1554,7 +1597,8 @@ template <typename NumberCallback>
     }
     else
     {
-      detail::ParseSnapshotRecursive(field, schema, buffer, callback_number, state, 0);
+      detail::ParseSnapshotRecursive(field, schema, buffer, callback_number,
+                                     callback_string, state, 0);
     }
   }
   // leftover bytes: the schema and the payload do not belong together

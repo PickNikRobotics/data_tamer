@@ -66,6 +66,21 @@ class GoldenVectors(unittest.TestCase):
         self.assertNotIn("i16", values)
         self.assertNotIn("pose/stamp", values)
 
+    def test_strings_snapshot(self):
+        # a std::string (char[]) decodes as one str; a std::array<char, 3> per character
+        schema = dt.parse_schema(read("schema_strings.txt").decode(), verify_hash=True)
+        mask, payload = read("snapshot_strings.mask"), read("snapshot_strings.payload")
+        values = dt.parse_snapshot(schema, mask, payload)
+        self.assertEqual(list(values.items()), list(self.expected["strings"].items()))
+        self.assertEqual(schema.field_names(), [
+            "ascii", "empty", "utf8", "invalid", "fixed[0]", "fixed[1]", "fixed[2]",
+            "labels[]/id", "labels[]/text"])
+        chars = dt.parse_snapshot(schema, mask, payload, strings_as_text=False)
+        self.assertEqual("".join(chars[f"ascii[{i}]"] for i in range(10)), "data_tamer")
+        self.assertEqual(chars["utf8[1]"], "\u00c3")  # one byte of the UTF-8 for "ü"
+        self.assertNotIn("empty", chars)
+        self.assertEqual(chars["labels[0]/text[0]"], "x")
+
     def test_rejects_trailing_bytes_and_wrong_version(self):
         with self.assertRaises(ValueError):
             dt.parse_snapshot(self.schema, read("snapshot_full.mask"), read("snapshot_full.payload") + b"\0")
