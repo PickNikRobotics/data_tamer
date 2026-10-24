@@ -111,6 +111,18 @@ void CheckSchemaName(const std::string& channel_name, const char* what,
   throw std::runtime_error(message + ": " + problem);
 }
 
+// A custom type name is a valid schema name and not the name of a built-in type
+// ("float64", "string"): decoders would read the built-in type.
+void CheckCustomTypeName(const std::string& channel_name, const std::string& type_name)
+{
+  CheckSchemaName(channel_name, "custom type name", type_name);
+  if(FromStr(type_name) != BasicType::OTHER)
+  {
+    throw std::runtime_error(ChannelPrefix(channel_name) + "invalid custom type name '" +
+                             type_name + "': it is the name of a built-in type");
+  }
+}
+
 // A type name that a TypeDefinition type and a registerCustomValue() serializer of one
 // channel would share.
 std::runtime_error SharedTypeName(const std::string& channel_name,
@@ -427,7 +439,7 @@ RegistrationID LogChannel::registerValueWithTypes(const std::string& name,
     // passes the registry's serializer of its type.
     if(type_info)
     {
-      CheckSchemaName(_p->channel_name, "custom type name", type_name);
+      CheckCustomTypeName(_p->channel_name, type_name);
       if(_p->schema.custom_types.contains(type_name) &&
          _p->type_registry.find(type_name) != type_info)
       {
@@ -436,7 +448,7 @@ RegistrationID LogChannel::registerValueWithTypes(const std::string& name,
     }
     for(const auto& [pending_name, pending_fields] : types)
     {
-      CheckSchemaName(_p->channel_name, "custom type name", pending_name);
+      CheckCustomTypeName(_p->channel_name, pending_name);
       if(_p->customSerializerUses(pending_name))
       {
         throw SharedTypeName(_p->channel_name, pending_name);

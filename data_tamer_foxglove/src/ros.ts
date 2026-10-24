@@ -1,6 +1,6 @@
 import { fail } from './errors.js';
 import { parseSchema, type Schema, type SchemaOptions } from './schema.js';
-import { decodeMessage, type DecodeOptions, type Message } from './decode.js';
+import { decodeMessage, type Message } from './decode.js';
 
 export type Hash = number | bigint;
 export interface SchemaMsg { hash: Hash; schema_text: string; channel_name?: string }
@@ -44,19 +44,17 @@ function bytes(value: Uint8Array | readonly number[]): Uint8Array {
       fail('bad_count', 'byte array elements must be integers in 0..255');
   return Uint8Array.from(value);
 }
-export function decodeSnapshotMsg(registry: SchemaRegistry, msg: SnapshotMsg,
-                                  options?: DecodeOptions): DecodedSnapshot | undefined {
+export function decodeSnapshotMsg(registry: SchemaRegistry, msg: SnapshotMsg): DecodedSnapshot | undefined {
   const schema = registry.find(msg.schema_hash);
   if (!schema) return undefined;
   const mask = bytes(msg.active_mask), payload = bytes(msg.payload);
-  return {schema, timestamp_nsec:msg.timestamp_nsec, values:decodeMessage(schema,mask,payload,options)};
+  return {schema, timestamp_nsec:msg.timestamp_nsec, values:decodeMessage(schema,mask,payload)};
 }
-export function decodeSnapshotBatch(registry: SchemaRegistry, batch: SnapshotBatchMsg,
-                                    options?: DecodeOptions): DecodedSnapshot[] {
+export function decodeSnapshotBatch(registry: SchemaRegistry, batch: SnapshotBatchMsg): DecodedSnapshot[] {
   registry.addSchemas(batch);
   const results: DecodedSnapshot[] = [];
   for (const msg of batch.snapshots) {
-    const result = decodeSnapshotMsg(registry,msg,options);
+    const result = decodeSnapshotMsg(registry,msg);
     if (result) results.push(result);
   }
   return results;

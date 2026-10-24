@@ -4,8 +4,7 @@ import { basicSizes, MAX_SCHEMA_DEPTH, type Field, type Schema } from './schema.
 // Cached names are bounded separately from plans; basic-vector runs reuse a plan
 // across counts, with a larger names cache to avoid cycling through 9+ lengths.
 export const CACHE_LIMITS = Object.freeze({masks:16, layouts:8, vectorLayouts:32, names:65536});
-/** A char[] field (a std::string) is one string unless stringsAsText is false. */
-export interface DecodeOptions { stringsAsText?: boolean }
+/** A "string" field is one JS string; every other basic type is a number. */
 export type Value = number | string;
 export interface FlatSnapshot { names: readonly string[]; values: Value[] }
 export type MessageValue = Value | Message | MessageValue[];
@@ -13,11 +12,12 @@ export interface Message { [key: string]: MessageValue }
 type Key = string | number;
 const typeCodes: Readonly<Record<string, number>> = Object.assign(Object.create(null),
   Object.fromEntries(Object.keys(basicSizes).map((name,i)=>[name,i])));
-// A char[] read as text: its uint32 length is the 4 bytes before its offset.
+// A "string" leaf: its uint32 byte count is the 4 bytes before its offset.
 const TEXT=12;
 // UTF-8 with U+FFFD for invalid bytes, as Python's "replace"; a leading BOM is text too.
 const utf8=new TextDecoder('utf-8',{ignoreBOM:true});
-const isText=(f: Field): boolean=>f.type==='char' && f.count===0;
+// "string" is a basic type, even where the schema also defines a custom type of that name.
+const isText=(f: Field): boolean=>f.type==='string';
 function numberAt(view: DataView, p: number, code: number): number {
   switch(code) {
     case 0:return +(view.getUint8(p)!==0);
@@ -50,15 +50,13 @@ type Plan = {
   runs?: Run[]; vectors: Map<string, Layout>;
 };
 type State = {
-  text: boolean; plans: Map<string, Plan>; sizes: Map<string, readonly [number, number]>;
+  plans: Map<string, Plan>; sizes: Map<string, readonly [number, number]>;
   lastMask?: Uint8Array; lastPlan?: Plan; paths: WeakMap<Field, Key[]>;
 };
-// Per schema, one for each stringsAsText: their plans and layouts differ.
-const states = [new WeakMap<Schema, State>(), new WeakMap<Schema, State>()] as const;
-function stateFor(schema: Schema, options: DecodeOptions = {}): State {
-  const text=options.stringsAsText!==false, map=states[+text];
-  let state=map.get(schema);
-  if(!state) {state={text,plans:new Map(),sizes:new Map(),paths:new WeakMap()};map.set(schema,state);}
+const states = new WeakMap<Schema, State>();
+function stateFor(schema: Schema): State {
+  let state=states.get(schema);
+  if(!state) {state={plans:new Map(),sizes:new Map(),paths:new WeakMap()};states.set(schema,state);}
   return state;
 }
 function planFor(schema: Schema, mask: Uint8Array, state: State): Plan {
@@ -76,9 +74,9 @@ function planFor(schema: Schema, mask: Uint8Array, state: State): Plan {
   if(!plan) {
     const fields=schema.fields.slice(0,bytes*8).filter((_,i)=>mask[i>>3]&(1<<(i&7)));
     plan={fields,short:mask.length*8<n,layouts:[],retained:0,vectors:new Map()};
-    // Runs cover the common basic-vector messages. Nested/custom vectors use the
-    // general walker; names that might collide keep its duplicate-name handling.
-    if(fields.some(f=>f.count===0) && fields.every(f=>basicSizes[f.type] && !f.name.includes('[') && !(state.text && isText(f)))
+    // Runs cover the common basic-vector messages. Nested/custom vectors and strings use
+    // the general walker; names that might collide keep its duplicate-name handling.
+    if(fields.some(f=>f.count===0) && fields.every(f=>basicSizes[f.type] && !f.name.includes('['))
         && new Set(fields.map(f=>f.name)).size===fields.length)
       plan.runs=fields.map(field=>({field,keys:fieldKeys(field,state),code:typeCodes[field.type],size:basicSizes[field.type]}));
     if(state.plans.size===CACHE_LIMITS.masks) state.plans.delete(state.plans.keys().next().value!);
@@ -94,6 +92,7 @@ function undecodable(schema: Schema, type: string): never {
 }
 function minElement(f: Field, schema: Schema, state: State, depth: number): number {
   if(basicSizes[f.type]) return basicSizes[f.type];
+  if(isText(f)) return 4; // the byte count of an empty string
   // Height keeps a size learned shallow subject to the same limit when reused deeper.
   let known=state.sizes.get(f.type);
   if(!known) {
@@ -104,7 +103,7 @@ function minElement(f: Field, schema: Schema, state: State, depth: number): numb
     for(const sub of subs) {
       if(sub.count===0) {size+=4;continue;}
       size+=minElement(sub,schema,state,depth+1)*(sub.count??1);
-      if(!basicSizes[sub.type]) height=Math.max(height,state.sizes.get(sub.type)![1]+1);
+      if(!basicSizes[sub.type] && !isText(sub)) height=Math.max(height,state.sizes.get(sub.type)![1]+1);
     }
     state.sizes.set(f.type,known=[size,height]);
   } else if(depth+known[1]>MAX_SCHEMA_DEPTH) fail('too_deep','custom types nested too deeply');
@@ -179,16 +178,11 @@ function compileLayout(schema: Schema, plan: Plan, view: DataView, state: State)
   function walk(f: Field,prefix: string,parentKeys: Key[],depth: number): void {
     if(depth>MAX_SCHEMA_DEPTH) fail('too_deep','custom types nested too deeply');
     const name=prefix?prefix+'/'+f.name:f.name,keys=[...parentKeys,...fieldKeys(f,state)];
-    if(state.text && isText(f)) {
-      check(4);countOffsets.push(pos);const length=view.getUint32(pos,true);counts.push(length);pos+=4;
-      check(length);leaves.push({name,code:TEXT,offset:pos,keys});pos+=length;
-      return;
-    }
     let count=f.count??1;
     if(f.count===0) {
       check(4);countOffsets.push(pos);count=view.getUint32(pos,true);counts.push(count);pos+=4;
       if(!count) {
-        if(!basicSizes[f.type] && !schema.customTypes[f.type] && !schema.opaqueTypes[f.type]) undecodable(schema,f.type);
+        if(!basicSizes[f.type] && !isText(f) && !schema.customTypes[f.type] && !schema.opaqueTypes[f.type]) undecodable(schema,f.type);
         return;
       }
     }
@@ -196,6 +190,10 @@ function compileLayout(schema: Schema, plan: Plan, view: DataView, state: State)
     const size=basicSizes[f.type];
     if(size) for(let i=0;i<count;++i) {
       check(size);leaves.push({name:f.count===null?name:`${name}[${i}]`,code:typeCodes[f.type],offset:pos,keys:f.count===null?keys:[...keys,i]});pos+=size;
+    } else if(isText(f)) for(let i=0;i<count;++i) {
+      // The byte count is checked against the cached layouts like a vector count.
+      check(4);countOffsets.push(pos);const length=view.getUint32(pos,true);counts.push(length);pos+=4;
+      check(length);leaves.push({name:f.count===null?name:`${name}[${i}]`,code:TEXT,offset:pos,keys:f.count===null?keys:[...keys,i]});pos+=length;
     } else {
       const subs=schema.customTypes[f.type];if(!subs) undecodable(schema,f.type);
       // Empty scalar DAGs can expand exponentially without consuming a byte.
@@ -215,8 +213,8 @@ function compileLayout(schema: Schema, plan: Plan, view: DataView, state: State)
   for(const leaf of unique.values()) {names.push(leaf.name);paths.push(leaf.keys);offsets.push(leaf.offset);codes.push(leaf.code);}
   return retain(plan,{names:Object.freeze(names),paths,offsets,codes:Uint8Array.from(codes),doubles:codes.every(c=>c===11),counts,countOffsets,size:pos,retained:leaves.length+counts.length});
 }
-function getLayout(schema: Schema, mask: Uint8Array, view: DataView, options?: DecodeOptions): Layout {
-  const state=stateFor(schema,options),plan=planFor(schema,mask,state);
+function getLayout(schema: Schema, mask: Uint8Array, view: DataView): Layout {
+  const state=stateFor(schema),plan=planFor(schema,mask,state);
   if(plan.runs) return vectorLayout(plan,view);
   for(let i=plan.layouts.length-1;i>=0;--i) {
     const layout=plan.layouts[i];if(layout.size!==view.byteLength)continue;
@@ -241,8 +239,8 @@ function readValues(layout: Layout,view: DataView): Value[] {
   else for(let i=0;i<out.length;++i)out[i]=valueAt(view,layout.offsets[i],layout.codes[i]);
   return out;
 }
-export function decodeFlat(schema: Schema,mask: Uint8Array,payload: Uint8Array,options?: DecodeOptions): FlatSnapshot {
-  const view=viewOf(payload),layout=getLayout(schema,mask,view,options);return {names:layout.names,values:readValues(layout,view)};
+export function decodeFlat(schema: Schema,mask: Uint8Array,payload: Uint8Array): FlatSnapshot {
+  const view=viewOf(payload),layout=getLayout(schema,mask,view);return {names:layout.names,values:readValues(layout,view)};
 }
 type ObjectNode={array:boolean;children:Map<Key,ObjectNode|number>};
 type ObjectRow={parent:number;key:Key;size:number;keys:Key[];indices:number[]};
@@ -299,8 +297,8 @@ function materialize(rows: ObjectRow[],view: DataView,layout: Layout): Message {
   }
   return containers[0];
 }
-export function decodeMessage(schema: Schema,mask: Uint8Array,payload: Uint8Array,options?: DecodeOptions): Message {
-  const view=viewOf(payload),layout=getLayout(schema,mask,view,options);
+export function decodeMessage(schema: Schema,mask: Uint8Array,payload: Uint8Array): Message {
+  const view=viewOf(payload),layout=getLayout(schema,mask,view);
   return materialize(layout.rows??=objectPlan(layout),view,layout);
 }
 /** Returns zero-copy views into body. */
@@ -312,8 +310,8 @@ export function splitMcapMessage(body: Uint8Array): {activeMask:Uint8Array;paylo
   return {activeMask:body.subarray(4,maskEnd),payload:body.subarray(start,end)};
 }
 /** Test-only cache counters; deliberately absent from the package exports. */
-export function cacheStats(schema: Schema, options?: DecodeOptions): Readonly<{masks:number;layouts:number;names:number}> {
-  let layouts=0,names=0;const state=states[+(options?.stringsAsText!==false)].get(schema);
+export function cacheStats(schema: Schema): Readonly<{masks:number;layouts:number;names:number}> {
+  let layouts=0,names=0;const state=states.get(schema);
   for(const plan of state?.plans.values()??[]) {layouts+=plan.layouts.length;names+=plan.retained;}
   return {masks:state?.plans.size??0,layouts,names};
 }

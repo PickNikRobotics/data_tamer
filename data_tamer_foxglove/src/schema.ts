@@ -4,6 +4,7 @@ export const MAX_SCHEMA_DEPTH = 64;
 
 export interface Field {
   readonly name: string;
+  /** A basic type (basicSizes, or "string": a uint32 byte count, then UTF-8 bytes) or a custom type. */
   readonly type: string;
   /** null: scalar; 0: dynamic vector; positive: fixed array. */
   readonly count: number | null;

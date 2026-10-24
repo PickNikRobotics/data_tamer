@@ -298,8 +298,9 @@ TEST(WireFormat, SchemaTextAndSnapshotsMatchGoldenVectors)
   checkGolden("snapshot_masked.mcap_message", bodies[1]);
 }
 
-// Strings (section 1): a std::string is a char[], which decoders may present as text;
-// a std::array<char, N> is a char[N], which they keep per character.
+// Text (section 1): a std::string is a `string`, which decoders present as text; a
+// std::vector<char> is a char[] and a std::array<char, N> a char[N], which they keep
+// per character.
 TEST(WireFormat, StringsMatchGoldenVectors)
 {
   auto channel = LogChannel::create("strings test");
@@ -312,12 +313,16 @@ TEST(WireFormat, StringsMatchGoldenVectors)
   std::string invalid = "a\xff"
                         "b";  // not UTF-8: a decoder replaces 0xff with U+FFFD
   std::array<char, 3> fixed = { 'a', 'b', 'c' };
+  std::vector<char> chars = { 'h', 'i' };
+  std::vector<std::string> tags = { "t", "" };
   std::vector<Label> labels = { { 1, "x" }, { 2, "" } };
   channel->registerValue("ascii", &ascii);
   channel->registerValue("empty", &empty);
   channel->registerValue("utf8", &utf8);
   channel->registerValue("invalid", &invalid);
   channel->registerValue("fixed", &fixed);
+  channel->registerValue("chars", &chars);
+  channel->registerValue("tags", &tags);
   channel->registerValue("labels", &labels);
 
   ASSERT_EQ(channel->takeSnapshot(std::chrono::nanoseconds(1)), SnapshotResult::ok);
@@ -353,6 +358,10 @@ TEST(WireFormat, StringsMatchGoldenVectors)
     { "fixed[0]", std::to_string('a') },
     { "fixed[1]", std::to_string('b') },
     { "fixed[2]", std::to_string('c') },
+    { "chars[0]", std::to_string('h') },
+    { "chars[1]", std::to_string('i') },
+    { "tags[0]", "\"t\"" },
+    { "tags[1]", "\"\"" },
     { "labels[0]/id", "1" },
     { "labels[0]/text", "\"x\"" },
     { "labels[1]/id", "2" },

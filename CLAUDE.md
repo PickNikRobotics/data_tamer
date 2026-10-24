@@ -54,7 +54,9 @@ under "Unreleased" in `data_tamer_cpp/CHANGELOG.rst`.
     (`details::AllowedRealTimeCall`). Not installed; tests and benchmarks have `src/` on
     their include path.
   - `tests/`: the gtest binary `datatamer_test`; `serialize_me_big_endian_test`,
-    SerializeMe built as for a big endian host; compile-only targets; compile-fail
+    SerializeMe built as for a big endian host; compile-only targets (with GCC,
+    `text_registration_without_p0522`: text registers without relaxed template template
+    matching, as with Clang 18); compile-fail
     probes in `tests/compile_fail/`; in Linux shared builds, `dlopen_tls_test`, which
     loads libdata_tamer with a plugin through `dlopen()` and counts `malloc()` calls;
     with Clang 20 or later, the `-Wfunction-effects` probe `nonblocking_caller.cpp` and,
@@ -85,9 +87,8 @@ under "Unreleased" in `data_tamer_cpp/CHANGELOG.rst`.
   fall back to the walker for what they do not compile. The caches are bounded: at most
   `_MAX_PLANS` masks per schema (the walker decodes further ones), `_PLAN_BUDGET` values
   per plan, and `_MAX_CACHED_NAMES` names per plan for its vectors and its last layout.
-  `strings_as_text` (a `char[]` as one `str`, the default) has its own plans
-  (`Schema._char_plans`, `_char_masks` for `False`), and the walker takes it too.
-  `test_fast_path.py` checks them against it in both modes, values and error messages: random schemas,
+  A `string` (text) is a `_TEXT` op, and a dynamic `string[]` is walked.
+  `test_fast_path.py` checks them against it, values and error messages: random schemas,
   the golden vectors, the 1.0.4 recording and every decode of the other tests.
   `benchmark_decode.py` times the three.
 - `data_tamer_foxglove/`: strict ESM TypeScript snapshot decoder, no runtime dependencies;

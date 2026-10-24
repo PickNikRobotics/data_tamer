@@ -246,20 +246,29 @@ An integer is recorded by size and signedness, so `long long`, `unsigned long lo
 `wchar_t` like the integer of its size and signedness. `long double` has no wire type: it
 is a compile error ("numeric type has no wire type"), use `double`.
 
-A `std::string` registers as `char[]` (a `uint32` count and the bytes, whatever the
-length), registered on its own or as a member of a custom type. It's read at every
-snapshot and can change length. The decoders return it as one value:
-`ParseSnapshot()` and `ForEachValue()` with a string callback (see "Reading the data"),
-a `str` in Python, a string in TypeScript and the Foxglove extension. Python and
-TypeScript decode the bytes as UTF-8 and replace invalid ones with U+FFFD; C++ passes
-them unchecked. A `std::array<char, N>` is `char[N]` and stays N numbers. Rules:
+Text is the schema type `string` (a `uint32` byte count and the bytes, whatever the
+length): a `std::string`, any other `std::basic_string<char>` (`std::pmr::string`) or a
+`std::string_view`, registered on its own, as a member of a custom type, or as the
+element of a `std::vector` (`string[]`) or `std::array` (`string[N]`), and
+`createLoggedValue<std::string>()`. It's read at every snapshot and can change length.
+The decoders return it as one value: `ParseSnapshot()` and `ForEachValue()` with a string
+callback (see "Reading the data"), a `str` in Python, a string in TypeScript and the
+Foxglove extension. Python and TypeScript decode the bytes as UTF-8 and replace invalid
+ones with U+FFFD; C++ passes them unchecked. A `std::vector<char>` is `char[]` and a
+`std::array<char, N>` is `char[N]`: characters, one value each, not text. A
+`const char*` is a compile error ("Missing TypeDefinition"): use `std::string_view`. A
+custom type may not be named after a basic type (`string`, `float64`, ...): the
+registration throws `std::runtime_error`. Rules:
 
-- `tryTakeSnapshot()` returns `oversize` when a string outgrows the slot: call
-  `setPayloadCapacity()` with room for the longest string before `startLogging()`.
-- A string written by a thread other than the snapshot thread is written inside
+- `tryTakeSnapshot()` returns `oversize` when a text outgrows the slot, and the whole
+  snapshot is dropped, numbers included: call `setPayloadCapacity()` with room for the
+  longest text before `startLogging()`. The library never truncates text.
+- Serializing a text allocates nothing, but assigning a `std::string` allocates once it
+  outgrows its capacity: on a real-time thread `reserve()` it beforehand, or assign a
+  `std::string_view` of storage that outlives the registration (a string literal). The
+  snapshot reads through a `std::string_view`: its characters must stay valid.
+- A text written by a thread other than the snapshot thread is written inside
   `scopedWrite()`, as a vector is.
-- Clang 18 and older fail to compile the registration of a `std::string` (no relaxed
-  template template matching, the default from Clang 19). GCC works.
 
 ### Names
 
@@ -1145,18 +1154,17 @@ numpy), `dt.parse_snapshot_values(schema, mask, payload)` returns `(names, value
 tuples in payload order equal to `tuple(d)` and `tuple(d.values())` of the dict;
 consecutive snapshots of one layout (mask and vector lengths) return the same `names`
 object, but compare names with `==`. `python/README.md` builds pandas tables with it.
-A `char[]` field (a `std::string`) decodes as one `str` ("" when empty) under its own
-name, with no index; every decoding function takes `strings_as_text=False` to get one
-character per byte as before (`"label[0]"`, `"label[1]"`, ...).
+A `string` value decodes as one `str` ("" when empty) under its own name ("label",
+"tags[0]", "labels[1]/text"); a `char` is a `str` of one character, also in a `char[]`.
 
 In C++, `data_tamer_v2/data_tamer_parser.hpp` is a single header with no dependency
 on the library. `DataTamerParser::BuildSchemaFromText()` reads both schema renderings.
-`ParseSnapshot()` visits each value and returns false for a snapshot of another schema or
-with bytes left over; its result is `[[nodiscard]]`. With a fourth argument,
-`callback_string(const std::string& name, std::string_view text)`, it passes each
-`char[]` field (a `std::string`) as one value, also when empty, instead of one
-`callback_number` call per character; `text` points into the payload, holds no
-terminator and is not checked to be UTF-8. `SplitMcapMessage()` splits an MCAP
+`ParseSnapshot()` visits each numeric value and returns false for a snapshot of another
+schema or with bytes left over; its result is `[[nodiscard]]`. It skips `string` values
+unless you pass a fourth argument, `callback_string(const std::string& name,
+std::string_view text)`, which gets each of them, also when empty, in schema order with
+the numbers; `text` points into the payload, holds no terminator and is not checked to be
+UTF-8. `SplitMcapMessage()` splits an MCAP
 message body into mask and payload and throws `std::runtime_error` if the body does not
 match its two lengths. Malformed input throws `std::runtime_error` (`ValueError` in
 Python).
@@ -1168,14 +1176,14 @@ To read an MCAP file in C++ with the library linked, `data_tamer_v2/mcap_reader.
 ```cpp
 #include "data_tamer_v2/mcap_reader.hpp"
 
-// callback(topic, timestamp_nsec, name, value) for every value; returns the snapshots
+// callback(topic, timestamp_nsec, name, value) for every number; returns the snapshots
 size_t n = DataTamer2::ForEachValue(
     "control.mcap",
     [&](const std::string& topic, uint64_t timestamp, const std::string& name,
         const DataTamerParser::VarNumber& value) { /* ... */ },
     { "control" });  // optional: only these topics
 
-// with a string callback, each std::string comes as one value instead of per character
+// text is skipped unless a string callback gets it
 DataTamer2::ForEachValue(
     "control.mcap",
     [&](const std::string& topic, uint64_t timestamp, const std::string& name,

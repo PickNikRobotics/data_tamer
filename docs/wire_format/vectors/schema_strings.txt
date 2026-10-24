@@ -1,14 +1,16 @@
 ### version: 5
-### hash: 7702610987344432887
+### hash: 693923379855050783
 ### channel_name: strings test
 
-char[] ascii
-char[] empty
-char[] utf8
-char[] invalid
+string ascii
+string empty
+string utf8
+string invalid
 char[3] fixed
+char[] chars
+string[] tags
 Label[] labels
 ===========================================================
 MSG: Label
 uint8 id
-char[] text
+string text

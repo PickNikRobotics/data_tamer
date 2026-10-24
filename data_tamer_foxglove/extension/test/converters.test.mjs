@@ -263,9 +263,9 @@ test('activation registers only the three stable schema conversions', () => {
   ]);
 });
 
-test('a std::string (char[]) converts to a string field', () => {
+test('a string field converts to a string, a char[] to byte values', () => {
   const { state, warnings } = setup();
-  const strings_hash = 7702610987344432887n;
+  const strings_hash = 693923379855050783n;
   convertSchemas(
       {
         schemas: [{
@@ -286,5 +286,7 @@ test('a std::string (char[]) converts to a string field', () => {
   assert.equal(values.utf8, 'Zürich ✓');
   assert.deepEqual(values.labels, [{ id: 1, text: 'x' }, { id: 2, text: '' }]);
   assert.deepEqual(values.fixed, [97, 98, 99]);
+  assert.deepEqual(values.chars, [104, 105]);
+  assert.deepEqual(values.tags, ['t', '']);
   assert.equal(warnings.length, 0);
 });

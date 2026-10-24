@@ -194,7 +194,8 @@ size_t ForEachValue(const std::string& path, const ValueCallback& callback,
 
 /// ForEachSnapshot() that also decodes: calls `callback(const std::string& topic,
 /// uint64_t timestamp, const std::string& name, const DataTamerParser::VarNumber&
-/// value)` for each value of each snapshot, in schema order (names as in
+/// value)` for each numeric value of each snapshot (text is skipped, see the overload
+/// below), in schema order (names as in
 /// DataTamerParser::ParseSnapshot()). A snapshot that does not match its schema throws,
 /// after the callback has seen the values decoded before the error.
 /// Returns the number of snapshots.
@@ -206,10 +207,10 @@ size_t ForEachValue(const std::string& path, const ValueCallback& callback,
                                DataTamerParser::detail::NoStringCallback{}, topics);
 }
 
-/// ForEachValue() that passes each "char[]" field (a std::string) to
+/// ForEachValue() that also passes each "string" value (a std::string in the writer) to
 /// `callback_string(const std::string& topic, uint64_t timestamp, const std::string&
-/// name, std::string_view text)` as one value, as the ParseSnapshot() overload with a
-/// string callback does. `text` is valid during the call only.
+/// name, std::string_view text)`, as the ParseSnapshot() overload with a string callback
+/// does. `text` is valid during the call only.
 template <typename ValueCallback, typename StringCallback,
           typename = std::enable_if_t<
               std::is_invocable_v<const StringCallback&, const std::string&, uint64_t,

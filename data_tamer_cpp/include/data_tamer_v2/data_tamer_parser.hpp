@@ -47,10 +47,11 @@ enum class BasicType : uint8_t
 
   FLOAT32,
   FLOAT64,
-  OTHER
+  OTHER,
+  STRING  // text: a uint32 byte count, then the bytes
 };
 
-constexpr size_t TypesCount = 13;
+constexpr size_t TypesCount = 14;
 
 namespace detail
 {
@@ -149,7 +150,8 @@ struct SnapshotView
 
 /// Decodes `snapshot` with `schema`, calling
 ///   callback_number(const std::string& name, const VarNumber& value)
-/// for each value of each active field, in schema order. Names join nested fields with
+/// for each numeric value of each active field, in schema order. "string" values (text)
+/// are skipped: pass a callback_string to the overload below to get them. Names join nested fields with
 /// '/' and index container elements: "pose/position/x", "points[1]/z". `name` is valid
 /// only during the call: copy it to keep it.
 /// Returns false if the hash is not the schema's (nothing is decoded) or if bytes are
@@ -160,14 +162,13 @@ template <typename NumberCallback>
 [[nodiscard]] bool ParseSnapshot(const Schema& schema, SnapshotView snapshot,
                                  const NumberCallback& callback_number);
 
-/// ParseSnapshot() that decodes each "char[]" field, as a std::string is written, as one
-/// value: it calls
+/// ParseSnapshot() that also decodes text: it calls
 ///   callback_string(const std::string& name, std::string_view text)
-/// once, also when the string is empty, instead of callback_number once per character
-/// ("label" rather than "label[0]", "label[1]", ...). `text` is the bytes as written: no
-/// terminator, and not checked to be UTF-8. It points into the payload, so it is valid
-/// as long as the payload: copy it to keep it longer. A fixed "char[N]"
-/// (std::array<char, N>) still goes to callback_number per character.
+/// for each "string" value (a std::string or std::string_view in the writer), also an
+/// empty one, in schema order with the numbers: "label", "tags[0]", "msg/label". `text`
+/// is the bytes as written: no terminator, and not checked to be UTF-8. It points into
+/// the payload, so it is valid as long as the payload: copy it to keep it longer.
+/// "char" values, also of a "char[]" (std::vector<char>), go to callback_number.
 template <typename NumberCallback, typename StringCallback>
 [[nodiscard]] bool ParseSnapshot(const Schema& schema, SnapshotView snapshot,
                                  const NumberCallback& callback_number,
@@ -305,6 +306,7 @@ inline VarNumber DeserializeToVarNumber(BasicType type, BufferSpan& buffer)
       return Deserialize<double>(buffer);
 
     case BasicType::OTHER:
+    case BasicType::STRING:
       return double(std::numeric_limits<double>::quiet_NaN());
   }
   return {};
@@ -604,7 +606,7 @@ inline const std::array<std::string, TypesCount>& BasicTypeNames()
 {
   static const std::array<std::string, TypesCount> kNames = {
     "bool",   "char",  "int8",   "uint8",   "int16",   "uint16", "int32",
-    "uint32", "int64", "uint64", "float32", "float64", "other"
+    "uint32", "int64", "uint64", "float32", "float64", "other",  "string"
   };
   return kNames;
 }
@@ -613,9 +615,9 @@ inline const std::array<std::string, TypesCount>& BasicTypeNames()
 inline BasicType BasicTypeFromName(const std::string& name)
 {
   const auto& names = BasicTypeNames();
-  for(size_t i = 0; i + 1 < TypesCount; i++)
+  for(size_t i = 0; i < TypesCount; i++)
   {
-    if(name == names[i])
+    if(i != size_t(BasicType::OTHER) && name == names[i])
     {
       return static_cast<BasicType>(i);
     }
@@ -1182,7 +1184,7 @@ BuilSchemaFromText(const std::string& txt, bool check_hash = false)
 
 namespace detail
 {
-/// Wire size in bytes of a basic type (0 for OTHER).
+/// Wire size in bytes of a basic type (0 for OTHER and STRING, whose size varies).
 inline size_t SizeOf(BasicType type)
 {
   switch(type)
@@ -1311,6 +1313,10 @@ inline const FieldsVector& CustomFields(const Schema& schema, const std::string&
 inline size_t MinElementSize(const TypeField& field, const Schema& schema,
                              MinSizes& min_sizes, int depth)
 {
+  if(field.type == BasicType::STRING)
+  {
+    return sizeof(uint32_t);  // the byte count of an empty text
+  }
   if(field.type != BasicType::OTHER)
   {
     return SizeOf(field.type);
@@ -1449,11 +1455,29 @@ struct DecodeState
   std::string name;  // the name of the value being decoded
 };
 
-/// The callback_string of a ParseSnapshot() call that has none: "char[]" fields go to
-/// callback_number per character.
+/// The callback_string of a ParseSnapshot() call that has none: "string" values are
+/// skipped.
 struct NoStringCallback
 {
 };
+
+/// Reads one "string" value and passes it to callback_string, if there is one.
+template <typename StringCallback>
+void DecodeText(BufferSpan& buffer, const std::string& name,
+                const StringCallback& callback_string)
+{
+  const uint32_t size = Deserialize<uint32_t>(buffer);
+  if(size > buffer.size)
+  {
+    throw std::runtime_error("DataTamerParser: payload truncated");
+  }
+  const std::string_view text(reinterpret_cast<const char*>(buffer.data), size);
+  buffer.trimFront(size);
+  if constexpr(!std::is_same_v<StringCallback, NoStringCallback>)
+  {
+    callback_string(name, text);
+  }
+}
 
 /// Decodes `field`. The first `parent_size` characters of `state.name` are its parent's
 /// name (none at the top level), the rest is scratch.
@@ -1468,21 +1492,6 @@ void ParseSnapshotRecursive(const TypeField& field, const Schema& schema,
   if(field.is_vector && field.array_size == 0)
   {
     vect_size = Deserialize<uint32_t>(buffer);
-  }
-  if constexpr(!std::is_same_v<StringCallback, NoStringCallback>)
-  {
-    if(field.type == BasicType::CHAR && field.is_vector && field.array_size == 0)
-    {
-      if(vect_size > buffer.size)
-      {
-        throw std::runtime_error("DataTamerParser: payload truncated");
-      }
-      const std::string_view text(reinterpret_cast<const char*>(buffer.data), vect_size);
-      buffer.trimFront(vect_size);
-      SetFieldName(state.name, parent_size, field.field_name);
-      callback_string(std::as_const(state.name), text);
-      return;
-    }
   }
   if(field.is_vector)
   {
@@ -1520,7 +1529,11 @@ void ParseSnapshotRecursive(const TypeField& field, const Schema& schema,
   std::string& name = state.name;
   // `name` holds the name of one value, or of one element of a custom type.
   auto doParse = [&]() {
-    if(sub_fields == nullptr)
+    if(field.type == BasicType::STRING)
+    {
+      DecodeText(buffer, std::as_const(name), callback_string);
+    }
+    else if(sub_fields == nullptr)
     {
       const auto var = DeserializeToVarNumber(field.type, buffer);
       callback_number(std::as_const(name), var);  // const: a callback cannot move it away
@@ -1589,7 +1602,11 @@ template <typename NumberCallback, typename StringCallback>
     {
       continue;
     }
-    if(field.type != BasicType::OTHER && !field.is_vector)
+    if(field.type == BasicType::STRING && !field.is_vector)
+    {
+      detail::DecodeText(buffer, field.field_name, callback_string);
+    }
+    else if(field.type != BasicType::OTHER && !field.is_vector)
     {
       // A top-level scalar is named as it is, without a copy.
       const auto var = DeserializeToVarNumber(field.type, buffer);

@@ -41,19 +41,26 @@ enums, `std::atomic` of those, `std::vector`, `std::array` and your own types (s
 [custom types](#custom-types)). It returns a `RegistrationID`. Integers are recorded by
 size and signedness, so `long long` works; `long double` is not supported, use `double`.
 
-A `std::string` works too, registered or as a member of a custom type. It's recorded as
-its length and its bytes, read at every snapshot, so it can change length from one
-snapshot to the next. The decoders return it as one text value: a `str` in Python, a
-string in TypeScript and Foxglove, a `std::string_view` in C++ when you pass a string
-callback (see [Reading the data](#reading-the-data)). Two things to know:
+Text works too: a `std::string` (also a `std::pmr::string`) or a `std::string_view`,
+registered, as a member of a custom type, or in a `std::vector` or `std::array`. The
+schema calls it `string`. It's recorded as its length and its bytes, read at every
+snapshot, so it can change length from one snapshot to the next. The decoders return it
+as one text value: a `str` in Python, a string in TypeScript and Foxglove, a
+`std::string_view` in C++ when you pass a string callback (see
+[Reading the data](#reading-the-data)). Things to know:
 
-- `tryTakeSnapshot()` doesn't grow its slot. Call `setPayloadCapacity()` with room for the
-  longest string, or the snapshot returns `oversize`.
-- Write a string that another thread reads inside `scopedWrite()`, like a vector.
-- Clang 18 and older can't compile the registration of a `std::string`: they lack the
-  relaxed template template matching that Clang 19 turns on by default. GCC works.
+- `tryTakeSnapshot()` doesn't grow its slot: a text longer than the slot drops the
+  whole snapshot as `oversize`, numbers included. Call `setPayloadCapacity()` with room
+  for the longest text.
+- Assigning a `std::string` allocates once it outgrows its capacity. In a real-time loop,
+  `reserve()` it once beforehand, or log a `std::string_view` of text that stays alive,
+  such as a string literal (`state = "IDLE";`): the snapshot reads the characters it
+  points to.
+- Write a text that another thread reads inside `scopedWrite()`, like a vector.
+- Write UTF-8: the decoders read it as UTF-8 and replace invalid bytes with U+FFFD.
 
-A `std::array<char, N>` stays N separate characters: it's more often raw bytes than text.
+A `std::vector<char>` or `std::array<char, N>` is not text: it stays one value per
+character. A `const char*` doesn't register: use a `std::string_view`.
 
 ### When you can register
 
@@ -429,13 +436,11 @@ DataTamer2::ForEachValue("run.mcap", [](const std::string& channel, uint64_t tim
 });
 ```
 
-A `std::string` comes to that callback one character at a time. To get it as one value,
-pass a second callback, which receives `(channel, timestamp_nsec, name, std::string_view
-text)` for each string; `DataTamerParser::ParseSnapshot()` takes the same extra callback,
-without the channel and timestamp. The text is the bytes as written, not checked to be
-UTF-8. Python and TypeScript decode a string as UTF-8, with invalid bytes replaced by
-U+FFFD; `strings_as_text=False` (Python) and `{ stringsAsText: false }` (TypeScript)
-give one value per character instead.
+Text doesn't come to that callback. To get it, pass a second callback, which receives
+`(channel, timestamp_nsec, name, std::string_view text)` for each text value;
+`DataTamerParser::ParseSnapshot()` takes the same extra callback, without the channel
+and timestamp. The text is the bytes as written, not checked to be UTF-8. Python and
+TypeScript decode it as UTF-8, with invalid bytes replaced by U+FFFD.
 
 Values come in log time order, and any error (a file that can't be read, a corrupt
 message) throws `std::runtime_error`, whose message names the file and, where there is
@@ -584,8 +589,9 @@ the same sinks.
 
 ### Can I log strings?
 
-Yes, `std::string` values and members (see [What you can register](#what-you-can-register)).
-For real-time snapshots, size `setPayloadCapacity()` for the longest one.
+Yes: `std::string` and `std::string_view` values, members and containers (see
+[What you can register](#what-you-can-register)). For real-time snapshots, size
+`setPayloadCapacity()` for the longest text.
 
 ### Does disabling a value save space?
 

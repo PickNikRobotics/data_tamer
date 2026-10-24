@@ -6,7 +6,7 @@ import {bits, messageBits} from './helpers.mjs';
 test('Python walker and fast path: flat AND nested differential', () => {
   const fixture = JSON.parse(
       readFileSync(new URL('../dist/reference.json', import.meta.url), 'utf8'));
-  let count = 0, errors = 0, messages = 0, conflicts = 0, perCharacter = 0;
+  let count = 0, errors = 0, messages = 0, conflicts = 0, strings = 0;
   for(const [index, group] of fixture.groups.entries())
   {
     if(group.error)
@@ -40,15 +40,7 @@ test('Python walker and fast path: flat AND nested differential', () => {
           out.values.map(bits), sample.bits,
           `${index}: ${group.text}\n${sample.payload}`);
       assert.equal(decodeFlat(schema, mask, payload).names, out.names);
-      if(sample.chars)
-      {
-        const chars = decodeFlat(schema, mask, payload, { stringsAsText: false });
-        assert.deepEqual(
-            chars.names, sample.chars.names, `${index}: per-character names`);
-        assert.deepEqual(
-            chars.values.map(bits), sample.chars.bits, `${index}: per character`);
-        ++perCharacter;
-      }
+      strings += out.values.filter(v => typeof v === 'string').length;
       if(sample.messageError)
       {
         assert.throws(
@@ -68,7 +60,8 @@ test('Python walker and fast path: flat AND nested differential', () => {
   assert.ok(
       messages > 0 && conflicts > 0,
       'both nested objects and conflicts must be exercised');
-  assert.ok(perCharacter > 0, 'strings must also be decoded per character');
+  assert.ok(strings > 0, 'string values must be exercised');
   console.log(`Differential: ${fixture.groups.length} schemas, ${count} payloads, ${
-      errors} expected errors, ${messages} nested objects, ${conflicts} name conflicts`);
+      errors} expected errors, ${messages} nested objects, ${conflicts} name conflicts, ${
+      strings} strings`);
 });

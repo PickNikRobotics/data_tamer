@@ -36,7 +36,7 @@ def code(error):
 
 
 class Text(str):
-    """A char[] decoded as text, which TS decodes as a string; a char is a number there."""
+    """A "string" value, which TS decodes as a string; a char is a number there."""
 
 
 class MarkingReader(dt._Reader):
@@ -150,9 +150,6 @@ def reference(text, samples, verify=False):
             names, values = dt.parse_snapshot_values(schema, mask, payload)
             assert list(names) == outputs[0]['names']
             assert same_values(values, marked.values())
-            chars = dt.parse_snapshot(schema, mask, payload, strings_as_text=False)
-            if list(chars) != list(marked):  # a char[] field: also decoded per character
-                case['chars'] = {'names': list(chars), 'bits': [bits(v) for v in chars.values()]}
         case.update(outputs[0])
         if 'error' not in case:
             case.update(nested_reference(schema, mask, payload))
@@ -192,10 +189,12 @@ def generate(seed, groups):
             samples.append((mask_of([True] * len(schema.fields)), bytes(payload)))
         output.append(reference(dt.to_text(schema), samples))
 
-    # Strings: random bytes, mostly not UTF-8, at the top level, in a struct and a vector
-    # of them; a fixed char[2] stays per character.
-    strings = line_schema([('s', 'char', 0), ('n', 'Named', 0), ('c', 'char', 2)],
-                          {'Named': [('k', 'char', 0), ('v', 'uint8', None)]})
+    # Strings: random bytes, mostly not UTF-8, at the top level, in a vector of a struct
+    # and in a fixed array; a char[2] and a char[] stay per character. (random_schema()
+    # mixes "string" into every shape too.)
+    strings = line_schema([('s', 'string', None), ('n', 'Named', 0), ('c', 'char', 2),
+                           ('t', 'string', 2), ('h', 'char', 0)],
+                          {'Named': [('k', 'string', None), ('v', 'uint8', None)]})
     text_bytes = lambda: rng.choice([
         rng.randbytes(rng.randint(0, 6)), 'Zürich ✓'.encode(), b'\xef\xbb\xbfbom',
         bytes(rng.choice([0x41, 0x80, 0xc3, 0xe2, 0xed, 0xf0, 0xf4, 0xff, 0xa0])
@@ -211,7 +210,12 @@ def generate(seed, groups):
             s = text_bytes()
             payload += struct.pack('<I', len(s)) + s + rng.randbytes(1)
         payload += rng.randbytes(2)
-        samples.extend(variants(rng, b'\x07', bytes(payload)))
+        for _ in range(2):
+            s = text_bytes()
+            payload += struct.pack('<I', len(s)) + s
+        s = text_bytes()
+        payload += struct.pack('<I', len(s)) + s
+        samples.extend(variants(rng, b'\x1f', bytes(payload)))
     output.append(reference(strings, samples))
     for t in ['uint8', 'float64', 'Point', 'Nested', 'O', 'Undefined', 'Empty']:
         for count in [0, 1, 0xffffffff]:

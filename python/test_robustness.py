@@ -14,38 +14,32 @@ HEADER = "### version: 5\n### hash: 0\n### channel_name: c\n\n"
 
 
 class StringMembers(unittest.TestCase):
-    # the C++ writer sends a std::string as char[]: a uint32 count, then the characters
-    TEXT = HEADER + f"Named n\n{SEPARATOR}\nMSG: Named\nuint8 tag\nchar[] name\n"
+    def decode(self, member: str, payload: bytes) -> dict:
+        text = HEADER + f"Named n\n{SEPARATOR}\nMSG: Named\nuint8 tag\n{member} name\n"
+        return dt.parse_snapshot(dt.parse_schema(text), b"\x01", b"\x01" + payload)
 
-    def decode(self, characters: bytes, **kwargs) -> dict:
-        payload = bytes([1]) + struct.pack("<I", len(characters)) + characters
-        return dt.parse_snapshot(dt.parse_schema(self.TEXT), b"\x01", payload, **kwargs)
-
-    def test_string_member_decodes_as_text(self):
-        self.assertEqual(self.decode(b"abc"), {"n/tag": 1, "n/name": "abc"})
-        self.assertEqual(self.decode(b""), {"n/tag": 1, "n/name": ""})
+    def test_string_member_decodes_as_one_str(self):
+        # a std::string is a "string": a uint32 byte count, then the bytes
+        self.assertEqual(self.decode("string", b"\x03\0\0\0abc"), {"n/tag": 1, "n/name": "abc"})
+        self.assertEqual(self.decode("string", b"\0\0\0\0"), {"n/tag": 1, "n/name": ""})
 
     def test_text_is_utf8_with_invalid_bytes_replaced(self):
-        self.assertEqual(self.decode("Zürich ✓".encode())["n/name"], "Zürich ✓")
-        self.assertEqual(self.decode(b"a\xffb\xc3")["n/name"], "a\ufffdb\ufffd")
-        self.assertEqual(self.decode(b"\xef\xbb\xbfa\0b")["n/name"], "\ufeffa\0b")  # BOM kept
+        values = self.decode("string", b"\x05\0\0\0\xc3\xa9\xff\0x")
+        self.assertEqual(values["n/name"], "\u00e9\ufffd\0x")
 
-    def test_string_member_decodes_as_a_char_vector_on_request(self):
-        self.assertEqual(self.decode(b"abc", strings_as_text=False),
-                         {"n/tag": 1, "n/name[0]": "a", "n/name[1]": "b", "n/name[2]": "c"})
-        self.assertEqual(self.decode(b"", strings_as_text=False), {"n/tag": 1})
+    def test_text_longer_than_the_payload_is_rejected(self):
+        for payload in (b"\x04\0\0\0abc", b"\x01\0\0", b"\xff\xff\xff\xff"):
+            with self.subTest(payload=payload), self.assertRaisesRegex(ValueError, "truncated"):
+                self.decode("string", payload)
 
-    def test_string_longer_than_the_payload_is_rejected(self):
-        payload = bytes([1]) + struct.pack("<I", 4) + b"abc"
-        for strings_as_text in (True, False):
-            with self.assertRaisesRegex(ValueError, "^payload truncated$"):
-                dt.parse_snapshot(dt.parse_schema(self.TEXT), b"\x01", payload,
-                                  strings_as_text=strings_as_text)
+    def test_char_vector_decodes_per_character(self):
+        # a std::vector<char> is a char[]: one str of one character per byte
+        self.assertEqual(self.decode("char[]", b"\x02\0\0\0ab"),
+                         {"n/tag": 1, "n/name[0]": "a", "n/name[1]": "b"})
 
-    def test_field_names_list_a_string_once(self):
-        schema = dt.parse_schema(self.TEXT)
-        self.assertEqual(schema.field_names(), ["n/tag", "n/name"])
-        self.assertEqual(schema.field_names(strings_as_text=False), ["n/tag", "n/name[]"])
+    def test_field_names_list_a_text_as_one_name(self):
+        text = HEADER + "string s\nstring[2] p\nstring[] v\n"
+        self.assertEqual(dt.parse_schema(text).field_names(), ["s", "p[0]", "p[1]", "v[]"])
 
 
 class Booleans(unittest.TestCase):

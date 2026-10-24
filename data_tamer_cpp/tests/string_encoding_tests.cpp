@@ -1,6 +1,7 @@
 #include "data_tamer_v2/channel.hpp"
 #include "data_tamer_v2/contrib/SerializeMe.hpp"
 #include "data_tamer_v2/custom_types.hpp"
+#include "alloc_counter.hpp"
 #include "decode_utils.hpp"
 #include "guarded_buffer.hpp"
 #include "test_sinks.hpp"
@@ -10,6 +11,7 @@
 #include <array>
 #include <cstdint>
 #include <map>
+#include <memory_resource>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -17,8 +19,8 @@
 #include <variant>
 #include <vector>
 
-// The schema describes a std::string as `char[]`: a uint32 count and that many chars
-// (docs/wire_format.md). The payload must hold exactly that.
+// A std::string or std::string_view is the schema type `string`: a uint32 byte count and
+// that many bytes (docs/wire_format.md). The payload must hold exactly that.
 
 namespace
 {
@@ -27,6 +29,18 @@ struct Named
   uint8_t tag = 1;
   std::string name;
 };
+
+// A custom type whose name is a built-in type's.
+struct Impostor
+{
+  int32_t x = 0;
+};
+template <typename AddField>
+std::string_view TypeDefinition(Impostor& p, AddField& add)
+{
+  add("x", &p.x);
+  return "string";
+}
 template <typename AddField>
 std::string_view TypeDefinition(Named& p, AddField& add)
 {
@@ -63,7 +77,7 @@ Decoded decodeWithStrings(const DataTamer2::LogChannel& channel,
 }
 }  // namespace
 
-TEST(StringEncoding, StringMemberIsSerializedAsACharVector)
+TEST(StringEncoding, StringMemberIsRecordedAsText)
 {
   DataTamerTest::Recording recording;
   Named named;
@@ -72,21 +86,106 @@ TEST(StringEncoding, StringMemberIsSerializedAsACharVector)
 
   const auto snapshot = recording.snapshot();
   EXPECT_EQ(snapshot.payload, (std::vector<uint8_t>{ 1, 3, 0, 0, 0, 'a', 'b', 'c' }));
-  EXPECT_NE(DataTamer2::ToStr(recording.channel->getSchema()).find("char[] name\n"),
+  EXPECT_NE(DataTamer2::ToStr(recording.channel->getSchema()).find("string name\n"),
             std::string::npos);
-  const std::map<std::string, double> expected = {
-    { "n/tag", 1 }, { "n/name[0]", 'a' }, { "n/name[1]", 'b' }, { "n/name[2]", 'c' }
-  };
+  // Without a string callback the parser passes the numbers only.
+  const std::map<std::string, double> expected = { { "n/tag", 1 } };
   EXPECT_EQ(DataTamerTest::decode(*recording.channel, snapshot), expected);
 }
 
-TEST(StringEncoding, RegisteredStringIsSerializedAsACharVector)
+TEST(StringEncoding, RegisteredStringIsRecordedAsText)
 {
   DataTamerTest::Recording recording;
   std::string text = "abc";
   recording.channel->registerValue("s", &text);
 
   EXPECT_EQ(recording.payload(), (std::vector<uint8_t>{ 3, 0, 0, 0, 'a', 'b', 'c' }));
+  const auto field = recording.field();
+  EXPECT_EQ(field.type, DataTamer2::BasicType::STRING);
+  EXPECT_FALSE(field.is_vector);
+  EXPECT_EQ(field.type_name, "string");
+}
+
+// Every text type is a `string`, also in a container; a std::vector<char> is not text.
+TEST(StringEncoding, TextTypesAndContainersOfTextHaveTheirSchemaType)
+{
+  DataTamerTest::Recording recording;
+  std::string text = "s";
+  std::string_view view = "view";  // a literal: the characters outlive the channel
+  std::pmr::string pmr = "pmr";
+  std::vector<std::string> list = { "a", "" };
+  std::array<std::string, 2> pair = { "b", "c" };
+  std::vector<char> chars = { 'h', 'i' };
+  auto logged = recording.channel->createLoggedValue<std::string>("logged", "lv");
+  recording.channel->registerValue("text", &text);
+  recording.channel->registerValue("view", &view);
+  recording.channel->registerValue("pmr", &pmr);
+  recording.channel->registerValue("list", &list);
+  recording.channel->registerValue("pair", &pair);
+  recording.channel->registerValue("chars", &chars);
+
+  const std::string schema = DataTamer2::ToStr(recording.channel->getSchema());
+  for(const char* line :
+      { "\nstring logged\n", "\nstring text\n", "\nstring view\n", "\nstring pmr\n",
+        "\nstring[] list\n", "\nstring[2] pair\n", "\nchar[] chars\n" })
+  {
+    EXPECT_NE(schema.find(line), std::string::npos) << line << " in\n" << schema;
+  }
+  const auto decoded = decodeWithStrings(*recording.channel, recording.snapshot());
+  const std::map<std::string, std::string> strings = {
+    { "logged", "lv" }, { "text", "s" },   { "view", "view" }, { "pmr", "pmr" },
+    { "list[0]", "a" }, { "list[1]", "" }, { "pair[0]", "b" }, { "pair[1]", "c" }
+  };
+  EXPECT_EQ(decoded.strings, strings);
+  const std::map<std::string, double> numbers = { { "chars[0]", 'h' },
+                                                  { "chars[1]", 'i' } };
+  EXPECT_EQ(decoded.numbers, numbers);
+}
+
+TEST(StringEncoding, CustomTypeNamedAsABuiltInTypeIsRefused)
+{
+  auto channel = DataTamer2::LogChannel::create("c");
+  Impostor impostor;
+  EXPECT_THROW(channel->registerValue("i", &impostor), std::runtime_error);
+  EXPECT_TRUE(channel->getSchema().fields.empty());
+}
+
+// A text adds no allocation to the real-time snapshot, whatever its length, as long as
+// the slot holds it; past that the snapshot is dropped as oversize, not truncated.
+TEST(StringEncoding, RealTimeSnapshotOfTextAllocatesNothing)
+{
+  auto sink = DataTamerTest::manual<DataTamer2::DummySink>();
+  auto channel = DataTamer2::LogChannel::create("c");
+  std::string text;
+  text.reserve(300);
+  channel->registerValue("text", &text);
+  channel->setPayloadCapacity(4 + 300);
+  channel->addDataSink(sink);
+  channel->startLogging();
+  sink.drain();  // The first delivery pass sizes the worker's pass list.
+  // The sink copies what it receives (on its worker): only the snapshots are counted.
+  const auto counted = [&](auto&& step) {
+    DataTamerTest::AllocCounter::Scope scope;
+    step();
+    return scope.allocations();
+  };
+  text.assign(300, 'x');  // within the capacity reserved above
+  EXPECT_EQ(counted([&] {
+              EXPECT_EQ(channel->tryTakeSnapshot(), DataTamer2::SnapshotResult::ok);
+            }),
+            0u);
+  sink.drain();
+  EXPECT_EQ(sink->latestPayloadSize(), size_t{ 4 + 300 });
+  text = "short";
+  EXPECT_EQ(counted([&] {
+              EXPECT_EQ(channel->tryTakeSnapshot(), DataTamer2::SnapshotResult::ok);
+            }),
+            0u);
+  sink.drain();
+  EXPECT_EQ(sink->latestPayloadSize(), size_t{ 4 + 5 });
+  text.assign(100'000, 'y');
+  EXPECT_EQ(channel->tryTakeSnapshot(), DataTamer2::SnapshotResult::oversize);
+  EXPECT_EQ(channel->droppedOversize(), 1u);
 }
 
 // The whole of a string longer than 64 KiB is serialized, whether it was that long when
@@ -146,9 +245,9 @@ TEST(StringEncoding, SerializeMeRejectsALengthLargerThanTheBytesThatFollow)
   EXPECT_THROW(SerializeMe::DeserializeFromBuffer(in, decoded), std::runtime_error);
 }
 
-// With a string callback, the parser passes a std::string as one value, empty or not,
-// at the top level, in a custom type and in a vector of them. A std::array<char, N> is
-// a fixed char[N]: it stays one number per character.
+// With a string callback, the parser passes a text as one value, empty or not, at the
+// top level, in a custom type and in a vector of them. A std::array<char, N> is a fixed
+// char[N]: it stays one number per character.
 TEST(StringEncoding, ParserWithAStringCallbackPassesAStringAsOneValue)
 {
   DataTamerTest::Recording recording;
@@ -200,7 +299,8 @@ TEST(StringEncoding, StringChangesLengthBetweenSnapshots)
 TEST(StringEncoding, StringCallbackGetsAViewOfThePayload)
 {
   DataTamerParser::Schema schema;
-  schema.fields.push_back({ "s", DataTamerParser::BasicType::CHAR, "char", true, 0 });
+  schema.fields.push_back(
+      { "s", DataTamerParser::BasicType::STRING, "string", false, 0 });
   const std::vector<uint8_t> mask = { 1 };
   const std::vector<uint8_t> payload = { 3, 0, 0, 0, 'a', 0, 0xff };
   const DataTamerParser::SnapshotView view{
@@ -222,7 +322,8 @@ TEST(StringEncoding, StringCallbackGetsAViewOfThePayload)
 TEST(StringEncoding, StringLongerThanThePayloadThrows)
 {
   DataTamerParser::Schema schema;
-  schema.fields.push_back({ "s", DataTamerParser::BasicType::CHAR, "char", true, 0 });
+  schema.fields.push_back(
+      { "s", DataTamerParser::BasicType::STRING, "string", false, 0 });
   const std::vector<uint8_t> mask = { 1 };
   for(const auto& payload : { std::vector<uint8_t>{ 4, 0, 0, 0, 'a', 'b', 'c' },
                               std::vector<uint8_t>{ 1, 0, 0 } })

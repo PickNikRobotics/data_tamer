@@ -88,6 +88,24 @@ using SpanBytes = Span<uint8_t>;
 using SpanBytesConst = Span<uint8_t const>;
 using StringSize = uint32_t;
 
+// Text: a std::string (any traits and allocator, std::pmr::string too) or a
+// std::string_view. It is recorded as the schema type "string", a uint32 byte count and
+// the bytes, and is never a container of char. Each serialization function has its own
+// overload for it, so that no compiler needs to match std::basic_string, which has three
+// template parameters, to `template <class, class> class Container`.
+template <typename T>
+struct is_text : std::false_type
+{
+};
+template <class Traits, class Alloc>
+struct is_text<std::basic_string<char, Traits, Alloc>> : std::true_type
+{
+};
+template <class Traits>
+struct is_text<std::basic_string_view<char, Traits>> : std::true_type
+{
+};
+
 const auto EmptyFuncion = [](const char*, void*) {};
 using EmptyFunc = decltype(EmptyFuncion);
 
@@ -229,16 +247,20 @@ inline decltype(auto) InvokeTypeDefinition(T& obj, AddField& add_field)
 template <typename T, bool = true>
 size_t BufferSize(const T& val);
 
-template <>
-size_t BufferSize(const std::string& str);
+template <class Traits, class Alloc>
+size_t BufferSize(const std::basic_string<char, Traits, Alloc>& str);
+
+template <class Traits>
+size_t BufferSize(const std::basic_string_view<char, Traits>& str);
 
 template <class T, size_t N,
           std::enable_if_t<!has_TypeDefinition<std::array<T, N>>::value, bool> = true>
 size_t BufferSize(const std::array<T, N>& v);
 
-template <
-    template <class, class> class Container, class T, class... TArgs,
-    std::enable_if_t<!has_TypeDefinition<Container<T, TArgs...>>::value, bool> = true>
+template <template <class, class> class Container, class T, class... TArgs,
+          std::enable_if_t<!has_TypeDefinition<Container<T, TArgs...>>::value &&
+                               !is_text<Container<T, TArgs...>>::value,
+                           bool> = true>
 size_t BufferSize(const Container<T, TArgs...>& vect);
 
 //---------- Forward declarations of DeserializeFromBuffer -----------
@@ -248,16 +270,18 @@ size_t BufferSize(const Container<T, TArgs...>& vect);
 template <typename T, bool = true>
 void DeserializeFromBuffer(SpanBytesConst& buffer, T& dest);
 
-template <>
-void DeserializeFromBuffer(SpanBytesConst& buffer, std::string& str);
+template <class Traits, class Alloc>
+void DeserializeFromBuffer(SpanBytesConst& buffer,
+                           std::basic_string<char, Traits, Alloc>& str);
 
 template <class T, size_t N,
           std::enable_if_t<!has_TypeDefinition<std::array<T, N>>::value, bool> = true>
 void DeserializeFromBuffer(SpanBytesConst& buffer, std::array<T, N>& v);
 
-template <
-    template <class, class> class Container, class T, class... TArgs,
-    std::enable_if_t<!has_TypeDefinition<Container<T, TArgs...>>::value, bool> = true>
+template <template <class, class> class Container, class T, class... TArgs,
+          std::enable_if_t<!has_TypeDefinition<Container<T, TArgs...>>::value &&
+                               !is_text<Container<T, TArgs...>>::value,
+                           bool> = true>
 void DeserializeFromBuffer(SpanBytesConst& buffer, Container<T, TArgs...>& dest);
 
 //---------- Forward declarations of SerializeIntoBuffer -----------
@@ -267,16 +291,22 @@ void DeserializeFromBuffer(SpanBytesConst& buffer, Container<T, TArgs...>& dest)
 template <typename T, bool = true>
 void SerializeIntoBuffer(SpanBytes& buffer, const T& value);
 
-template <>
-void SerializeIntoBuffer(SpanBytes& buffer, const std::string& str);
+template <class Traits, class Alloc>
+void SerializeIntoBuffer(SpanBytes& buffer,
+                         const std::basic_string<char, Traits, Alloc>& str);
+
+template <class Traits>
+void SerializeIntoBuffer(SpanBytes& buffer,
+                         const std::basic_string_view<char, Traits>& str);
 
 template <class T, size_t N,
           std::enable_if_t<!has_TypeDefinition<std::array<T, N>>::value, bool> = true>
 void SerializeIntoBuffer(SpanBytes& buffer, const std::array<T, N>& v);
 
-template <
-    template <class, class> class Container, class T, class... TArgs,
-    std::enable_if_t<!has_TypeDefinition<Container<T, TArgs...>>::value, bool> = true>
+template <template <class, class> class Container, class T, class... TArgs,
+          std::enable_if_t<!has_TypeDefinition<Container<T, TArgs...>>::value &&
+                               !is_text<Container<T, TArgs...>>::value,
+                           bool> = true>
 void SerializeIntoBuffer(SpanBytes& buffer, const Container<T, TArgs...>& vect);
 
 //-----------------------------------------------------------------------
@@ -421,7 +451,8 @@ struct container_info : container_info_<T, false, -1>
 template <template <class, class> class Container, class T, class... TArgs>
 struct container_info<
     Container<T, TArgs...>,
-    std::enable_if_t<!has_TypeDefinition<Container<T, TArgs...>>::value>>
+    std::enable_if_t<!has_TypeDefinition<Container<T, TArgs...>>::value &&
+                     !is_text<Container<T, TArgs...>>::value>>
   : container_info_<T, true, 0>
 {
 };
@@ -486,8 +517,14 @@ inline size_t BufferSize(const T& val)
   }
 }
 
-template <>
-inline size_t BufferSize(const std::string& str)
+template <class Traits, class Alloc>
+inline size_t BufferSize(const std::basic_string<char, Traits, Alloc>& str)
+{
+  return sizeof(StringSize) + str.size();
+}
+
+template <class Traits>
+inline size_t BufferSize(const std::basic_string_view<char, Traits>& str)
 {
   return sizeof(StringSize) + str.size();
 }
@@ -512,7 +549,9 @@ inline size_t BufferSize([[maybe_unused]] const std::array<T, N>& vect)
 }
 
 template <template <class, class> class Container, class T, class... TArgs,
-          std::enable_if_t<!has_TypeDefinition<Container<T, TArgs...>>::value, bool>>
+          std::enable_if_t<!has_TypeDefinition<Container<T, TArgs...>>::value &&
+                               !is_text<Container<T, TArgs...>>::value,
+                           bool>>
 inline size_t BufferSize(const Container<T, TArgs...>& vect)
 {
   if constexpr(is_number<T>() && is_vector<Container<T, TArgs...>>())
@@ -578,8 +617,9 @@ inline uint32_t DeserializeCount(SpanBytesConst& buffer)
   return count;
 }
 
-template <>
-inline void DeserializeFromBuffer(SpanBytesConst& buffer, std::string& dest)
+template <class Traits, class Alloc>
+inline void DeserializeFromBuffer(SpanBytesConst& buffer,
+                                  std::basic_string<char, Traits, Alloc>& dest)
 {
   const uint32_t size = DeserializeCount(buffer);
   if(size > buffer.size())
@@ -615,7 +655,9 @@ inline void DeserializeFromBuffer(SpanBytesConst& buffer, std::array<T, N>& dest
 }
 
 template <template <class, class> class Container, class T, class... TArgs,
-          std::enable_if_t<!has_TypeDefinition<Container<T, TArgs...>>::value, bool>>
+          std::enable_if_t<!has_TypeDefinition<Container<T, TArgs...>>::value &&
+                               !is_text<Container<T, TArgs...>>::value,
+                           bool>>
 inline void DeserializeFromBuffer(SpanBytesConst& buffer, Container<T, TArgs...>& dest)
 {
   const uint32_t num_values = DeserializeCount(buffer);
@@ -690,16 +732,33 @@ inline void SerializeCount(SpanBytes& buffer, size_t count)
   SerializeIntoBuffer(buffer, static_cast<uint32_t>(count));
 }
 
-template <>
-inline void SerializeIntoBuffer(SpanBytes& buffer, std::string const& str)
+/// Writes the uint32 byte count and the bytes of a text.
+inline void SerializeText(SpanBytes& buffer, const char* data, size_t size)
 {
-  if((str.size() + sizeof(StringSize)) > buffer.size())
+  if((size + sizeof(StringSize)) > buffer.size())
   {
     throw std::runtime_error("SerializeIntoBuffer: buffer overflow");
   }
-  SerializeCount(buffer, str.size());
-  std::memcpy(buffer.data(), str.data(), str.size());
-  buffer.trimFront(str.size());
+  SerializeCount(buffer, size);
+  if(size != 0)  // memcpy() from the null data() of an empty string_view is undefined
+  {
+    std::memcpy(buffer.data(), data, size);
+  }
+  buffer.trimFront(size);
+}
+
+template <class Traits, class Alloc>
+inline void SerializeIntoBuffer(SpanBytes& buffer,
+                                const std::basic_string<char, Traits, Alloc>& str)
+{
+  SerializeText(buffer, str.data(), str.size());
+}
+
+template <class Traits>
+inline void SerializeIntoBuffer(SpanBytes& buffer,
+                                const std::basic_string_view<char, Traits>& str)
+{
+  SerializeText(buffer, str.data(), str.size());
 }
 
 template <typename T, size_t N,
@@ -729,7 +788,9 @@ inline void SerializeIntoBuffer(SpanBytes& buffer, std::array<T, N> const& vect)
 }
 
 template <template <class, class> class Container, class T, class... TArgs,
-          std::enable_if_t<!has_TypeDefinition<Container<T, TArgs...>>::value, bool>>
+          std::enable_if_t<!has_TypeDefinition<Container<T, TArgs...>>::value &&
+                               !is_text<Container<T, TArgs...>>::value,
+                           bool>>
 inline void SerializeIntoBuffer(SpanBytes& buffer, Container<T, TArgs...> const& vect)
 {
   SerializeCount(buffer, vect.size());

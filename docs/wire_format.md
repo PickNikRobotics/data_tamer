@@ -7,8 +7,9 @@ sources. Two artifacts keep it honest:
 - `docs/wire_format/vectors/` holds golden fixtures: a schema text, two
   snapshots (all fields enabled, two fields disabled), their MCAP message bodies
   and the decoded values (`expected.json`), plus the YAML rendering of that
-  schema (`schema.yaml`) and a schema with path-like names in both renderings
-  (`schema_nested.txt`, `schema_nested.yaml`). `v4/` holds a file recorded by
+  schema (`schema.yaml`), a schema with path-like names in both renderings
+  (`schema_nested.txt`, `schema_nested.yaml`) and one with text
+  (`schema_strings.txt`, `snapshot_strings.*`). `v4/` holds a file recorded by
   data_tamer 1.0.4 (schema version 4, section 5): `recorded_1.0.4.mcap`, its
   three schema texts and the values the recorder set (`expected.tsv`, whose
   header describes it). It covers the cases a reader of 1.x files meets: custom
@@ -35,7 +36,7 @@ Python and TypeScript decoders, and describe the change in this file.
 | Version | Change |
 |---:|---|
 | 6 | data_tamer 2.0. YAML rendering of the version 5 schema (section 2.1), opt-in. Same hash. |
-| 5 | data_tamer 2.0. Hash defined as FNV-1a 64 of the schema text; covers custom type bodies. |
+| 5 | data_tamer 2.0. Hash defined as FNV-1a 64 of the schema text; covers custom type bodies. The basic type `string` (text). |
 | 4 | data_tamer 0.7 to 1.x. Lower-case type names, `MSG:` sections. Hash was `std::hash` based (section 5). |
 
 ## 1. Data model
@@ -54,15 +55,10 @@ A field has a type, a name and an optional container shape.
 | custom struct | `Pose pose` | its fields, in `MSG:` order, concatenated |
 | vector of structs | `Point3D[] pts` | `uint32` count, then each struct |
 | array of structs | `Pose[3] poses` | 3 structs, no count |
+| text | `string label` | `uint32` byte count, then that many bytes |
+| vector of texts | `string[] tags` | `uint32` count, then each text |
 
-There is no string type, no alignment padding, no separators and no per-field tags.
-A C++ `std::string` is registered as `char[]`: a `uint32` count, then that many bytes,
-with no terminator and no charset. A decoder can present a dynamic `char[]` as one text
-value instead of one value per byte. The reference decoders read it as UTF-8 and
-replace each invalid byte sequence with U+FFFD, as the Unicode standard recommends
-(Python's `"replace"`, the WHATWG `TextDecoder`), and keep a leading byte order mark;
-the C++ parser hands over the bytes unchecked. A fixed `char[N]` (a
-`std::array<char, N>`) stays N values.
+There is no alignment padding, no separator and no per-field tag.
 All multi-byte numbers are **little-endian**.
 Decoders need not preserve NaN payload bits or signaling NaNs; -0.0 and every non-NaN bit pattern must be exact.
 
@@ -92,6 +88,20 @@ enum name. A C++ integer type is recorded as the wire type of its size and
 signedness (`long long` is `int64`, `char16_t` is `uint16`, `char32_t` is `uint32`,
 `wchar_t` is `int32` or `uint32`). `long double` has no wire type and cannot be
 recorded.
+
+Type id 13, `string`, is text: a `uint32` byte count, then that many bytes, with no
+terminator and no charset. A C++ `std::string` (any `std::basic_string` of `char`, such as
+`std::pmr::string`) and a `std::string_view` are recorded as `string`, so their length
+can change from one snapshot to the next. It is a basic type of the schema text, like
+`float64`: it has no `MSG:` section, and it can be a vector (`string[]`), a fixed array
+(`string[2]`) or the field of a custom type. A `std::vector<char>` is a `char[]` and a
+`std::array<char, N>` a `char[N]`: those are characters, decoded one value each, not
+text. Decoders present a `string` as one text value: the reference decoders read it as
+UTF-8, replace each invalid byte sequence with U+FFFD, as the Unicode standard
+recommends (Python's `"replace"`, the WHATWG `TextDecoder`), and keep a leading byte
+order mark; the C++ parser hands over the bytes unchecked. Writers should write UTF-8.
+Version 4 (data_tamer 1.x) has no `string`: 1.x wrote a `std::string` in ways no
+reader decoded (section 5).
 
 ## 2. Schema text
 
@@ -144,8 +154,9 @@ the colon of `### key:`, trimmed; the space after the colon is optional
    Decoders reject a text with any other name. It may have empty
    `/`-separated components (leading, trailing or repeated `/`): writers do not
    reject them, although names built with `DataTamer2::JoinNames()` have none. `type-spec`
-   is a basic type name or a custom type name (not empty, no whitespace or control
-   character), optionally followed by `[]`
+   is a basic type name (section 1, `string` included) or a custom type name (not
+   empty, no whitespace or control character, not the name of a basic type: writers
+   refuse one), optionally followed by `[]`
    (dynamic vector) or `[N]` (fixed array, decimal N, 1 to 65535), and nothing
    follows the `]`. Top-level field order is the mask bit order and the payload
    order.
@@ -298,16 +309,17 @@ decode_field(field):
     if field.is_vector and count == 0:
         count = read uint32           # dynamic vector length prefix
     repeat (1 if not field.is_vector else count) times:
-        if field.type is basic:  read that many bytes, little-endian
-        else:                    for sub in custom_types[field.type]: decode_field(sub)
+        if field.type is string: n = read uint32; read n bytes   # one text value
+        elif field.type is basic: read that many bytes, little-endian
+        else:                     for sub in custom_types[field.type]: decode_field(sub)
 ```
 
 After the loop `pos` must equal the payload length; otherwise the schema and
 the payload do not belong together. Decoders must check every read against the
 remaining payload before performing it, reject, before decoding any element, a
 dynamic count or a fixed array length larger than the remaining bytes divided by
-the fewest bytes one element takes (a basic type: its size; a dynamic vector: its
-4 byte count; a fixed array: its length times its element's; a custom type: the
+the fewest bytes one element takes (a basic type: its size; a `string` or a dynamic
+vector: its 4 byte count; a fixed array: its length times its element's; a custom type: the
 sum over its fields). An element that takes 0 bytes (a type without fields) holds
 no value however large the count, and decoders must not iterate over it. They
 also bound the nesting depth of custom types (the reference
@@ -321,8 +333,8 @@ which holds nothing to skip and decodes as empty.
 
 Flattened series names, as produced by the reference decoders and PlotJuggler:
 nested fields join with `/`, container elements append `[i]`:
-`pose/position/x`, `vec[2]`, `points[1]/z`. A `char[]` presented as text has the
-field's name, without an index, also when it is empty.
+`pose/position/x`, `vec[2]`, `points[1]/z`. A `string` is one value, under the name of
+its field or element: `label`, `tags[0]`, `labels[1]/text`.
 `Schema.field_names()` in the Python decoder lists these names from the schema
 alone; the length of a dynamic vector is only known per message, so it lists
 its elements once with empty brackets (`vec[]`, `points[]/z`).
@@ -496,8 +508,8 @@ floats compared bit-exactly), split both `.mcap_message` bodies into the same
 mask and payload bytes, and reject a payload with trailing bytes or a schema
 with another version or without one. A decoder that reads version 4 also decodes
 `v4/recorded_1.0.4.mcap` to `v4/expected.tsv`, matching each schema by its
-declared hash and rejecting the messages marked `!undecodable`. A decoder that
-presents `char[]` as text decodes `snapshot_strings.*` with `schema_strings.txt` to the
-`strings` entry of `expected.json`: one `char[]` empty, one UTF-8, one invalid UTF-8,
-and `char[]` members in a vector of a custom type, next to a `char[3]` that stays per
-character.
+declared hash and rejecting the messages marked `!undecodable`. Every decoder also
+decodes `snapshot_strings.*` with `schema_strings.txt` to the `strings` entry of
+`expected.json`: texts that are ASCII, empty, UTF-8 and invalid UTF-8 (one U+FFFD), a
+`string[]`, `string` members in a vector of a custom type, and a `char[3]` and a
+`char[]` that stay one value per character.

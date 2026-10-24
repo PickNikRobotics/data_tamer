@@ -2,7 +2,7 @@ import {parseSchema} from '../dist/index.js';
 export const separator = '='.repeat(59);
 export const schema = fields => parseSchema(`### version: 5\n### hash: 7\n${fields}\n`);
 // NaNs compare by classification; every other number compares by binary64 bits, and
-// a string (a char[] read as text) by its text.
+// a string (a "string" value) by its text.
 export const bits = n => {
   if(typeof n === 'string')
     return `s:${n}`;

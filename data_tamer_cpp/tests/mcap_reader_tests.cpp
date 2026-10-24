@@ -147,7 +147,7 @@ TEST(McapReader, ForEachValueDecodesInLogTimeOrder)
   EXPECT_EQ(readValues(path), expected);
 }
 
-// With a string callback, a std::string comes as one value; the numbers come as before.
+// With a string callback, a std::string comes as one value; without one, it is skipped.
 TEST(McapReader, ForEachValueWithAStringCallbackPassesStringsAsText)
 {
   DataTamerTest::ScratchDir dir("mcap_reader");
@@ -180,8 +180,7 @@ TEST(McapReader, ForEachValueWithAStringCallbackPassesStringsAsText)
   EXPECT_EQ(numbers, (std::vector<Value>{ { "s", 10, "x", 7 }, { "s", 20, "x", 7 } }));
   EXPECT_EQ(strings, (decltype(strings){ { "s", 10, "label", "first" },
                                          { "s", 20, "label", "" } }));
-  // Without one, the characters come one by one, as numbers.
-  EXPECT_EQ(readValues(path).size(), 5u + 1u + 1u);
+  EXPECT_EQ(readValues(path).size(), 2u);
 }
 
 TEST(McapReader, ForEachSnapshotFillsTimestampAndHash)

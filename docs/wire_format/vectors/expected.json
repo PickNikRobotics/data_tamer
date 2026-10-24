@@ -21,7 +21,8 @@
   },
   "strings": {
     "ascii": "data_tamer", "empty": "", "utf8": "Z\u00fcrich \u2713", "invalid": "a\ufffdb",
-    "fixed[0]": "a", "fixed[1]": "b", "fixed[2]": "c",
+    "fixed[0]": "a", "fixed[1]": "b", "fixed[2]": "c", "chars[0]": "h", "chars[1]": "i",
+    "tags[0]": "t", "tags[1]": "",
     "labels[0]/id": 1, "labels[0]/text": "x", "labels[1]/id": 2, "labels[1]/text": ""
   }
 }

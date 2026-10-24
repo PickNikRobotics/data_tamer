@@ -21,10 +21,8 @@ for timestamp_nsec, topic, values in dt.iter_mcap("log.mcap"):
 ```
 
 Disabled fields are absent from `values`. Channels with another encoding are skipped.
-A `std::string` is one `str` (`"label": "idle"`), its bytes decoded as UTF-8 with
-invalid ones replaced by U+FFFD; `iter_mcap()`, `parse_snapshot()` and the other decoding
-functions take `strings_as_text=False` to return one character per byte instead
-(`"label[0]": "i"`, ...).
+A `string` (a `std::string` in the writer) is one `str` (`"label": "idle"`), its bytes
+decoded as UTF-8 with invalid ones replaced by U+FFFD.
 `iter_mcap()` reads one file: `MCAPSink` can split a recording into numbered files
 (`run.mcap`, `run_1.mcap`, ...), each self-contained, so read them in turn.
 
