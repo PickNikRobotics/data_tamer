@@ -479,9 +479,8 @@ inline constexpr bool is_vector()
 template <typename T, bool>
 inline size_t BufferSize(const T& val)
 {
-  static_assert(is_number<T>() || is_text<T>::value || has_TypeDefinition<T>(), "Missing "
-                                                                                "TypeDefi"
-                                                                                "nition");
+  constexpr bool known = is_number<T>() || is_text<T>::value || has_TypeDefinition<T>();
+  static_assert(known, "Missing TypeDefinition");
 
   if constexpr(is_number<T>())
   {
@@ -556,9 +555,8 @@ inline uint32_t DeserializeCount(SpanBytesConst& buffer)
 template <typename T, bool>
 inline void DeserializeFromBuffer(SpanBytesConst& buffer, T& dest)
 {
-  static_assert(is_number<T>() || is_text<T>::value || has_TypeDefinition<T>(), "Missing "
-                                                                                "TypeDefi"
-                                                                                "nition");
+  constexpr bool known = is_number<T>() || is_text<T>::value || has_TypeDefinition<T>();
+  static_assert(known, "Missing TypeDefinition");
 
   if constexpr(is_number<T>())
   {
@@ -583,25 +581,9 @@ inline void DeserializeFromBuffer(SpanBytesConst& buffer, T& dest)
   }
   else if constexpr(is_text<T>::value)
   {
-    static_assert(
-        !std::is_same_v<T, std::basic_string_view<char, typename T::traits_type>>, "a "
-                                                                                   "std::"
-                                                                                   "strin"
-                                                                                   "g_"
-                                                                                   "view "
-                                                                                   "can'"
-                                                                                   "t "
-                                                                                   "own "
-                                                                                   "the "
-                                                                                   "text "
-                                                                                   "it "
-                                                                                   "reads"
-                                                                                   ": "
-                                                                                   "use "
-                                                                                   "a "
-                                                                                   "std::"
-                                                                                   "strin"
-                                                                                   "g");
+    constexpr bool owning =
+        !std::is_same_v<T, std::basic_string_view<char, typename T::traits_type>>;
+    static_assert(owning, "std::string_view can't own what it reads: use std::string");
     const uint32_t size = DeserializeCount(buffer);
     if(size > buffer.size())
     {
@@ -696,9 +678,8 @@ inline void SerializeCount(SpanBytes& buffer, size_t count)
 template <typename T, bool>
 inline void SerializeIntoBuffer(SpanBytes& buffer, T const& value)
 {
-  static_assert(is_number<T>() || is_text<T>::value || has_TypeDefinition<T>(), "Missing "
-                                                                                "TypeDefi"
-                                                                                "nition");
+  constexpr bool known = is_number<T>() || is_text<T>::value || has_TypeDefinition<T>();
+  static_assert(known, "Missing TypeDefinition");
 
   if constexpr(is_number<T>())
   {
