@@ -2,8 +2,8 @@
 Changelog for package data_tamer
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Unreleased
-----------
+2.0.0 (2026-10-24)
+------------------
 First release of the 2.x series, relative to 1.0.4. It breaks source and binary
 compatibility: rebuild every binary that links data_tamer, and read ``docs/MIGRATION.md``,
 which gives the replacement for each removed API and lists the behaviour changes that
