@@ -579,8 +579,8 @@ TEST(DataTamerParser, YamlSchemaRoundTrip)
 
 TEST(DataTamerParser, YamlSchemaRejectsMalformedInput)
 {
-  const std::string head = "version: 6\nhash: 1\nchannel_name: c\n";
-  EXPECT_THROW(BuildSchemaFromText("version: 7\nhash: 1\nchannel_name: c\nfields: {}\n"),
+  const std::string head = "version: 5\nhash: 1\nchannel_name: c\n";
+  EXPECT_THROW(BuildSchemaFromText("version: 6\nhash: 1\nchannel_name: c\nfields: {}\n"),
                std::runtime_error);
   EXPECT_THROW(BuildSchemaFromText(head), std::runtime_error);  // no fields
   EXPECT_THROW(BuildSchemaFromText(head + "fields:\n  a: float64\n  a: int8\n"),
@@ -599,13 +599,13 @@ TEST(DataTamerParser, YamlSchemaRejectsMalformedInput)
   EXPECT_THROW(BuildSchemaFromText(head + "fields:\n  a: "
                                           "int32[99999999999999999999999]\n"),
                std::runtime_error);
-  EXPECT_THROW(BuildSchemaFromText("version: 6\nhash: "
+  EXPECT_THROW(BuildSchemaFromText("version: 5\nhash: "
                                    "99999999999999999999\nchannel_name: "
                                    "c\nfields: {}\n"),
                std::runtime_error);
   EXPECT_THROW(BuildSchemaFromText(head + "fields:\n  \"\\uD800\": int8\n"),
                std::runtime_error);  // surrogate
-  EXPECT_THROW(BuildSchemaFromText("  version: 6\n  hash: 1\n  channel_name: c\n  "
+  EXPECT_THROW(BuildSchemaFromText("  version: 5\n  hash: 1\n  channel_name: c\n  "
                                    "fields: {}\n"),
                std::runtime_error);  // top level must start at column 0
   std::string deep = head + "fields:\n";

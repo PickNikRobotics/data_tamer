@@ -92,7 +92,7 @@ under "Unreleased" in `data_tamer_cpp/CHANGELOG.rst`.
   the golden vectors, the 1.0.4 recording and every decode of the other tests.
   `benchmark_decode.py` times the three.
 - `data_tamer_foxglove/`: strict ESM TypeScript snapshot decoder, no runtime dependencies;
-  schema versions 4/5/6, bounded mask/layout plans and ROS 2 message helpers. Its
+  schema versions 4 and 5 (line format and YAML), bounded mask/layout plans and ROS 2 message helpers. Its
   `test/` checks golden vectors, the 1.0.4 recording and generated Python differential
   cases; `bench/benchmark.mjs` times flat and nested output.
   - `extension/`: Foxglove desktop/web schema converters (Node 22), bundling
@@ -317,7 +317,8 @@ DATA_TAMER_UPDATE_GOLDEN=1 \
   vectors, update `python/data_tamer_parser.py` (the reference walker, then the compiled
   plans until `test_fast_path.py` passes), `data_tamer_parser.hpp` and the TypeScript
   decoder in `data_tamer_foxglove/src/`, and bump
-  `SCHEMA_VERSION` or `SCHEMA_YAML_VERSION` in `types.hpp` when the text changes. The
+  `SCHEMA_VERSION` in `types.hpp` (and in `data_tamer_parser.hpp` and the Python
+  decoder) when the text changes, the line format or YAML. The
   `WireFormat.*`, Python and TypeScript tests fail until all four decoders agree.
 - LogChannel, ChannelsRegistry, SinkWorker, TypesRegistry, MCAPSink, MCAPRingSink and
   ROS2PublisherSink keep all their state behind a Pimpl (LogChannel's only other base is

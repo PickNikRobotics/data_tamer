@@ -373,7 +373,7 @@ is set. What changed:
 - The schema text is version 5, and its hash is FNV-1a of the text: the same on every
   platform, and different from the 1.x hash of the same channel. Readers built with the
   1.x parser reject version 5 with "Wrong SCHEMA_VERSION", and the optional YAML
-  rendering (`SchemaFormat::Yaml`, version 6) with "Unexpected line: fields:".
+  rendering (`SchemaFormat::Yaml`) with "Unexpected line: fields:".
 - A `std::string` or `std::string_view`, registered, inside a custom type or in a
   container, is the new basic schema type `string`: a `uint32` byte count and its bytes.
   The decoders return it as one text value. 1.x wrote a `std::string` as `char[]` with a

@@ -184,11 +184,11 @@ class SchemaHeaders(unittest.TestCase):
 
     def test_text_whose_first_line_starts_with_three_hashes_is_the_line_format(self):
         # only "#" comment lines that do not start with "###" may come before "version:"
-        yaml = "version: 6\nhash: 1\nchannel_name: c\nfields:\n  x: int8\n"
+        yaml = "version: 5\nhash: 1\nchannel_name: c\nfields:\n  x: int8\n"
         self.assertEqual(dt.parse_schema("# comment\n" + yaml).fields,
                          [dt.Field("x", "int8")])
         # as the line format, "fields:" is no field line
-        for head in ("### note\n", "### version: 6\n", "\n  ### note\n"):
+        for head in ("### note\n", "### version: 5\n", "\n  ### note\n"):
             with self.subTest(head=head), self.assertRaises(ValueError):
                 dt.parse_schema(head + yaml)
 
@@ -221,7 +221,7 @@ class FieldLines(unittest.TestCase):
     def test_field_name_with_whitespace_or_a_control_character_is_rejected(self):
         # No character up to the space and no DEL, in both renderings and in a type
         # section. YAML writes them as escapes in a quoted key, of a field or of a group.
-        yaml = 'version: 6\nhash: 1\nchannel_name: c\nfields:\n  "'
+        yaml = 'version: 5\nhash: 1\nchannel_name: c\nfields:\n  "'
         for name, escaped in (("a b", "a b"), ("a\tb", "a\\tb"), ("a\rb", "a\\rb"),
                               ("a\x01b", "a\\x01b"), ("a\x7fb", "a\\x7fb")):
             for text in (HEADER + f"float64 {name}\n",

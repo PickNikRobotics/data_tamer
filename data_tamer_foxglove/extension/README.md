@@ -2,7 +2,7 @@
 
 Plot data_tamer ROS 2 snapshots in Foxglove desktop or web, or inspect rosbag2
 recordings of those topics (including rosbag2 MCAP storage). Version 2.0.0
-supports schema versions 4/5/6.
+supports schema versions 4 and 5 (line format and YAML).
 
 ## Install
 
@@ -35,7 +35,7 @@ catalog must reach the live bridge/subscriber, or be included in a recording.
 Subscribe again for new catalogs. Unknown-schema snapshots are skipped, without
 buffering: seek/replay after loading the catalog to revisit them.
 
-All converters share one catalog until the extension reloads. v5/v6 hashes
+All converters share one catalog until the extension reloads. v5 hashes
 identify content. Legacy v4 hashes exclude custom type bodies: conflicting v4
 catalogs with one hash are unsupported and could silently use the first schema.
 Reload the extension between v4 recordings whose custom definitions changed.

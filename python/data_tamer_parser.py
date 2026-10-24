@@ -25,7 +25,7 @@ tuple object:
 
 For an MCAP message body written by MCAPSink use split_mcap_message() first.
 parse_schema() reads both schema renderings: the line format (versions 4 and 5) and
-YAML (version 6); to_text() renders a schema back to the line format.
+YAML (version 5); to_text() renders a schema back to the line format.
 For the ROS 2 messages of ROS2PublisherSink (data_tamer_msgs Schemas, Snapshot,
 SnapshotBatch) use SchemaRegistry, parse_snapshot_msg() and
 iter_snapshot_batch(); they only read message attributes, so they need no ROS
@@ -53,8 +53,7 @@ from functools import lru_cache
 from itertools import chain, groupby
 from operator import itemgetter
 
-SCHEMA_VERSION = 5
-SCHEMA_YAML_VERSION = 6  # the YAML rendering of the same schema (spec section 2.1)
+SCHEMA_VERSION = 5  # of the line format and of the YAML rendering (spec section 2.1)
 _READABLE_VERSIONS = (4, 5)  # 4 differs only in how its hash was computed
 # A type section starts with a line of "=": the writer emits _SEPARATOR_WIDTH of them and
 # the reader accepts _MIN_SEPARATOR_WIDTH or more.
@@ -205,7 +204,7 @@ def parse_schema(text: str, verify_hash: bool = False) -> Schema:
     """Parse the schema text stored in the MCAP schema record / Schema.msg.
 
     Both renderings are accepted: the line format (versions 4 and 5) and YAML
-    (version 6), told apart by their first line. With verify_hash the declared
+    (version 5), told apart by their first line. With verify_hash the declared
     hash must equal the computed one (section 5). A version 4 hash (data_tamer
     1.x) came from the writer's std::hash and cannot be recomputed here: the
     declared value is accepted, verify_hash or not.
@@ -276,8 +275,8 @@ def _missing_version_error() -> ValueError:
     """A line format text without a version line before its fields, such as the texts of
     data_tamer releases before 0.7.0 (spec section 2)."""
     return ValueError('no "### version:" line before the fields; the supported schema '
-                      "versions are 4 and 5 (6 in YAML), so texts written before "
-                      "data_tamer 0.7.0 are not readable")
+                      "versions are 4 and 5, so texts written before data_tamer 0.7.0 "
+                      "are not readable")
 
 
 def _first_line(text: str) -> str:
@@ -458,7 +457,7 @@ def _parse_schema_yaml(text: str, verify_hash: bool) -> Schema:
         return top[key][1]
 
     version = scalar("version")
-    if _parse_uint(version, "version") != SCHEMA_YAML_VERSION:
+    if _parse_uint(version, "version") != SCHEMA_VERSION:
         raise ValueError(f"unsupported YAML schema version {version!r}")
     schema = Schema(channel_name=scalar("channel_name"),
                     hash=_parse_uint(scalar("hash"), "hash"))

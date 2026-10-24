@@ -72,8 +72,9 @@ function firstLine(text: string): string {
 }
 export function parseSchema(text: string, options: SchemaOptions = {}): Schema {
   if (typeof text !== 'string') fail('bad_schema', 'schema text must be a string');
-  const parsed = firstLine(text).startsWith('version:') ? parseYaml(text) : parseLines(text);
-  if (options.verifyHash && parsed.version !== 4 && parsed.hash !== hashText(parsed.version === 6 ? toText(parsed) : text))
+  const yaml = firstLine(text).startsWith('version:');
+  const parsed = yaml ? parseYaml(text) : parseLines(text);
+  if (options.verifyHash && parsed.version !== 4 && parsed.hash !== hashText(yaml ? toText(parsed) : text))
     fail('hash_mismatch', 'schema hash does not match its text');
   for (const fields of [parsed.fields, ...Object.values(parsed.customTypes)]) {
     fields.forEach(Object.freeze);
@@ -116,14 +117,14 @@ function parseLines(text: string): Schema {
       delete customTypes[lastType];
       break;
     } else {
-      if (!version) fail('missing_version', 'no ### version: line before fields; supported versions: 4, 5, YAML 6');
+      if (!version) fail('missing_version', 'no ### version: line before fields; supported versions: 4 and 5');
       const space = line.indexOf(' ');
       if (space < 0) fail('bad_schema', 'field line without a name');
       target.push(field(line.slice(0, space), trim(line.slice(space + 1))));
     }
   }
   if (!seen) fail('bad_schema', 'empty schema text');
-  if (!version) fail('missing_version', 'no ### version: line; supported versions: 4, 5, YAML 6');
+  if (!version) fail('missing_version', 'no ### version: line; supported versions: 4 and 5');
   if (previous === 'separator') fail('bad_schema', 'expected MSG after last separator');
   return {version, hash, channelName, fields, customTypes, opaqueTypes};
 }
@@ -220,7 +221,7 @@ function parseYaml(text: string): Schema {
     if (!n || n.children === null) return fail('bad_schema', `YAML schema requires mapping ${key}`);
     return n.children;
   };
-  if (uint(getScalar('version'), 'version') !== 6n) fail('unsupported_version', 'unsupported YAML schema version');
+  if (uint(getScalar('version'), 'version') !== 5n) fail('unsupported_version', 'unsupported YAML schema version');
   const customTypes: Record<string, Field[]> = Object.create(null);
   const opaqueTypes: Record<string, [string, string]> = Object.create(null);
   for (const n of mapping('types')) {
@@ -233,7 +234,7 @@ function parseYaml(text: string): Schema {
     if (encoding == null || body == null) fail('bad_schema', 'opaque type needs encoding and schema');
     opaqueTypes[n.key] = [encoding, body];
   }
-  return {version:6, hash:uint(getScalar('hash'), 'hash'), channelName:getScalar('channel_name'),
+  return {version:5, hash:uint(getScalar('hash'), 'hash'), channelName:getScalar('channel_name'),
     fields:flatten(mapping('fields', true)), customTypes, opaqueTypes};
 }
 function toText(s: Schema): string {

@@ -1,4 +1,4 @@
-# Data Tamer wire format (schema versions 5 and 6)
+# Data Tamer wire format (schema version 5)
 
 This document is the normative description of the bytes Data Tamer produces.
 Anyone can implement a decoder in any language from it without reading the C++
@@ -35,8 +35,7 @@ Python and TypeScript decoders, and describe the change in this file.
 
 | Version | Change |
 |---:|---|
-| 6 | data_tamer 2.0. YAML rendering of the version 5 schema (section 2.1), opt-in. Same hash. |
-| 5 | data_tamer 2.0. Hash defined as FNV-1a 64 of the schema text; covers custom type bodies. The basic type `string` (text). |
+| 5 | data_tamer 2.0. Hash defined as FNV-1a 64 of the schema text; covers custom type bodies. The basic type `string` (text). An opt-in YAML rendering (section 2.1), same version and hash. |
 | 4 | data_tamer 0.7 to 1.x. Lower-case type names, `MSG:` sections. Hash was `std::hash` based (section 5). |
 
 ## 1. Data model
@@ -182,7 +181,7 @@ the colon of `### key:`, trimmed; the space after the colon is optional
    final `\n` (the writer ends the section with one), so a parsed schema
    renders back to the same text.
 
-### 2.1 YAML rendering (version 6)
+### 2.1 YAML rendering
 
 The same schema can be written as YAML. It is opt-in (`ToYaml()`;
 `ROS2PublisherOptions::schema_format = SchemaFormat::Yaml`); MCAP files keep
@@ -193,7 +192,7 @@ because a shared prefix is written once (`schema_nested.txt` vs
 `hash` is that of the complete file, not of the excerpt):
 
 ```yaml
-version: 6
+version: 5
 hash: 8022624192411902335
 channel_name: "nested test"
 fields:
@@ -222,7 +221,7 @@ starts with `###` is the line format, whatever follows it.
 
 Content:
 
-- `version` (6), `hash` (decimal uint64, the hash of section 5 — the same value
+- `version` (5, as in the line format), `hash` (decimal uint64, the hash of section 5 — the same value
   the line format of this schema carries) and `channel_name`.
 - `fields`: the top-level fields, **in document order**, which is the mask bit
   order and the payload order. Generic YAML loaders that keep insertion order
@@ -452,7 +451,7 @@ value, which is all decoding needs. Verification differs:
 
 Readers older than version 5 (data_tamer 1.x) recompute the version 4 hash
 themselves, so they fail instead of decoding newer texts wrongly: a version 5
-text with "Wrong SCHEMA_VERSION", the YAML rendering (version 6) with
+text with "Wrong SCHEMA_VERSION", its YAML rendering with
 "Unexpected line: fields:".
 
 ## 6. Worked example
@@ -500,7 +499,7 @@ same relative position.
 A decoder conforms when it reproduces `expected.json` from the vectors
 directory the way `python/test_data_tamer_parser.py` does: parse `schema.txt`
 and recompute its hash,
-parse `schema.yaml` and `schema_nested.yaml` (if it reads version 6) to the
+parse `schema.yaml` and `schema_nested.yaml` (if it reads YAML) to the
 same schemas as `schema.txt` and `schema_nested.txt`, hashes included (neither
 has an opaque type),
 decode both snapshots from mask and payload (disabled fields absent, not zero;

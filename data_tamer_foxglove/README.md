@@ -24,7 +24,7 @@ const snapshots = decodeSnapshotBatch(registry, batchMsg);
 // Embedded schemas register first; unknown hashes skip; input order is retained.
 ```
 
-`parseSchema` accepts v4/v5 text and v6 YAML and returns a frozen schema.
+`parseSchema` accepts v4/v5 text and v5 YAML and returns a frozen schema.
 `schemaHash` computes FNV-1a-64 (YAML uses canonical v5 text). V4 hashes are
 accepted unchecked because their `std::hash` recipe is platform dependent.
 Registry hashes accept `bigint` or safe integer numbers; unsafe numbers fail

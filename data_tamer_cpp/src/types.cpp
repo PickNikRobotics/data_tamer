@@ -472,7 +472,7 @@ std::string ToYaml(const Schema& schema)
 {
   std::ostringstream os;
   os.imbue(std::locale::classic());  // the hash is written here: never locale-dependent
-  os << "version: " << SCHEMA_YAML_VERSION << "\n";
+  os << "version: " << SCHEMA_VERSION << "\n";
   os << "hash: " << schema.hash << "\n";
   os << "channel_name: ";
   WriteName(os, schema.channel_name);

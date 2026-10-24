@@ -201,7 +201,7 @@ class FieldNames(unittest.TestCase):
 
 
 class YamlSchema(unittest.TestCase):
-    """The YAML rendering (version 6) decodes to the same schema as the line format."""
+    """The YAML rendering (version 5) decodes to the same schema as the line format."""
 
     def assert_same(self, stem: str):
         text = read(stem + ".txt").decode()
@@ -229,7 +229,7 @@ class YamlSchema(unittest.TestCase):
         self.assertLess(len(read("schema_nested.yaml")), len(read("schema_nested.txt")))
 
     def test_quoted_scalars_and_opaque_types(self):
-        text = ('version: 6\nhash: 0\nchannel_name: "a \\"b\\""\nfields:\n'
+        text = ('version: 5\nhash: 0\nchannel_name: "a \\"b\\""\nfields:\n'
                 '  "x+y":\n    "1": "Blob[2]"\n'
                 'opaque_types:\n  Blob:\n    encoding: proto\n    schema: "l1\\n\\tl2\\x01\\u00e9"\n')
         schema = dt.parse_schema(text)
@@ -238,8 +238,8 @@ class YamlSchema(unittest.TestCase):
         self.assertEqual(schema.custom_schemas, {"Blob": ("proto", "l1\n\tl2\x01\u00e9")})
 
     def test_rejects_malformed_yaml(self):
-        head = "version: 6\nhash: 1\nchannel_name: c\n"
-        for bad in ["version: 7\nhash: 1\nchannel_name: c\nfields: {}\n",
+        head = "version: 5\nhash: 1\nchannel_name: c\n"
+        for bad in ["version: 6\nhash: 1\nchannel_name: c\nfields: {}\n",
                     head,                                            # no fields
                     head + "fields:\n  a: float64\n  a: int8\n",     # duplicate key
                     head + "fields:\n  a: float64\n   b: int8\n",    # indentation
@@ -253,8 +253,8 @@ class YamlSchema(unittest.TestCase):
                     head + 'fields:\n  "\\x+1": int8\n',            # bad hex escape
                     head + 'fields:\n  "\\uD800": int8\n',          # surrogate
                     "version: +6\nhash: 1\nchannel_name: c\nfields: {}\n",
-                    "version: 6\nhash: 18446744073709551616\nchannel_name: c\nfields: {}\n",
-                    "  version: 6\n  hash: 1\n  channel_name: c\n  fields: {}\n",
+                    "version: 5\nhash: 18446744073709551616\nchannel_name: c\nfields: {}\n",
+                    "  version: 5\n  hash: 1\n  channel_name: c\n  fields: {}\n",
                     head + "fields:\n" + "".join("  " * (i + 1) + "k:\n" for i in range(100))
                     + "  " * 101 + "x: int8\n"]:                      # too deep
             with self.subTest(bad=bad), self.assertRaises(ValueError):
@@ -268,7 +268,7 @@ class YamlSchema(unittest.TestCase):
         except ImportError:
             self.skipTest("PyYAML not installed")
         doc = yaml.safe_load(read("schema_nested.yaml"))
-        self.assertEqual(doc["version"], dt.SCHEMA_YAML_VERSION)
+        self.assertEqual(doc["version"], dt.SCHEMA_VERSION)
         self.assertEqual(list(doc["fields"]["arm"]), ["joint_1", "joint_2", "mode"])
         self.assertEqual(doc["fields"]["7up"], {"x": "float64", "y": "float64"})
         self.assertEqual(doc["fields"]["on"], "uint8")

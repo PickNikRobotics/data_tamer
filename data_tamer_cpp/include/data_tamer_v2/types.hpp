@@ -15,9 +15,8 @@
 namespace DataTamer2
 {
 
+/// Version of the schema, in the line format (ToStr()) and in YAML (ToYaml()).
 constexpr int SCHEMA_VERSION = 5;
-/// Version of the YAML rendering of a schema (see ToYaml()).
-constexpr int SCHEMA_YAML_VERSION = 6;
 
 // clang-format off
 enum class BasicType: uint8_t
@@ -214,7 +213,7 @@ struct Schema
 [[nodiscard]] std::string ToStr(const Schema& schema);
 
 /**
- * @brief The schema as YAML, schema version 6 (docs/wire_format.md, section 2.1):
+ * @brief The schema as YAML, schema version 5 (docs/wire_format.md, section 2.1):
  * shorter when field names are "/"-separated paths. Schema::hash is the same as for
  * ToStr(), because it is always computed over that text.
  */
@@ -225,7 +224,8 @@ enum class SchemaFormat
 {
   /// ToStr(): the line format, schema version 5. Every reader understands it.
   Text,
-  /// ToYaml(): schema version 6. Older readers (e.g. older PlotJuggler) cannot read it.
+  /// ToYaml(): schema version 5 too. Older readers (e.g. older PlotJuggler) cannot read
+  /// it.
   Yaml,
 };
 

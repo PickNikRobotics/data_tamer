@@ -136,7 +136,7 @@ reads 1.x files.
   RAM and writes an MCAP file on ``requestDump()``, which is real-time safe.
 * ``ROS2PublisherSink`` takes ``ROS2PublisherOptions``: QoS, aggregation into
   ``data_tamer_msgs/SnapshotBatch`` (new message) and the schema format.
-* A YAML rendering of the schema (wire format version 6): ``ToYaml()``,
+* A YAML rendering of the schema (wire format section 2.1, also version 5): ``ToYaml()``,
   ``RenderSchema()``, ``SchemaFormat::Yaml``.
 * ``DataSink::onStop()`` and ``onStart()``, ``SinkWorker::Delivery::Manual`` (no thread:
   the application calls ``drain()``).
@@ -188,7 +188,7 @@ reads 1.x files.
   rosbag2 recordings: decoded snapshots with header timestamps, schema catalogs,
   batch inspection, and packaged ``.foxe`` release artifacts.
 * TypeScript snapshot decoder in ``data_tamer_foxglove/``, with schema versions
-  4/5/6, bounded compiled layouts, nested objects and ROS 2 message helpers.
+  4 and 5 (line format and YAML), bounded compiled layouts, nested objects and ROS 2 message helpers.
 * Tutorials ``T01`` to ``T08``, run by ctest; ``docs/USER_MANUAL.md``,
   ``docs/llm_user_manual.md``, ``docs/MIGRATION.md`` and the wire format specification
   ``docs/wire_format.md``, with golden vectors.

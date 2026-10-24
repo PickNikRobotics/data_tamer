@@ -25,9 +25,8 @@ namespace DataTamerParser
 inline namespace v2
 {
 
+/// Version of the schema, in the line format and in YAML (docs/wire_format.md).
 constexpr int SCHEMA_VERSION = 5;
-/// Version of the YAML rendering of a schema (docs/wire_format.md, section 2.1).
-constexpr int SCHEMA_YAML_VERSION = 6;
 
 enum class BasicType : uint8_t
 {
@@ -844,7 +843,7 @@ inline bool ReadNonBlankLine(const std::string& txt, size_t& offset, std::string
   return false;
 }
 
-/// True for the YAML rendering (version 6): its first line that is not a comment starts
+/// True for the YAML rendering (version 5): its first line that is not a comment starts
 /// with "version:", where the line format starts with a "###" header.
 inline bool IsYamlSchema(const std::string& txt)
 {
@@ -948,14 +947,12 @@ inline TypeField ParseFieldLine(const std::string& line)
 inline std::runtime_error MissingVersionError()
 {
   return std::runtime_error("DataTamerParser: no \"### version:\" line before the "
-                            "fields; the supported schema "
-                            "versions are 4 and 5 (6 in YAML), so texts written before "
-                            "data_tamer 0.7.0 are "
-                            "not readable");
+                            "fields; the supported schema versions are 4 and 5, so "
+                            "texts written before data_tamer 0.7.0 are not readable");
 }
 }  // namespace detail
 
-/// Parses a YAML schema (version 6, docs/wire_format.md section 2.1).
+/// Parses a YAML schema (version 5, docs/wire_format.md section 2.1).
 /// BuildSchemaFromText() calls it when the text starts with "version:".
 [[nodiscard]] inline Schema BuildSchemaFromYaml(const std::string& txt,
                                                 bool check_hash = false)
@@ -993,7 +990,7 @@ inline std::runtime_error MissingVersionError()
     return *parsed;
   };
 
-  if(toUint(scalar("version"), "version") != SCHEMA_YAML_VERSION)
+  if(toUint(scalar("version"), "version") != SCHEMA_VERSION)
   {
     throw std::runtime_error("Wrong SCHEMA_VERSION");
   }
@@ -1034,7 +1031,7 @@ inline std::runtime_error MissingVersionError()
   return schema;
 }
 
-/// Parses a schema text in the line format (versions 4 and 5) or YAML (version 6), see
+/// Parses a schema text in the line format (versions 4 and 5) or YAML (version 5), see
 /// docs/wire_format.md section 2. Throws std::runtime_error on a malformed text or
 /// another version; `check_hash` also throws if the declared hash is wrong. The declared
 /// hash is the schema's hash. For version 4 (data_tamer 1.x) `check_hash` recomputes it

@@ -243,8 +243,8 @@ def generate(seed, groups):
                  '### version: 5\nuint8 x y', '### version: 5\nuint8[0] x', '### version: 5\nuint8[65536] x',
                  '### version: 5\nuint8[1]junk x', '### version: 5\nMSG: A',
                  '### version: 5\n'+'='*30, '### version: 5\nENCODING: x']
-    yaml = 'version: 6\nhash: 7\nchannel_name: "c"\nfields:\n  x: uint8\n'
-    malformed += [yaml.replace('version: 6','version: 7'), yaml.replace('  x:', '\tx:'),
+    yaml = 'version: 5\nhash: 7\nchannel_name: "c"\nfields:\n  x: uint8\n'
+    malformed += [yaml.replace('version: 5','version: 6'), yaml.replace('  x:', '\tx:'),
                   yaml+'  x: float64\n', yaml.replace('uint8','[uint8]'), yaml.replace('"c"','"\\uD800"'),
                   yaml.replace('"c"', '"\\U00110000"'), yaml.replace('uint8','uint8 # comment'),
                   yaml.replace('uint8',"'uint8'"), yaml.replace('  x:', '   x:')+'  y: uint8\n']

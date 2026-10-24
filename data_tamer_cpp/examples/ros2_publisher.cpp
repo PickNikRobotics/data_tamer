@@ -15,7 +15,7 @@
 // Usage: ros2_publisher [--aggregate] [--yaml]
 //   --aggregate  publish SnapshotBatch on /test/data_batch (100 snapshots or 100 ms)
 //                instead of one Snapshot per sample on /test/data
-//   --yaml       write the schemas as YAML (wire format version 6)
+//   --yaml       write the schemas as YAML (wire format section 2.1)
 // python/ros2_subscriber.py decodes either.
 class JointPublisher : public rclcpp::Node
 {

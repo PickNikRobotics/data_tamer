@@ -33,7 +33,7 @@ test('original bracket text and appended indices retain distinct typed paths', (
       decodeMessage(nested, Uint8Array.of(1), Uint8Array.of(4)), { a: [[4]] });
 });
 test('YAML quoted remainder matches Python whitespace rather than JS trim', () => {
-  const yaml = tail => `version: 6\nhash: 7\nchannel_name: "c"${tail}\nfields: {}\n`;
+  const yaml = tail => `version: 5\nhash: 7\nchannel_name: "c"${tail}\nfields: {}\n`;
   for(const c of ['\u0085', '\u001c', '\u00a0', '\u2007'])
     assert.equal(parseSchema(yaml(c)).channelName, 'c');
   for(const c of ['\ufeff', '\u200b'])
