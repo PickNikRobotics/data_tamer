@@ -268,10 +268,6 @@ size_t BufferSize(const Container<T, TArgs...>& vect);
 template <typename T, bool = true>
 void DeserializeFromBuffer(SpanBytesConst& buffer, T& dest);
 
-template <class Traits, class Alloc>
-void DeserializeFromBuffer(SpanBytesConst& buffer,
-                           std::basic_string<char, Traits, Alloc>& str);
-
 template <class T, size_t N,
           std::enable_if_t<!has_TypeDefinition<std::array<T, N>>::value, bool> = true>
 void DeserializeFromBuffer(SpanBytesConst& buffer, std::array<T, N>& v);
@@ -549,10 +545,20 @@ inline size_t BufferSize(const Container<T, TArgs...>& vect)
 //-----------------------------------------------------------------------
 //-----------------------------------------------------------------------
 
+/// Reads the uint32 count that SerializeCount() writes.
+inline uint32_t DeserializeCount(SpanBytesConst& buffer)
+{
+  uint32_t count = 0;
+  DeserializeFromBuffer(buffer, count);
+  return count;
+}
+
 template <typename T, bool>
 inline void DeserializeFromBuffer(SpanBytesConst& buffer, T& dest)
 {
-  static_assert(is_number<T>() || has_TypeDefinition<T>(), "Missing TypeDefinition");
+  static_assert(is_number<T>() || is_text<T>::value || has_TypeDefinition<T>(), "Missing "
+                                                                                "TypeDefi"
+                                                                                "nition");
 
   if constexpr(is_number<T>())
   {
@@ -575,6 +581,35 @@ inline void DeserializeFromBuffer(SpanBytesConst& buffer, T& dest)
     }
     buffer = SpanBytesConst(buffer.data() + S, buffer.size() - S);  // NOLINT
   }
+  else if constexpr(is_text<T>::value)
+  {
+    static_assert(
+        !std::is_same_v<T, std::basic_string_view<char, typename T::traits_type>>, "a "
+                                                                                   "std::"
+                                                                                   "strin"
+                                                                                   "g_"
+                                                                                   "view "
+                                                                                   "can'"
+                                                                                   "t "
+                                                                                   "own "
+                                                                                   "the "
+                                                                                   "text "
+                                                                                   "it "
+                                                                                   "reads"
+                                                                                   ": "
+                                                                                   "use "
+                                                                                   "a "
+                                                                                   "std::"
+                                                                                   "strin"
+                                                                                   "g");
+    const uint32_t size = DeserializeCount(buffer);
+    if(size > buffer.size())
+    {
+      throw std::runtime_error("DeserializeFromBuffer: buffer overflow");
+    }
+    dest.assign(reinterpret_cast<char const*>(buffer.data()), size);
+    buffer.trimFront(size);
+  }
   else
   {
     // fields are written: the pointer must not be const
@@ -583,28 +618,6 @@ inline void DeserializeFromBuffer(SpanBytesConst& buffer, T& dest)
     };
     InvokeTypeDefinition(dest, func);
   }
-}
-
-/// Reads the uint32 count that SerializeCount() writes.
-inline uint32_t DeserializeCount(SpanBytesConst& buffer)
-{
-  uint32_t count = 0;
-  DeserializeFromBuffer(buffer, count);
-  return count;
-}
-
-template <class Traits, class Alloc>
-inline void DeserializeFromBuffer(SpanBytesConst& buffer,
-                                  std::basic_string<char, Traits, Alloc>& dest)
-{
-  const uint32_t size = DeserializeCount(buffer);
-  if(size > buffer.size())
-  {
-    throw std::runtime_error("DeserializeFromBuffer: buffer overflow");
-  }
-
-  dest.assign(reinterpret_cast<char const*>(buffer.data()), size);
-  buffer.trimFront(size);
 }
 
 template <typename T, size_t N,

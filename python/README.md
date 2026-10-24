@@ -81,7 +81,7 @@ decoded by the reference walker, at its speed. Microseconds per snapshot on Pyth
 | `float64[]`, 900 to 1100 long    |  ~1000 |       287 |           30 (9x)  |                 16 (18x)  |
 | `Pose[100]`                      |    700 |       330 |           21 (16x) |                6.1 (54x)  |
 | `Point3D[]`, 100 long            |    300 |       126 |          9.0 (14x) |                3.3 (38x)  |
-| `Joint[]`, a string and a float  |    156 |        63 |          68 (0.9x) |                 66 (1x)   |
+| `Joint[]`, a `char[]`, a float  |    156 |        63 |          68 (0.9x) |                 66 (1x)   |
 
 `parse_snapshot_values()` keeps only the last layout of each mask, so when a vector
 changes length at every snapshot, its names are copied again each time (the fourth row).

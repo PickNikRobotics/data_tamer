@@ -196,19 +196,21 @@ TEST(StringEncoding, StringLongerThan64KiBIsSerialized)
   }
 }
 
+// With the template argument written out too, as 1.x code may call them.
 TEST(StringEncoding, SerializeMeSizesAndRoundTripsAString)
 {
   const std::string text = "hello";
   EXPECT_EQ(SerializeMe::BufferSize(text), size_t{ 4 + 5 });
+  EXPECT_EQ(SerializeMe::BufferSize<std::string>(text), size_t{ 4 + 5 });
 
   std::vector<uint8_t> storage(SerializeMe::BufferSize(text));
   SerializeMe::SpanBytes out(storage);
-  SerializeMe::SerializeIntoBuffer(out, text);
+  SerializeMe::SerializeIntoBuffer<std::string>(out, text);
   EXPECT_EQ(storage, (std::vector<uint8_t>{ 5, 0, 0, 0, 'h', 'e', 'l', 'l', 'o' }));
 
   SerializeMe::SpanBytesConst in(storage);
   std::string decoded;
-  SerializeMe::DeserializeFromBuffer(in, decoded);
+  SerializeMe::DeserializeFromBuffer<std::string>(in, decoded);
   EXPECT_EQ(decoded, text);
   EXPECT_EQ(in.size(), 0u);
 }
