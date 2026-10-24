@@ -10,6 +10,7 @@
 #include "data_tamer_v2/sinks/dummy_sink.hpp"
 #include "data_tamer_v2/sinks/mcap_sink.hpp"
 #include "data_tamer_v2/data_tamer_parser.hpp"
+#include "decode_utils.hpp"
 #include "test_sinks.hpp"
 #include "geometry_types.hpp"
 
@@ -334,15 +335,9 @@ TEST(WireFormat, StringsMatchGoldenVectors)
   checkGolden("snapshot_strings.payload", snapshot.payload);
 
   const auto schema = DataTamerParser::BuildSchemaFromText(text, true);
-  const DataTamerParser::SnapshotView view{
-    schema.hash,
-    0,
-    { snapshot.active_mask.data(), snapshot.active_mask.size() },
-    { snapshot.payload.data(), snapshot.payload.size() }
-  };
   std::vector<std::pair<std::string, std::string>> values;  // strings as text, in order
   ASSERT_TRUE(DataTamerParser::ParseSnapshot(
-      schema, view,
+      schema, DataTamerTest::viewOf(snapshot),
       [&](const std::string& name, const DataTamerParser::VarNumber& number) {
         std::visit([&](auto x) { values.emplace_back(name, std::to_string(x)); }, number);
       },

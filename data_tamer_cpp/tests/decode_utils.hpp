@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <map>
 #include <string>
+#include <string_view>
 #include <variant>
 
 namespace DataTamerTest
@@ -38,6 +39,33 @@ inline std::map<std::string, double> decode(const DataTamer2::LogChannel& channe
       });
   EXPECT_TRUE(complete) << "bytes are left after the last field";
   return values;
+}
+
+/// What the parser reads from `snapshot`, with a string callback: the numbers, and the
+/// strings as text, by name.
+struct Decoded
+{
+  std::map<std::string, double> numbers;
+  std::map<std::string, std::string> strings;
+};
+
+inline Decoded decodeWithStrings(const DataTamer2::LogChannel& channel,
+                                 const DataTamer2::Snapshot& snapshot)
+{
+  const auto schema =
+      DataTamerParser::BuildSchemaFromText(DataTamer2::ToStr(channel.getSchema()));
+  Decoded out;
+  const bool complete = DataTamerParser::ParseSnapshot(
+      schema, viewOf(snapshot),
+      [&](const std::string& name, const DataTamerParser::VarNumber& number) {
+        out.numbers[name] = std::visit([](const auto& x) { return double(x); }, number);
+      },
+      [&](const std::string& name, std::string_view text) {
+        EXPECT_EQ(out.strings.count(name), 0u) << name;
+        out.strings[name] = std::string(text);
+      });
+  EXPECT_TRUE(complete) << "bytes are left after the last field";
+  return out;
 }
 
 }  // namespace DataTamerTest

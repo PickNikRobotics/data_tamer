@@ -13,11 +13,12 @@ type Key = string | number;
 const typeCodes: Readonly<Record<string, number>> = Object.assign(Object.create(null),
   Object.fromEntries(Object.keys(basicSizes).map((name,i)=>[name,i])));
 // A "string" leaf: its uint32 byte count is the 4 bytes before its offset.
-const TEXT=12;
+const TEXT=Object.keys(basicSizes).length;
 // UTF-8 with U+FFFD for invalid bytes, as Python's "replace"; a leading BOM is text too.
 const utf8=new TextDecoder('utf-8',{ignoreBOM:true});
 // "string" is a basic type, even where the schema also defines a custom type of that name.
 const isText=(f: Field): boolean=>f.type==='string';
+const isCustom=(f: Field): boolean=>!basicSizes[f.type] && !isText(f);
 function numberAt(view: DataView, p: number, code: number): number {
   switch(code) {
     case 0:return +(view.getUint8(p)!==0);
@@ -103,7 +104,7 @@ function minElement(f: Field, schema: Schema, state: State, depth: number): numb
     for(const sub of subs) {
       if(sub.count===0) {size+=4;continue;}
       size+=minElement(sub,schema,state,depth+1)*(sub.count??1);
-      if(!basicSizes[sub.type] && !isText(sub)) height=Math.max(height,state.sizes.get(sub.type)![1]+1);
+      if(isCustom(sub)) height=Math.max(height,state.sizes.get(sub.type)![1]+1);
     }
     state.sizes.set(f.type,known=[size,height]);
   } else if(depth+known[1]>MAX_SCHEMA_DEPTH) fail('too_deep','custom types nested too deeply');
@@ -175,14 +176,16 @@ function vectorLayout(plan: Plan, view: DataView): Layout {
 function compileLayout(schema: Schema, plan: Plan, view: DataView, state: State): Layout {
   const leaves: Leaf[]=[],counts: number[]=[],countOffsets: number[]=[];let pos=0;
   const check=(bytes: number): void=>{if(bytes>view.byteLength-pos) fail('truncated','payload truncated');};
+  // A vector count or a text's byte count, which getLayout() checks to reuse the layout.
+  const readCount=(): number=>{check(4);countOffsets.push(pos);const n=view.getUint32(pos,true);counts.push(n);pos+=4;return n;};
   function walk(f: Field,prefix: string,parentKeys: Key[],depth: number): void {
     if(depth>MAX_SCHEMA_DEPTH) fail('too_deep','custom types nested too deeply');
     const name=prefix?prefix+'/'+f.name:f.name,keys=[...parentKeys,...fieldKeys(f,state)];
     let count=f.count??1;
     if(f.count===0) {
-      check(4);countOffsets.push(pos);count=view.getUint32(pos,true);counts.push(count);pos+=4;
+      count=readCount();
       if(!count) {
-        if(!basicSizes[f.type] && !isText(f) && !schema.customTypes[f.type] && !schema.opaqueTypes[f.type]) undecodable(schema,f.type);
+        if(isCustom(f) && !schema.customTypes[f.type] && !schema.opaqueTypes[f.type]) undecodable(schema,f.type);
         return;
       }
     }
@@ -191,9 +194,7 @@ function compileLayout(schema: Schema, plan: Plan, view: DataView, state: State)
     if(size) for(let i=0;i<count;++i) {
       check(size);leaves.push({name:f.count===null?name:`${name}[${i}]`,code:typeCodes[f.type],offset:pos,keys:f.count===null?keys:[...keys,i]});pos+=size;
     } else if(isText(f)) for(let i=0;i<count;++i) {
-      // The byte count is checked against the cached layouts like a vector count.
-      check(4);countOffsets.push(pos);const length=view.getUint32(pos,true);counts.push(length);pos+=4;
-      check(length);leaves.push({name:f.count===null?name:`${name}[${i}]`,code:TEXT,offset:pos,keys:f.count===null?keys:[...keys,i]});pos+=length;
+      const length=readCount();check(length);leaves.push({name:f.count===null?name:`${name}[${i}]`,code:TEXT,offset:pos,keys:f.count===null?keys:[...keys,i]});pos+=length;
     } else {
       const subs=schema.customTypes[f.type];if(!subs) undecodable(schema,f.type);
       // Empty scalar DAGs can expand exponentially without consuming a byte.

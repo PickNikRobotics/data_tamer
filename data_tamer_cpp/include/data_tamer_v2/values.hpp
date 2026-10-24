@@ -16,6 +16,7 @@
 namespace DataTamer2
 {
 using SerializeMe::has_TypeDefinition;
+using SerializeMe::is_plain_container_v;
 using SerializeMe::is_text;
 
 namespace details
@@ -54,15 +55,11 @@ public:
   ValuePtr(const std::atomic<T>* pointer);
 
   template <template <class, class> class Container, class T, class... TArgs,
-            std::enable_if_t<!has_TypeDefinition<Container<T, TArgs...>>::value &&
-                                 !is_text<Container<T, TArgs...>>::value,
-                             bool> = true>
+            std::enable_if_t<is_plain_container_v<Container<T, TArgs...>>, bool> = true>
   ValuePtr(const Container<T, TArgs...>* vect);
 
   template <template <class, class> class Container, class T, class... TArgs,
-            std::enable_if_t<!has_TypeDefinition<Container<T, TArgs...>>::value &&
-                                 !is_text<Container<T, TArgs...>>::value,
-                             bool> = true>
+            std::enable_if_t<is_plain_container_v<Container<T, TArgs...>>, bool> = true>
   ValuePtr(const Container<T, TArgs...>* vect, CustomSerializer::Ptr type_info);
 
   template <typename T, size_t N,
@@ -277,9 +274,7 @@ inline ValuePtr::ValuePtr(const std::atomic<T>* pointer)
 }
 
 template <template <class, class> class Container, class T, class... TArgs,
-          std::enable_if_t<!has_TypeDefinition<Container<T, TArgs...>>::value &&
-                               !is_text<Container<T, TArgs...>>::value,
-                           bool>>
+          std::enable_if_t<is_plain_container_v<Container<T, TArgs...>>, bool>>
 inline ValuePtr::ValuePtr(const Container<T, TArgs...>* vect)
   : v_ptr_(vect)
   , serialize_fn_(&ValuePtr::serializeContainer<Container<T, TArgs...>>)
@@ -290,9 +285,7 @@ inline ValuePtr::ValuePtr(const Container<T, TArgs...>* vect)
 {}
 
 template <template <class, class> class Container, class T, class... TArgs,
-          std::enable_if_t<!has_TypeDefinition<Container<T, TArgs...>>::value &&
-                               !is_text<Container<T, TArgs...>>::value,
-                           bool>>
+          std::enable_if_t<is_plain_container_v<Container<T, TArgs...>>, bool>>
 inline ValuePtr::ValuePtr(const Container<T, TArgs...>* vect,
                           CustomSerializer::Ptr type_info)
   : v_ptr_(vect)

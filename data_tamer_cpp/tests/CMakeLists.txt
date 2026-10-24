@@ -364,8 +364,6 @@ target_link_libraries(logged_value_alone PRIVATE data_tamer)
 data_tamer_strict_cxx17(logged_value_alone)
 data_tamer_add_build_test(logged_value_header_alone logged_value_alone)
 
-# The standalone parser is copied into other projects: with its templates instantiated
-# it must compile without a warning under the strict flags of this library.
 # Text registers without relaxed template template matching (P0522), as with Clang 18
 # and older; GCC can turn that matching off.
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
@@ -376,6 +374,8 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     target_compile_features(text_registration_without_p0522 PRIVATE cxx_std_17)
 endif()
 
+# The standalone parser is copied into other projects: with its templates instantiated
+# it must compile without a warning under the strict flags of this library.
 add_library(parser_header_warnings OBJECT parser_header_warnings.cpp)
 target_include_directories(parser_header_warnings PRIVATE ${PROJECT_SOURCE_DIR}/include)
 data_tamer_strict_cxx17(parser_header_warnings WARNINGS)

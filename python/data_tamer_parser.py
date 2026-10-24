@@ -517,18 +517,21 @@ class _Reader:
         return value.decode("latin-1") if type_name == "char" else value
 
     def text(self) -> str:
-        """A "string": its byte count, then that many bytes read as UTF-8."""
-        count = self.number("uint32")
-        if count > len(self.data) - self.pos:
-            raise ValueError("payload truncated")
-        value = _text(self.data, self.pos, count)
-        self.pos += count
+        value, self.pos = _read_text(self.data, self.pos)
         return value
 
 
-def _text(data, pos: int, count: int) -> str:
-    """The format gives no charset: UTF-8, invalid bytes replaced by U+FFFD."""
-    return bytes(data[pos:pos + count]).decode("utf-8", "replace")
+def _read_text(data, pos: int) -> tuple:
+    """The "string" at `pos`, its byte count then that many bytes, and the position after
+    it. The format gives no charset: UTF-8, invalid bytes replaced by U+FFFD."""
+    if pos + 4 > len(data):
+        raise ValueError("payload truncated")
+    (count,) = _U32.unpack_from(data, pos)
+    pos += 4
+    end = pos + count
+    if end > len(data):
+        raise ValueError("payload truncated")
+    return str(data[pos:end], "utf-8", "replace"), end
 
 
 def _min_element_size(f: Field, schema: Schema, depth: int) -> int:
@@ -702,7 +705,7 @@ def _parse_snapshot_reference(schema: Schema, active_mask: bytes,
 # read once into a local, so a thread sees a whole plan or none.
 
 # The ops: (_FIXED, Struct, names, char positions), (_VECTOR, _Vector),
-# (_CHECK, fewest bytes), (_WALK, field, prefix, depth), (_TEXT, name).
+# (_CHECK, fewest bytes), (_WALK, field, prefix, depth), (_TEXT, (name,)).
 _FIXED, _VECTOR, _CHECK, _WALK, _TEXT = range(5)
 _CODE = {name: s.format[1] for name, s in _STRUCT.items()}  # "float64" -> "d"
 _U32 = _STRUCT["uint32"]
@@ -760,20 +763,17 @@ def _compile_field(f: Field, schema: Schema, prefix: str, depth: int, items: lis
         names = (f"{name}[{i}]" for i in range(f.array_size))
     else:
         names = (name,)
-    if f.is_basic:
+    if f.is_basic or f.is_text:
         if (f.array_size or 1) > budget[0]:
             raise _Unplannable
         budget[0] -= f.array_size or 1
-        code = _CODE[f.type_name]
-        items.extend((code, n) for n in names)
-        return
-    if f.is_text:
-        if (f.array_size or 1) > budget[0]:
-            raise _Unplannable
-        budget[0] -= f.array_size or 1
+        if f.is_basic:
+            code = _CODE[f.type_name]
+            items.extend((code, n) for n in names)
+            return
         if f.is_vector:  # the reference first checks that the payload holds the counts
             items.append((_CHECK, f.array_size * least))
-        items.extend((_TEXT, n) for n in names)
+        items.extend((_TEXT, (n,)) for n in names)  # (_TEXT, names of its one part)
         return
     subs = schema.custom_types.get(f.type_name)
     if subs is None:
@@ -879,7 +879,7 @@ def _unique_names(ops: list) -> bool:
         if op[0] == _FIXED:
             names += op[2]
         elif op[0] == _TEXT:
-            names.append(op[1])
+            names += op[1]
         elif op[0] == _VECTOR:
             if len(set(op[1].suffixes)) < len(op[1].suffixes):
                 return False
@@ -954,14 +954,8 @@ class _Plan:
                 if op[1] > size - pos:
                     raise ValueError("payload truncated")
             elif kind == _TEXT:
-                if pos + 4 > size:
-                    raise ValueError("payload truncated")
-                (count,) = _U32.unpack_from(payload, pos)
-                pos += 4
-                if count > size - pos:
-                    raise ValueError("payload truncated")
-                parts.append(((op[1],), (_text(payload, pos, count),)))
-                pos += count
+                value, pos = _read_text(payload, pos)
+                parts.append((op[1], (value,)))
             else:
                 reader = _Reader(payload)
                 reader.pos = pos

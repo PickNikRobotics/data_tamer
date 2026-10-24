@@ -139,12 +139,21 @@ size_t ForEachSnapshot(const std::string& path, const SnapshotCallback& callback
   return count;
 }
 
-namespace details
-{
-template <typename ValueCallback, typename StringCallback>
+/// ForEachSnapshot() that also decodes: calls `callback(const std::string& topic,
+/// uint64_t timestamp, const std::string& name, const DataTamerParser::VarNumber&
+/// value)` for each numeric value and `callback_string(const std::string& topic, uint64_t
+/// timestamp, const std::string& name, std::string_view text)` for each "string" value
+/// (a std::string in the writer) of each snapshot, in schema order (names as in
+/// DataTamerParser::ParseSnapshot()). `text` is valid during the call only. A snapshot
+/// that does not match its schema throws, after the callbacks have seen the values
+/// decoded before the error. Returns the number of snapshots.
+template <typename ValueCallback, typename StringCallback,
+          typename = std::enable_if_t<
+              std::is_invocable_v<const StringCallback&, const std::string&, uint64_t,
+                                  const std::string&, std::string_view>>>
 size_t ForEachValue(const std::string& path, const ValueCallback& callback,
                     const StringCallback& callback_string,
-                    const std::vector<std::string>& topics)
+                    const std::vector<std::string>& topics = {})
 {
   const auto decode = [&](const std::string& topic, const DataTamerParser::Schema& schema,
                           const DataTamerParser::SnapshotView& snapshot) {
@@ -158,20 +167,12 @@ size_t ForEachValue(const std::string& path, const ValueCallback& callback,
     bool matches = false;
     try
     {
-      if constexpr(std::is_same_v<StringCallback,
-                                  DataTamerParser::detail::NoStringCallback>)
-      {
-        matches = DataTamerParser::ParseSnapshot(schema, snapshot, on_value);
-      }
-      else
-      {
-        const auto on_string = [&](const std::string& name, std::string_view text) {
-          in_callback = true;
-          callback_string(topic, snapshot.timestamp, name, text);
-          in_callback = false;
-        };
-        matches = DataTamerParser::ParseSnapshot(schema, snapshot, on_value, on_string);
-      }
+      const auto on_string = [&](const std::string& name, std::string_view text) {
+        in_callback = true;
+        callback_string(topic, snapshot.timestamp, name, text);
+        in_callback = false;
+      };
+      matches = DataTamerParser::ParseSnapshot(schema, snapshot, on_value, on_string);
     }
     catch(const std::runtime_error& e)
     {
@@ -190,36 +191,15 @@ size_t ForEachValue(const std::string& path, const ValueCallback& callback,
   };
   return ForEachSnapshot(path, decode, topics);
 }
-}  // namespace details
 
-/// ForEachSnapshot() that also decodes: calls `callback(const std::string& topic,
-/// uint64_t timestamp, const std::string& name, const DataTamerParser::VarNumber&
-/// value)` for each numeric value of each snapshot (text is skipped, see the overload
-/// below), in schema order (names as in
-/// DataTamerParser::ParseSnapshot()). A snapshot that does not match its schema throws,
-/// after the callback has seen the values decoded before the error.
-/// Returns the number of snapshots.
+/// ForEachValue() without a string callback: "string" values are skipped.
 template <typename ValueCallback>
 size_t ForEachValue(const std::string& path, const ValueCallback& callback,
                     const std::vector<std::string>& topics = {})
 {
-  return details::ForEachValue(path, callback,
-                               DataTamerParser::detail::NoStringCallback{}, topics);
-}
-
-/// ForEachValue() that also passes each "string" value (a std::string in the writer) to
-/// `callback_string(const std::string& topic, uint64_t timestamp, const std::string&
-/// name, std::string_view text)`, as the ParseSnapshot() overload with a string callback
-/// does. `text` is valid during the call only.
-template <typename ValueCallback, typename StringCallback,
-          typename = std::enable_if_t<
-              std::is_invocable_v<const StringCallback&, const std::string&, uint64_t,
-                                  const std::string&, std::string_view>>>
-size_t ForEachValue(const std::string& path, const ValueCallback& callback,
-                    const StringCallback& callback_string,
-                    const std::vector<std::string>& topics = {})
-{
-  return details::ForEachValue(path, callback, callback_string, topics);
+  return ForEachValue(
+      path, callback,
+      [](const std::string&, uint64_t, const std::string&, std::string_view) {}, topics);
 }
 
 }  // namespace DataTamer2

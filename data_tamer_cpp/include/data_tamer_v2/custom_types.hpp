@@ -200,8 +200,7 @@ struct CustomTypeName
 template <template <class, class> class Container, class T, class... TArgs>
 struct CustomTypeName<
     Container<T, TArgs...>,
-    std::enable_if_t<!SerializeMe::has_TypeDefinition<Container<T, TArgs...>>::value &&
-                     !SerializeMe::is_text<Container<T, TArgs...>>::value>>
+    std::enable_if_t<SerializeMe::is_plain_container_v<Container<T, TArgs...>>>>
 {
   static std::string_view get() { return CustomTypeName<T>::get(); }
 };

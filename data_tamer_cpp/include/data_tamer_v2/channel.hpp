@@ -153,9 +153,7 @@ public:
    * between snapshots (see setPayloadCapacity()).
    */
   template <template <class, class> class Container, class T, class... TArgs,
-            std::enable_if_t<!has_TypeDefinition<Container<T, TArgs...>>::value &&
-                                 !is_text<Container<T, TArgs...>>::value,
-                             bool> = true>
+            std::enable_if_t<is_plain_container_v<Container<T, TArgs...>>, bool> = true>
   RegistrationID registerValue(const std::string& name,
                                const Container<T, TArgs...>* value);
 
@@ -622,9 +620,7 @@ inline RegistrationID LogChannel::registerCustomValue(const std::string& name,
 }
 
 template <template <class, class> class Container, class T, class... TArgs,
-          std::enable_if_t<!has_TypeDefinition<Container<T, TArgs...>>::value &&
-                               !is_text<Container<T, TArgs...>>::value,
-                           bool>>
+          std::enable_if_t<is_plain_container_v<Container<T, TArgs...>>, bool>>
 inline RegistrationID LogChannel::registerValue(const std::string& prefix,
                                                 const Container<T, TArgs...>* vect)
 {

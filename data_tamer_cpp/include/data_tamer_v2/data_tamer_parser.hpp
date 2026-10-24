@@ -151,8 +151,8 @@ struct SnapshotView
 /// Decodes `snapshot` with `schema`, calling
 ///   callback_number(const std::string& name, const VarNumber& value)
 /// for each numeric value of each active field, in schema order. "string" values (text)
-/// are skipped: pass a callback_string to the overload below to get them. Names join nested fields with
-/// '/' and index container elements: "pose/position/x", "points[1]/z". `name` is valid
+/// are skipped: pass a callback_string to the overload below to get them. Names join
+/// nested fields with '/' and index container elements: "pose/position/x", "points[1]/z". `name` is valid
 /// only during the call: copy it to keep it.
 /// Returns false if the hash is not the schema's (nothing is decoded) or if bytes are
 /// left after the last field (the callback has already run). Throws std::runtime_error
@@ -1455,28 +1455,15 @@ struct DecodeState
   std::string name;  // the name of the value being decoded
 };
 
-/// The callback_string of a ParseSnapshot() call that has none: "string" values are
-/// skipped.
-struct NoStringCallback
-{
-};
-
-/// Reads one "string" value and passes it to callback_string, if there is one.
+/// Reads one "string" value and passes it to callback_string.
 template <typename StringCallback>
 void DecodeText(BufferSpan& buffer, const std::string& name,
                 const StringCallback& callback_string)
 {
   const uint32_t size = Deserialize<uint32_t>(buffer);
-  if(size > buffer.size)
-  {
-    throw std::runtime_error("DataTamerParser: payload truncated");
-  }
-  const std::string_view text(reinterpret_cast<const char*>(buffer.data), size);
+  const auto* text = reinterpret_cast<const char*>(buffer.data);
   buffer.trimFront(size);
-  if constexpr(!std::is_same_v<StringCallback, NoStringCallback>)
-  {
-    callback_string(name, text);
-  }
+  callback_string(name, std::string_view(text, size));
 }
 
 /// Decodes `field`. The first `parent_size` characters of `state.name` are its parent's
@@ -1576,7 +1563,8 @@ template <typename NumberCallback>
 [[nodiscard]] inline bool ParseSnapshot(const Schema& schema, SnapshotView snapshot,
                                         const NumberCallback& callback_number)
 {
-  return ParseSnapshot(schema, snapshot, callback_number, detail::NoStringCallback{});
+  return ParseSnapshot(schema, snapshot, callback_number,
+                       [](const std::string&, std::string_view) {});
 }
 
 template <typename NumberCallback, typename StringCallback>
