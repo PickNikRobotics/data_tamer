@@ -126,8 +126,9 @@ private:
 
 namespace details
 {
-/// GetBasicType<T>() for a recorded type. The one check, at compile time, that a numeric
-/// type has a wire type (long double has none): every registration path reaches it.
+/// GetBasicType<T>() for a recorded type, and STRING for a text. The one check, at
+/// compile time, that a numeric type has a wire type (long double has none): every
+/// registration path reaches it.
 template <typename T>
 constexpr BasicType WireType()
 {
@@ -138,7 +139,14 @@ constexpr BasicType WireType()
                                                                               "int, "
                                                                               "float or "
                                                                               "double");
-  return GetBasicType<T>();
+  if constexpr(SerializeMe::is_text<std::remove_cv_t<T>>::value)
+  {
+    return BasicType::STRING;
+  }
+  else
+  {
+    return GetBasicType<T>();
+  }
 }
 }  // namespace details
 
@@ -192,7 +200,7 @@ struct CustomTypeName
 template <template <class, class> class Container, class T, class... TArgs>
 struct CustomTypeName<
     Container<T, TArgs...>,
-    std::enable_if_t<!SerializeMe::has_TypeDefinition<Container<T, TArgs...>>::value>>
+    std::enable_if_t<SerializeMe::is_plain_container_v<Container<T, TArgs...>>>>
 {
   static std::string_view get() { return CustomTypeName<T>::get(); }
 };
@@ -206,7 +214,7 @@ struct CustomTypeName<
 };
 
 // Adds the serialized size of T to fixed_size, and clears is_fixed_size if T contains a
-// vector. Used by the CustomSerializerT constructor.
+// vector or a text. Used by the CustomSerializerT constructor.
 template <typename T>
 inline void GetFixedSize(bool& is_fixed_size, size_t& fixed_size)
 {
@@ -215,6 +223,10 @@ inline void GetFixedSize(bool& is_fixed_size, size_t& fixed_size)
   if constexpr(IsNumericType<T>())
   {
     fixed_size += sizeof(T);
+  }
+  else if constexpr(is_text<T>::value)
+  {
+    is_fixed_size = false;
   }
   else
   {

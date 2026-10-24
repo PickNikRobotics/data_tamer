@@ -25,7 +25,7 @@ static const std::array<std::string, TypesCount> kNames = {
     "int32", "uint32",
     "int64", "uint64",
     "float32", "float64",
-    "other"
+    "other", "string"
 };
 // clang-format on
 
@@ -57,7 +57,7 @@ size_t SizeOf(const BasicType& type)
       { 1, 1,
         1, 1,
         2, 2, 4, 4, 8, 8,
-        4, 8, 0 };
+        4, 8, 0, 0 };
   // clang-format on
   return kSizes[static_cast<size_t>(type)];
 }
@@ -94,6 +94,7 @@ VarNumber DeserializeAsVarType(const BasicType& type, const void* data)
     case BasicType::FLOAT64: return DeserializeImpl<double>(data);
 
     case BasicType::OTHER:
+    case BasicType::STRING:
       return double(std::numeric_limits<double>::quiet_NaN());
   }
   // clang-format on
@@ -471,7 +472,7 @@ std::string ToYaml(const Schema& schema)
 {
   std::ostringstream os;
   os.imbue(std::locale::classic());  // the hash is written here: never locale-dependent
-  os << "version: " << SCHEMA_YAML_VERSION << "\n";
+  os << "version: " << SCHEMA_VERSION << "\n";
   os << "hash: " << schema.hash << "\n";
   os << "channel_name: ";
   WriteName(os, schema.channel_name);

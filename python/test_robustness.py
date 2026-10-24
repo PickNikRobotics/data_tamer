@@ -14,11 +14,32 @@ HEADER = "### version: 5\n### hash: 0\n### channel_name: c\n\n"
 
 
 class StringMembers(unittest.TestCase):
-    def test_string_member_decodes_as_a_char_vector(self):
-        # the C++ writer sends a std::string as char[]: a uint32 count, then the characters
-        text = HEADER + f"Named n\n{SEPARATOR}\nMSG: Named\nuint8 tag\nchar[] name\n"
-        values = dt.parse_snapshot(dt.parse_schema(text), b"\x01", bytes([1, 3, 0, 0, 0]) + b"abc")
-        self.assertEqual(values, {"n/tag": 1, "n/name[0]": "a", "n/name[1]": "b", "n/name[2]": "c"})
+    def decode(self, member: str, payload: bytes) -> dict:
+        text = HEADER + f"Named n\n{SEPARATOR}\nMSG: Named\nuint8 tag\n{member} name\n"
+        return dt.parse_snapshot(dt.parse_schema(text), b"\x01", b"\x01" + payload)
+
+    def test_string_member_decodes_as_one_str(self):
+        # a std::string is a "string": a uint32 byte count, then the bytes
+        self.assertEqual(self.decode("string", b"\x03\0\0\0abc"), {"n/tag": 1, "n/name": "abc"})
+        self.assertEqual(self.decode("string", b"\0\0\0\0"), {"n/tag": 1, "n/name": ""})
+
+    def test_text_is_utf8_with_invalid_bytes_replaced(self):
+        values = self.decode("string", b"\x05\0\0\0\xc3\xa9\xff\0x")
+        self.assertEqual(values["n/name"], "\u00e9\ufffd\0x")
+
+    def test_text_longer_than_the_payload_is_rejected(self):
+        for payload in (b"\x04\0\0\0abc", b"\x01\0\0", b"\xff\xff\xff\xff"):
+            with self.subTest(payload=payload), self.assertRaisesRegex(ValueError, "truncated"):
+                self.decode("string", payload)
+
+    def test_char_vector_decodes_per_character(self):
+        # a std::vector<char> is a char[]: one str of one character per byte
+        self.assertEqual(self.decode("char[]", b"\x02\0\0\0ab"),
+                         {"n/tag": 1, "n/name[0]": "a", "n/name[1]": "b"})
+
+    def test_field_names_list_a_text_as_one_name(self):
+        text = HEADER + "string s\nstring[2] p\nstring[] v\n"
+        self.assertEqual(dt.parse_schema(text).field_names(), ["s", "p[0]", "p[1]", "v[]"])
 
 
 class Booleans(unittest.TestCase):
@@ -163,11 +184,11 @@ class SchemaHeaders(unittest.TestCase):
 
     def test_text_whose_first_line_starts_with_three_hashes_is_the_line_format(self):
         # only "#" comment lines that do not start with "###" may come before "version:"
-        yaml = "version: 6\nhash: 1\nchannel_name: c\nfields:\n  x: int8\n"
+        yaml = "version: 5\nhash: 1\nchannel_name: c\nfields:\n  x: int8\n"
         self.assertEqual(dt.parse_schema("# comment\n" + yaml).fields,
                          [dt.Field("x", "int8")])
         # as the line format, "fields:" is no field line
-        for head in ("### note\n", "### version: 6\n", "\n  ### note\n"):
+        for head in ("### note\n", "### version: 5\n", "\n  ### note\n"):
             with self.subTest(head=head), self.assertRaises(ValueError):
                 dt.parse_schema(head + yaml)
 
@@ -200,7 +221,7 @@ class FieldLines(unittest.TestCase):
     def test_field_name_with_whitespace_or_a_control_character_is_rejected(self):
         # No character up to the space and no DEL, in both renderings and in a type
         # section. YAML writes them as escapes in a quoted key, of a field or of a group.
-        yaml = 'version: 6\nhash: 1\nchannel_name: c\nfields:\n  "'
+        yaml = 'version: 5\nhash: 1\nchannel_name: c\nfields:\n  "'
         for name, escaped in (("a b", "a b"), ("a\tb", "a\\tb"), ("a\rb", "a\\rb"),
                               ("a\x01b", "a\\x01b"), ("a\x7fb", "a\\x7fb")):
             for text in (HEADER + f"float64 {name}\n",

@@ -35,7 +35,18 @@ def code(error):
     raise AssertionError(f'unmapped reference error: {error}')
 
 
+class Text(str):
+    """A "string" value, which TS decodes as a string; a char is a number there."""
+
+
+class MarkingReader(dt._Reader):
+    def text(self):
+        return Text(super().text())
+
+
 def bits(value):
+    if isinstance(value, Text):
+        return 's:' + value
     if isinstance(value, str):
         value = ord(value)
     return 'nan' if math.isnan(float(value)) else struct.pack('>d', float(value)).hex()
@@ -89,12 +100,28 @@ def nested_reference(schema, mask, payload):
             self.names.append(name)
             self.values.append(bits(value))
 
-    writes, reader = Writes(), dt._Reader(payload)
+    writes, reader = Writes(), MarkingReader(payload)
     for i, field in enumerate(schema.fields):
         if dt.get_bit(mask, i):
             dt._parse_field(field, schema, reader, '', writes)
     assert reader.pos == len(payload)
     return nested(writes.names, writes.values)
+
+
+def same_values(a, b):
+    """Equal value by value, NaN equal to NaN."""
+    a, b = list(a), list(b)
+    return len(a) == len(b) and all(x == y or (x != x and y != y) for x, y in zip(a, b))
+
+
+def marked_reference(schema, mask, payload):
+    """The reference walker's dict, with text values as Text."""
+    out, reader = {}, MarkingReader(payload)
+    for i, field in enumerate(schema.fields):
+        if dt.get_bit(mask, i):
+            dt._parse_field(field, schema, reader, '', out)
+    assert reader.pos == len(payload)
+    return out
 
 
 def reference(text, samples, verify=False):
@@ -112,7 +139,9 @@ def reference(text, samples, verify=False):
         for decode in (dt._parse_snapshot_reference, dt.parse_snapshot):
             try:
                 result = decode(schema, mask, payload)
-                outputs.append({'names': list(result), 'bits': [bits(v) for v in result.values()]})
+                marked = marked_reference(schema, mask, payload)
+                assert list(marked) == list(result) and same_values(marked.values(), result.values())
+                outputs.append({'names': list(marked), 'bits': [bits(v) for v in marked.values()]})
             except ValueError as error:
                 outputs.append({'error': code(error)})
         if outputs[0] != outputs[1]:
@@ -120,7 +149,7 @@ def reference(text, samples, verify=False):
         if 'error' not in outputs[0]:
             names, values = dt.parse_snapshot_values(schema, mask, payload)
             assert list(names) == outputs[0]['names']
-            assert [bits(v) for v in values] == outputs[0]['bits']
+            assert same_values(values, marked.values())
         case.update(outputs[0])
         if 'error' not in case:
             case.update(nested_reference(schema, mask, payload))
@@ -160,6 +189,34 @@ def generate(seed, groups):
             samples.append((mask_of([True] * len(schema.fields)), bytes(payload)))
         output.append(reference(dt.to_text(schema), samples))
 
+    # Strings: random bytes, mostly not UTF-8, at the top level, in a vector of a struct
+    # and in a fixed array; a char[2] and a char[] stay per character. (random_schema()
+    # mixes "string" into every shape too.)
+    strings = line_schema([('s', 'string', None), ('n', 'Named', 0), ('c', 'char', 2),
+                           ('t', 'string', 2), ('h', 'char', 0)],
+                          {'Named': [('k', 'string', None), ('v', 'uint8', None)]})
+    text_bytes = lambda: rng.choice([
+        rng.randbytes(rng.randint(0, 6)), 'Zürich ✓'.encode(), b'\xef\xbb\xbfbom',
+        bytes(rng.choice([0x41, 0x80, 0xc3, 0xe2, 0xed, 0xf0, 0xf4, 0xff, 0xa0])
+              for _ in range(rng.randint(1, 6)))])
+    samples = []
+    for _ in range(60):
+        payload = bytearray()
+        s = text_bytes()
+        payload += struct.pack('<I', len(s)) + s
+        items = rng.randint(0, 3)
+        payload += struct.pack('<I', items)
+        for _ in range(items):
+            s = text_bytes()
+            payload += struct.pack('<I', len(s)) + s + rng.randbytes(1)
+        payload += rng.randbytes(2)
+        for _ in range(2):
+            s = text_bytes()
+            payload += struct.pack('<I', len(s)) + s
+        s = text_bytes()
+        payload += struct.pack('<I', len(s)) + s
+        samples.extend(variants(rng, b'\x1f', bytes(payload)))
+    output.append(reference(strings, samples))
     for t in ['uint8', 'float64', 'Point', 'Nested', 'O', 'Undefined', 'Empty']:
         for count in [0, 1, 0xffffffff]:
             types = {'Point':[('x','float64',None)], 'Nested':[('v','uint8',0)], 'Empty':[]}
@@ -186,8 +243,8 @@ def generate(seed, groups):
                  '### version: 5\nuint8 x y', '### version: 5\nuint8[0] x', '### version: 5\nuint8[65536] x',
                  '### version: 5\nuint8[1]junk x', '### version: 5\nMSG: A',
                  '### version: 5\n'+'='*30, '### version: 5\nENCODING: x']
-    yaml = 'version: 6\nhash: 7\nchannel_name: "c"\nfields:\n  x: uint8\n'
-    malformed += [yaml.replace('version: 6','version: 7'), yaml.replace('  x:', '\tx:'),
+    yaml = 'version: 5\nhash: 7\nchannel_name: "c"\nfields:\n  x: uint8\n'
+    malformed += [yaml.replace('version: 5','version: 6'), yaml.replace('  x:', '\tx:'),
                   yaml+'  x: float64\n', yaml.replace('uint8','[uint8]'), yaml.replace('"c"','"\\uD800"'),
                   yaml.replace('"c"', '"\\U00110000"'), yaml.replace('uint8','uint8 # comment'),
                   yaml.replace('uint8',"'uint8'"), yaml.replace('  x:', '   x:')+'  y: uint8\n']

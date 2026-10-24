@@ -1,0 +1,16 @@
+### version: 5
+### hash: 693923379855050783
+### channel_name: strings test
+
+string ascii
+string empty
+string utf8
+string invalid
+char[3] fixed
+char[] chars
+string[] tags
+Label[] labels
+===========================================================
+MSG: Label
+uint8 id
+string text

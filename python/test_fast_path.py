@@ -77,6 +77,9 @@ def encode(rng: random.Random, schema: dt.Schema, f: dt.Field, out: bytearray,
     for _ in range(count):
         if f.is_basic:
             out += rng.randbytes(dt._STRUCT[f.type_name].size)
+        elif f.is_text:  # random bytes: often not UTF-8
+            size = rng.choice((0, 1, 3, 8))
+            out += struct.pack("<I", size) + rng.randbytes(size)
         elif f.type_name in schema.custom_types:
             for sub in schema.custom_types[f.type_name]:
                 encode(rng, schema, sub, out, depth + 1)
@@ -108,7 +111,7 @@ def variants(rng: random.Random, mask: bytes, payload: bytes):
         yield b"", payload
 
 
-BASIC = list(dt._STRUCT)
+BASIC = list(dt._STRUCT) + ["string"]
 
 
 def random_field(rng: random.Random, name: str, types: list) -> dt.Field:
@@ -206,6 +209,14 @@ class GoldenVectors(unittest.TestCase):
             for _ in range(200):
                 for mask, payload in variants(rng, *snapshot(rng, schema, enabled=0.5)):
                     self.assertIsNone(disagreement(schema, mask, payload))
+
+    def test_strings_snapshot_every_cut_and_random_masks(self):
+        schema = dt.parse_schema(read("schema_strings.txt").decode())
+        self.check(schema, read("snapshot_strings.mask"), read("snapshot_strings.payload"))
+        rng = random.Random(6)
+        for _ in range(200):
+            for mask, payload in variants(rng, *snapshot(rng, schema, enabled=0.5)):
+                self.assertIsNone(disagreement(schema, mask, payload))
 
     def test_nested_schema(self):
         schema = dt.parse_schema(read("schema_nested.yaml").decode())
@@ -327,6 +338,24 @@ class EdgeCases(unittest.TestCase):
         values = dt.parse_snapshot(dt.parse_schema(HEADER + text), b"\x0f", payload)
         self.assertEqual(values["s[0]"], "\u00e9")
         self.assertEqual(values["ns[1]/k"], "y")
+
+    def test_text(self):
+        text = (f"string s\nstring[2] pair\nstring[] list\nTagged[] ts\nTagged t\n{SEPARATOR}\n"
+                "MSG: Tagged\nuint8 v\nstring label\n")
+        def text_bytes(raw: bytes) -> bytes:
+            return struct.pack("<I", len(raw)) + raw
+        payload = (text_bytes(b"Z\xc3\xbcrich") + text_bytes(b"") + text_bytes(b"a\xffb")
+                   + b"\x02\0\0\0" + text_bytes(b"x") + text_bytes(b"yy")
+                   + b"\x01\0\0\0" + b"\x07" + text_bytes(b"in")
+                   + b"\x08" + text_bytes(b"top"))
+        self.assert_agrees(text, b"\x1f", payload)
+        values = dt.parse_snapshot(dt.parse_schema(HEADER + text), b"\x1f", payload)
+        self.assertEqual(values, {
+            "s": "Z\u00fcrich", "pair[0]": "", "pair[1]": "a\ufffdb",
+            "list[0]": "x", "list[1]": "yy", "ts[0]/v": 7, "ts[0]/label": "in",
+            "t/v": 8, "t/label": "top"})
+        for end in range(len(payload)):
+            self.assert_agrees(text, b"\x1f", payload[:end])
 
     def test_field_too_large_for_the_budget_is_walked_and_later_ones_compile(self):
         # q runs out of budget at its second array, p at its first element: what they

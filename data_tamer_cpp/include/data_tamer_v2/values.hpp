@@ -16,6 +16,8 @@
 namespace DataTamer2
 {
 using SerializeMe::has_TypeDefinition;
+using SerializeMe::is_plain_container_v;
+using SerializeMe::is_text;
 
 namespace details
 {
@@ -43,7 +45,8 @@ public:
 
   ValuePtr() = default;
 
-  /// Plain value: numeric, or a custom type with its serializer.
+  /// Plain value: numeric, a text (std::string, std::string_view), or a custom type
+  /// with its serializer.
   template <typename T, std::enable_if_t<!details::is_std_atomic<T>::value, bool> = true>
   ValuePtr(const T* pointer, CustomSerializer::Ptr type_info = {});
 
@@ -51,14 +54,12 @@ public:
   template <typename T, std::enable_if_t<IsNumericType<T>(), bool> = true>
   ValuePtr(const std::atomic<T>* pointer);
 
-  template <
-      template <class, class> class Container, class T, class... TArgs,
-      std::enable_if_t<!has_TypeDefinition<Container<T, TArgs...>>::value, bool> = true>
+  template <template <class, class> class Container, class T, class... TArgs,
+            std::enable_if_t<is_plain_container_v<Container<T, TArgs...>>, bool> = true>
   ValuePtr(const Container<T, TArgs...>* vect);
 
-  template <
-      template <class, class> class Container, class T, class... TArgs,
-      std::enable_if_t<!has_TypeDefinition<Container<T, TArgs...>>::value, bool> = true>
+  template <template <class, class> class Container, class T, class... TArgs,
+            std::enable_if_t<is_plain_container_v<Container<T, TArgs...>>, bool> = true>
   ValuePtr(const Container<T, TArgs...>* vect, CustomSerializer::Ptr type_info);
 
   template <typename T, size_t N,
@@ -95,10 +96,12 @@ public:
   [[nodiscard]] size_t getSerializedSize() const;
 
   /// True when getSerializedSize() never changes: a scalar, a std::array or a
-  /// fixed-size custom type. False for a dynamic container and a detached value.
+  /// fixed-size custom type. False for a dynamic container, a text (or an array of
+  /// them) and a detached value.
   [[nodiscard]] bool isFixedSize() const
   {
-    if(v_ptr_ == nullptr || (is_vector_ && array_size_ == 0))
+    if(v_ptr_ == nullptr || (is_vector_ && array_size_ == 0) ||
+       type_ == BasicType::STRING)
     {
       return false;
     }
@@ -246,6 +249,12 @@ inline ValuePtr::ValuePtr(const T* pointer, CustomSerializer::Ptr type_info)
     serialize_fn_ = &ValuePtr::serializeNumeric<T>;
     size_fn_ = &ValuePtr::sizeNumeric<T>;
   }
+  else if constexpr(is_text<T>::value)
+  {
+    // SerializeMe writes the byte count and the bytes, as for a vector
+    serialize_fn_ = &ValuePtr::serializeContainer<T>;
+    size_fn_ = &ValuePtr::sizeContainer<T>;
+  }
   else
   {
     throw std::invalid_argument("ValuePtr: a custom type needs a serializer");
@@ -265,7 +274,7 @@ inline ValuePtr::ValuePtr(const std::atomic<T>* pointer)
 }
 
 template <template <class, class> class Container, class T, class... TArgs,
-          std::enable_if_t<!has_TypeDefinition<Container<T, TArgs...>>::value, bool>>
+          std::enable_if_t<is_plain_container_v<Container<T, TArgs...>>, bool>>
 inline ValuePtr::ValuePtr(const Container<T, TArgs...>* vect)
   : v_ptr_(vect)
   , serialize_fn_(&ValuePtr::serializeContainer<Container<T, TArgs...>>)
@@ -276,7 +285,7 @@ inline ValuePtr::ValuePtr(const Container<T, TArgs...>* vect)
 {}
 
 template <template <class, class> class Container, class T, class... TArgs,
-          std::enable_if_t<!has_TypeDefinition<Container<T, TArgs...>>::value, bool>>
+          std::enable_if_t<is_plain_container_v<Container<T, TArgs...>>, bool>>
 inline ValuePtr::ValuePtr(const Container<T, TArgs...>* vect,
                           CustomSerializer::Ptr type_info)
   : v_ptr_(vect)

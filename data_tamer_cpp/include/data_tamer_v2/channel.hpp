@@ -123,6 +123,11 @@ public:
    * returned or the channel is destroyed. Write the variable inside scopedWrite()
    * whenever another thread may take a snapshot meanwhile.
    *
+   * A std::string (or another std::basic_string of char) and a std::string_view are
+   * recorded as text, the schema type "string": the length and the bytes at each
+   * snapshot, so the text may change length (see setPayloadCapacity()). A
+   * std::string_view is read through: the characters it views must stay valid too.
+   *
    * The name must be unique in the channel, non-empty and free of whitespace and
    * control characters, and so must the name of a custom type and of each of its
    * fields; JoinNames() builds hierarchical names. Throws std::runtime_error for a
@@ -143,17 +148,16 @@ public:
   RegistrationID registerValue(const std::string& name, const std::atomic<T>* value);
 
   /**
-   * @brief registerValue() for a std::vector (or similar container) of numbers or
-   * custom types. Its size and elements are read at each snapshot, so it may grow
+   * @brief registerValue() for a std::vector (or similar container) of numbers, texts
+   * or custom types. Its size and elements are read at each snapshot, so it may grow
    * between snapshots (see setPayloadCapacity()).
    */
-  template <
-      template <class, class> class Container, class T, class... TArgs,
-      std::enable_if_t<!has_TypeDefinition<Container<T, TArgs...>>::value, bool> = true>
+  template <template <class, class> class Container, class T, class... TArgs,
+            std::enable_if_t<is_plain_container_v<Container<T, TArgs...>>, bool> = true>
   RegistrationID registerValue(const std::string& name,
                                const Container<T, TArgs...>* value);
 
-  /// registerValue() for a fixed-size std::array of numbers or custom types.
+  /// registerValue() for a fixed-size std::array of numbers, texts or custom types.
   template <typename T, size_t N,
             std::enable_if_t<!has_TypeDefinition<std::array<T, N>>::value, bool> = true>
   RegistrationID registerValue(const std::string& name, const std::array<T, N>* value);
@@ -511,8 +515,8 @@ void LogChannel::discoverTypesImpl(PendingTypes& types, FieldsVector& fields,
     field.is_vector = true;
     field.array_size = container_info<T>::size;
   }
-  field.type = GetBasicType<Type>();
-  if constexpr(GetBasicType<Type>() == BasicType::OTHER)
+  field.type = details::WireType<Type>();
+  if constexpr(details::WireType<Type>() == BasicType::OTHER)
   {
     field.type_name = CustomTypeName<Type>::get();
     discoverTypes<Type>(types);
@@ -574,9 +578,11 @@ inline RegistrationID LogChannel::registerValue(const std::string& name,
   std::lock_guard const lock(controlMutex());
   checkValueName(name);
   using namespace SerializeMe;
-  static_assert(has_TypeDefinition<T>() || IsNumericType<T>(), "Missing TypeDefinition");
+  constexpr bool known =
+      has_TypeDefinition<T>() || IsNumericType<T>() || is_text<T>::value;
+  static_assert(known, "Missing TypeDefinition");
 
-  if constexpr(IsNumericType<T>())
+  if constexpr(IsNumericType<T>() || is_text<T>::value)
   {
     return registerValueImpl(name, ValuePtr(value_ptr), {});
   }
@@ -614,13 +620,13 @@ inline RegistrationID LogChannel::registerCustomValue(const std::string& name,
 }
 
 template <template <class, class> class Container, class T, class... TArgs,
-          std::enable_if_t<!has_TypeDefinition<Container<T, TArgs...>>::value, bool>>
+          std::enable_if_t<is_plain_container_v<Container<T, TArgs...>>, bool>>
 inline RegistrationID LogChannel::registerValue(const std::string& prefix,
                                                 const Container<T, TArgs...>* vect)
 {
   std::lock_guard const lock(controlMutex());
   checkValueName(prefix);
-  if constexpr(IsNumericType<T>())
+  if constexpr(IsNumericType<T>() || is_text<T>::value)
   {
     return registerValueImpl(prefix, ValuePtr(vect), {});
   }
@@ -640,7 +646,7 @@ inline RegistrationID LogChannel::registerValue(const std::string& prefix,
 {
   std::lock_guard const lock(controlMutex());
   checkValueName(prefix);
-  if constexpr(IsNumericType<T>())
+  if constexpr(IsNumericType<T>() || is_text<T>::value)
   {
     return registerValueImpl(prefix, ValuePtr(vect), {});
   }

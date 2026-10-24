@@ -373,9 +373,14 @@ is set. What changed:
 - The schema text is version 5, and its hash is FNV-1a of the text: the same on every
   platform, and different from the 1.x hash of the same channel. Readers built with the
   1.x parser reject version 5 with "Wrong SCHEMA_VERSION", and the optional YAML
-  rendering (`SchemaFormat::Yaml`, version 6) with "Unexpected line: fields:".
-- A `std::string`, registered or inside a custom type, is written as a `uint32` count and
-  its characters. 1.x wrote a 16-bit length that no reader decoded.
+  rendering (`SchemaFormat::Yaml`) with "Unexpected line: fields:".
+- A `std::string` or `std::string_view`, registered, inside a custom type or in a
+  container, is the new basic schema type `string`: a `uint32` byte count and its bytes.
+  The decoders return it as one text value. 1.x wrote a `std::string` as `char[]` with a
+  16-bit length that no reader decoded. A `std::vector<char>` is still `char[]`, one value
+  per character.
+- A custom type named after a basic type (`string`, `float64`, ...) is refused: the
+  registration throws `std::runtime_error`. Rename the type.
 
 So:
 
@@ -401,6 +406,11 @@ The parser header changed too:
   is removed.
 - `SnapshotView::schema_hash` is `uint64_t`.
 - The header needs a little-endian host and no longer includes `<iostream>`.
+- `ParseSnapshot(schema, view, callback_number)` skips `string` values. New:
+  `ParseSnapshot(schema, view, callback_number, callback_string)` passes each one to
+  `callback_string(name, std::string_view)`, and `ForEachValue()` takes the same extra
+  callback. `BasicType` has a new last enumerator, `STRING`: a `switch` over it that lists
+  every enumerator needs a case.
 - New: `SplitMcapMessage()` splits an MCAP message into mask and payload, and
   `SchemaRegistry`, `DataTamerParser::ToSnapshotView()` of a ROS 2 message and
   `ForEachSnapshotInBatch()` decode the ROS 2 messages.

@@ -11,6 +11,10 @@ measures it), so do not modify a Schema after decoding with it. Usage:
     schema = parse_schema(schema_text)
     values = parse_snapshot(schema, active_mask, payload)   # {"pose/position/x": 1.0, ...}
 
+A "string" value (a std::string or std::string_view in the writer) is one str,
+its bytes read as UTF-8 with invalid ones replaced by U+FFFD: {"label": "text"}.
+A "char" is a str of one character, also in a "char[]" (std::vector<char>).
+
 To build columns (pandas, numpy), parse_snapshot_values() returns the names and
 the values as two tuples in payload order, tuple(d) and tuple(d.values()) of
 d = parse_snapshot(...), and is faster still. Consecutive snapshots of one layout
@@ -21,7 +25,7 @@ tuple object:
 
 For an MCAP message body written by MCAPSink use split_mcap_message() first.
 parse_schema() reads both schema renderings: the line format (versions 4 and 5) and
-YAML (version 6); to_text() renders a schema back to the line format.
+YAML (version 5); to_text() renders a schema back to the line format.
 For the ROS 2 messages of ROS2PublisherSink (data_tamer_msgs Schemas, Snapshot,
 SnapshotBatch) use SchemaRegistry, parse_snapshot_msg() and
 iter_snapshot_batch(); they only read message attributes, so they need no ROS
@@ -49,8 +53,7 @@ from functools import lru_cache
 from itertools import chain, groupby
 from operator import itemgetter
 
-SCHEMA_VERSION = 5
-SCHEMA_YAML_VERSION = 6  # the YAML rendering of the same schema (spec section 2.1)
+SCHEMA_VERSION = 5  # of the line format and of the YAML rendering (spec section 2.1)
 _READABLE_VERSIONS = (4, 5)  # 4 differs only in how its hash was computed
 # A type section starts with a line of "=": the writer emits _SEPARATOR_WIDTH of them and
 # the reader accepts _MIN_SEPARATOR_WIDTH or more.
@@ -73,13 +76,23 @@ _STRUCT = {
 class Field:
     """Mirrors TypeField in the C++ headers."""
     field_name: str
-    type_name: str           # one of _STRUCT, or a custom type name
+    type_name: str           # one of _STRUCT, "string", or a custom type name
     is_vector: bool = False  # true for "T[]" and "T[N]"
     array_size: int = 0      # N for "T[N]", 0 for "T[]" (count prefix on the wire)
 
     @property
     def is_basic(self) -> bool:
+        """A fixed-size basic type: one of _STRUCT."""
         return self.type_name in _STRUCT
+
+    @property
+    def is_text(self) -> bool:
+        """The basic type "string": a uint32 byte count, then the bytes (section 1)."""
+        return self.type_name == "string"
+
+    @property
+    def is_custom(self) -> bool:
+        return not self.is_basic and not self.is_text
 
 
 @dataclass
@@ -191,7 +204,7 @@ def parse_schema(text: str, verify_hash: bool = False) -> Schema:
     """Parse the schema text stored in the MCAP schema record / Schema.msg.
 
     Both renderings are accepted: the line format (versions 4 and 5) and YAML
-    (version 6), told apart by their first line. With verify_hash the declared
+    (version 5), told apart by their first line. With verify_hash the declared
     hash must equal the computed one (section 5). A version 4 hash (data_tamer
     1.x) came from the writer's std::hash and cannot be recomputed here: the
     declared value is accepted, verify_hash or not.
@@ -262,8 +275,8 @@ def _missing_version_error() -> ValueError:
     """A line format text without a version line before its fields, such as the texts of
     data_tamer releases before 0.7.0 (spec section 2)."""
     return ValueError('no "### version:" line before the fields; the supported schema '
-                      "versions are 4 and 5 (6 in YAML), so texts written before "
-                      "data_tamer 0.7.0 are not readable")
+                      "versions are 4 and 5, so texts written before data_tamer 0.7.0 "
+                      "are not readable")
 
 
 def _first_line(text: str) -> str:
@@ -444,7 +457,7 @@ def _parse_schema_yaml(text: str, verify_hash: bool) -> Schema:
         return top[key][1]
 
     version = scalar("version")
-    if _parse_uint(version, "version") != SCHEMA_YAML_VERSION:
+    if _parse_uint(version, "version") != SCHEMA_VERSION:
         raise ValueError(f"unsupported YAML schema version {version!r}")
     schema = Schema(channel_name=scalar("channel_name"),
                     hash=_parse_uint(scalar("hash"), "hash"))
@@ -502,6 +515,23 @@ class _Reader:
         self.pos += fmt.size
         return value.decode("latin-1") if type_name == "char" else value
 
+    def text(self) -> str:
+        value, self.pos = _read_text(self.data, self.pos)
+        return value
+
+
+def _read_text(data, pos: int) -> tuple:
+    """The "string" at `pos`, its byte count then that many bytes, and the position after
+    it. The format gives no charset: UTF-8, invalid bytes replaced by U+FFFD."""
+    if pos + 4 > len(data):
+        raise ValueError("payload truncated")
+    (count,) = _U32.unpack_from(data, pos)
+    pos += 4
+    end = pos + count
+    if end > len(data):
+        raise ValueError("payload truncated")
+    return str(data[pos:end], "utf-8", "replace"), end
+
 
 def _min_element_size(f: Field, schema: Schema, depth: int) -> int:
     """Fewest payload bytes one element of `f` takes: the size of a basic type, or the
@@ -513,6 +543,8 @@ def _min_element_size(f: Field, schema: Schema, depth: int) -> int:
     """
     if f.is_basic:
         return _STRUCT[f.type_name].size
+    if f.is_text:
+        return 4  # the byte count of an empty string
     memo = schema._min_sizes
     known = memo.get(f.type_name)
     if known is None:
@@ -523,7 +555,7 @@ def _min_element_size(f: Field, schema: Schema, depth: int) -> int:
             raise _nesting_error()
         size = sum(_min_field_size(sub, schema, depth + 1) for sub in subs)
         height = max((memo[sub.type_name][1] + 1 for sub in subs  # filled by the sum
-                      if not sub.is_basic and (sub.array_size or not sub.is_vector)),
+                      if sub.is_custom and (sub.array_size or not sub.is_vector)),
                      default=0)
         known = memo[f.type_name] = (size, height)
     elif depth + known[1] > MAX_SCHEMA_DEPTH:
@@ -549,7 +581,7 @@ def _parse_field(f: Field, schema: Schema, reader: _Reader, prefix: str, out: di
         if not count:
             # Nothing to read: an opaque type has nothing to skip, but a type the schema
             # does not define at all makes it malformed, whatever the count.
-            if (not f.is_basic and f.type_name not in schema.custom_types
+            if (f.is_custom and f.type_name not in schema.custom_types
                     and f.type_name not in schema.custom_schemas):
                 raise _undecodable_error(schema, f.type_name)
             return
@@ -567,6 +599,9 @@ def _parse_field(f: Field, schema: Schema, reader: _Reader, prefix: str, out: di
     if f.is_basic:
         for n in names:
             out[n] = reader.number(f.type_name)
+    elif f.is_text:
+        for n in names:
+            out[n] = reader.text()
     else:
         subs = schema.custom_types.get(f.type_name)
         if subs is None:
@@ -589,7 +624,7 @@ def _names_count(f: Field, schema: Schema, memo: dict, depth: int) -> int:
     if depth > MAX_SCHEMA_DEPTH:
         raise _nesting_error()
     per_element, height = 1, 0  # basic or opaque type: one name, no nesting
-    if not f.is_basic and f.type_name not in schema.custom_schemas:
+    if f.is_custom and f.type_name not in schema.custom_schemas:
         subs = schema.custom_types.get(f.type_name)
         if subs is None:
             raise _undecodable_error(schema, f.type_name)
@@ -618,7 +653,7 @@ def _field_names(f: Field, schema: Schema, prefix: str, out: list[str]) -> None:
         names = [f"{name}[{i}]" for i in range(f.array_size)]
     else:
         names = [f"{name}[]"]
-    subs = schema.custom_types.get(f.type_name) if not f.is_basic else None
+    subs = schema.custom_types.get(f.type_name) if f.is_custom else None
     if f.type_name in schema.custom_schemas:
         subs = None
     for n in names:
@@ -655,6 +690,7 @@ def _parse_snapshot_reference(schema: Schema, active_mask: bytes,
 # - a dynamic vector of a basic type, or of a custom type made of fixed-size values,
 #   reads its count, checks it against the bytes left, then unpacks every element at once
 #   (_Vector);
+# - a "string" is one str (_TEXT); a dynamic vector of them is walked;
 # - a fixed array of a custom type that holds vectors first checks that the payload holds
 #   its fewest bytes, as the reference does (_CHECK);
 # - anything else (an undefined or opaque type, a vector of elements that hold vectors)
@@ -668,8 +704,8 @@ def _parse_snapshot_reference(schema: Schema, active_mask: bytes,
 # read once into a local, so a thread sees a whole plan or none.
 
 # The ops: (_FIXED, Struct, names, char positions), (_VECTOR, _Vector),
-# (_CHECK, fewest bytes), (_WALK, field, prefix, depth).
-_FIXED, _VECTOR, _CHECK, _WALK = range(4)
+# (_CHECK, fewest bytes), (_WALK, field, prefix, depth), (_TEXT, (name,)).
+_FIXED, _VECTOR, _CHECK, _WALK, _TEXT = range(5)
 _CODE = {name: s.format[1] for name, s in _STRUCT.items()}  # "float64" -> "d"
 _U32 = _STRUCT["uint32"]
 _MAX_PLANS = 16  # per schema: one per active mask, and masks are few
@@ -726,12 +762,17 @@ def _compile_field(f: Field, schema: Schema, prefix: str, depth: int, items: lis
         names = (f"{name}[{i}]" for i in range(f.array_size))
     else:
         names = (name,)
-    if f.is_basic:
+    if f.is_basic or f.is_text:
         if (f.array_size or 1) > budget[0]:
             raise _Unplannable
         budget[0] -= f.array_size or 1
-        code = _CODE[f.type_name]
-        items.extend((code, n) for n in names)
+        if f.is_basic:
+            code = _CODE[f.type_name]
+            items.extend((code, n) for n in names)
+            return
+        if f.is_vector:  # the reference first checks that the payload holds the counts
+            items.append((_CHECK, f.array_size * least))
+        items.extend((_TEXT, (n,)) for n in names)  # (_TEXT, names of its one part)
         return
     subs = schema.custom_types.get(f.type_name)
     if subs is None:
@@ -752,6 +793,8 @@ def _compile_field(f: Field, schema: Schema, prefix: str, depth: int, items: lis
 def _compile_vector(f: Field, schema: Schema, prefix: str, name: str, depth: int,
                     budget: list) -> tuple:
     """A _Vector op if the elements are fixed-size values, else a _WALK op."""
+    if f.is_text:
+        return (_WALK, f, prefix, depth)
     if f.is_basic:
         return (_VECTOR, _Vector(name, [_CODE[f.type_name]], [""]))
     subs = schema.custom_types.get(f.type_name)
@@ -834,6 +877,8 @@ def _unique_names(ops: list) -> bool:
     for op in ops:
         if op[0] == _FIXED:
             names += op[2]
+        elif op[0] == _TEXT:
+            names += op[1]
         elif op[0] == _VECTOR:
             if len(set(op[1].suffixes)) < len(op[1].suffixes):
                 return False
@@ -873,8 +918,9 @@ class _Plan:
         self.mask_short = mask_short  # raise when the ops are done, as the reference does
         # every op but _CHECK adds one part to run(); the layout depends on these ones
         kinds = [op[0] for op in self.ops if op[0] != _CHECK]
+        # a _TEXT has one name, whatever its length
         self.variable = tuple((i, kind == _VECTOR) for i, kind in enumerate(kinds)
-                              if kind != _FIXED)
+                              if kind not in (_FIXED, _TEXT))
         vectors = [op[1] for op in self.ops if op[0] == _VECTOR]
         for vector in vectors:
             vector.cap = _MAX_CACHED_NAMES // len(vectors)
@@ -906,6 +952,9 @@ class _Plan:
             elif kind == _CHECK:
                 if op[1] > size - pos:
                     raise ValueError("payload truncated")
+            elif kind == _TEXT:
+                value, pos = _read_text(payload, pos)
+                parts.append((op[1], (value,)))
             else:
                 reader = _Reader(payload)
                 reader.pos = pos
@@ -959,6 +1008,9 @@ def _plan(schema: Schema, active_mask: bytes) -> _Plan | None:
 
 def parse_snapshot(schema: Schema, active_mask: bytes, payload: bytes) -> dict[str, object]:
     """Decode one snapshot into {"field/path[i]": value}. Disabled fields are absent.
+
+    A number is an int, float or bool, a "char" a str of one character, a "string" a str
+    (UTF-8, invalid bytes replaced by U+FFFD; "" when empty).
 
     Malformed input raises ValueError. The schema keeps a decoding plan per active mask:
     do not modify a schema after decoding with it.

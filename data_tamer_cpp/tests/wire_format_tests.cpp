@@ -10,6 +10,7 @@
 #include "data_tamer_v2/sinks/dummy_sink.hpp"
 #include "data_tamer_v2/sinks/mcap_sink.hpp"
 #include "data_tamer_v2/data_tamer_parser.hpp"
+#include "decode_utils.hpp"
 #include "test_sinks.hpp"
 #include "geometry_types.hpp"
 
@@ -28,6 +29,7 @@
 #include <map>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <utility>
 #include <variant>
@@ -51,6 +53,19 @@ std::string_view TypeDefinition(StampedPose& p, AddField& add)
   add("position", &p.position);
   add("stamp", &p.stamp);
   return "Pose";
+}
+
+struct Label
+{
+  uint8_t id = 0;
+  std::string text;
+};
+template <class AddField>
+std::string_view TypeDefinition(Label& p, AddField& add)
+{
+  add("id", &p.id);
+  add("text", &p.text);
+  return "Label";
 }
 
 const std::string kDir = DATA_TAMER_WIRE_FORMAT_DIR;
@@ -282,6 +297,72 @@ TEST(WireFormat, SchemaTextAndSnapshotsMatchGoldenVectors)
   ASSERT_EQ(bodies.size(), 2u);
   checkGolden("snapshot_full.mcap_message", bodies[0]);
   checkGolden("snapshot_masked.mcap_message", bodies[1]);
+}
+
+// Text (section 1): a std::string is a `string`, which decoders present as text; a
+// std::vector<char> is a char[] and a std::array<char, N> a char[N], which they keep
+// per character.
+TEST(WireFormat, StringsMatchGoldenVectors)
+{
+  auto channel = LogChannel::create("strings test");
+  auto sink = DataTamerTest::manual<DummySink>();
+  channel->addDataSink(sink);
+
+  std::string ascii = "data_tamer";
+  std::string empty;
+  std::string utf8 = "Z\xc3\xbcrich \xe2\x9c\x93";  // "Zürich ✓"
+  std::string invalid = "a\xff"
+                        "b";  // not UTF-8: a decoder replaces 0xff with U+FFFD
+  std::array<char, 3> fixed = { 'a', 'b', 'c' };
+  std::vector<char> chars = { 'h', 'i' };
+  std::vector<std::string> tags = { "t", "" };
+  std::vector<Label> labels = { { 1, "x" }, { 2, "" } };
+  channel->registerValue("ascii", &ascii);
+  channel->registerValue("empty", &empty);
+  channel->registerValue("utf8", &utf8);
+  channel->registerValue("invalid", &invalid);
+  channel->registerValue("fixed", &fixed);
+  channel->registerValue("chars", &chars);
+  channel->registerValue("tags", &tags);
+  channel->registerValue("labels", &labels);
+
+  ASSERT_EQ(channel->takeSnapshot(std::chrono::nanoseconds(1)), SnapshotResult::ok);
+  sink.drain();
+  const Snapshot snapshot = sink->latestSnapshot();
+  const std::string text = ToStr(channel->getSchema());
+  checkGolden("schema_strings.txt", { text.begin(), text.end() });
+  checkGolden("snapshot_strings.mask", snapshot.active_mask);
+  checkGolden("snapshot_strings.payload", snapshot.payload);
+
+  const auto schema = DataTamerParser::BuildSchemaFromText(text, true);
+  std::vector<std::pair<std::string, std::string>> values;  // strings as text, in order
+  ASSERT_TRUE(DataTamerParser::ParseSnapshot(
+      schema, DataTamerTest::viewOf(snapshot),
+      [&](const std::string& name, const DataTamerParser::VarNumber& number) {
+        std::visit([&](auto x) { values.emplace_back(name, std::to_string(x)); }, number);
+      },
+      [&](const std::string& name, std::string_view str) {
+        values.emplace_back(name, "\"" + std::string(str) + "\"");
+      }));
+  const std::vector<std::pair<std::string, std::string>> expected = {
+    { "ascii", "\"data_tamer\"" },
+    { "empty", "\"\"" },
+    { "utf8", "\"Z\xc3\xbcrich \xe2\x9c\x93\"" },
+    { "invalid", "\"a\xff"
+                 "b\"" },
+    { "fixed[0]", std::to_string('a') },
+    { "fixed[1]", std::to_string('b') },
+    { "fixed[2]", std::to_string('c') },
+    { "chars[0]", std::to_string('h') },
+    { "chars[1]", std::to_string('i') },
+    { "tags[0]", "\"t\"" },
+    { "tags[1]", "\"\"" },
+    { "labels[0]/id", "1" },
+    { "labels[0]/text", "\"x\"" },
+    { "labels[1]/id", "2" },
+    { "labels[1]/text", "\"\"" },
+  };
+  EXPECT_EQ(values, expected);
 }
 
 // The YAML rendering (section 2.1) of names that are "/"-separated paths:

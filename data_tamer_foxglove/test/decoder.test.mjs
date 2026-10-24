@@ -31,6 +31,103 @@ for(const format of ['txt', 'yaml'])
       assert.equal(decodeMessage(s, mask, payload).points[0].x, 4);
     });
   }
+test(
+    'golden strings: a string is one JS string, a char[N] and a char[] stay per character',
+    () => {
+      const s = parseSchema(text('schema_strings.txt'), { verifyHash: true });
+      const expected = JSON.parse(text('expected.json')).strings;
+      const mask = bytes('snapshot_strings.mask'),
+            payload = bytes('snapshot_strings.payload');
+      const out = decodeFlat(s, mask, payload);
+      assert.deepEqual(out.names, Object.keys(expected));
+      assert.deepEqual(
+          out.values,
+          Object.entries(expected).map(
+              ([name, v]) => /^(fixed|chars)\[/.test(name) ? v.charCodeAt(0) : v));
+      const message = decodeMessage(s, mask, payload);
+      assert.equal(message.utf8, 'Zürich ✓');
+      assert.equal(message.invalid, 'a�b');
+      assert.deepEqual(message.labels, [{ id: 1, text: 'x' }, { id: 2, text: '' }]);
+      assert.deepEqual(message.fixed, [97, 98, 99]);
+      assert.deepEqual(message.chars, [104, 105]);
+      assert.deepEqual(message.tags, ['t', '']);
+    });
+const u32 = n => [n & 255, (n >> 8) & 255, (n >> 16) & 255, n >>> 24];
+const str = b => [...u32(b.length), ...b];
+const ascii = t => [...new TextEncoder().encode(t)];
+test('a string at top level, in arrays and in a custom type', () => {
+  const s =
+      schema(`string a\nstring[2] pair\nstring[] list\nTagged t\nTagged[] ts\nchar[] c\n${
+          sep}\nMSG: Tagged\nuint8 v\nstring label`);
+  const payload = Uint8Array.from([
+    ...str(ascii('top')),
+    ...str(ascii('p0')),
+    ...str([]),
+    ...u32(2),
+    ...str(ascii('l0')),
+    ...str(ascii('long one')),
+    7,
+    ...str(ascii('tag')),
+    ...u32(1),
+    8,
+    ...str([]),
+    ...u32(2),
+    0x68,
+    0x69,
+  ]);
+  const out = decodeFlat(s, Uint8Array.of(63), payload);
+  assert.deepEqual(out.names, [
+    'a', 'pair[0]', 'pair[1]', 'list[0]', 'list[1]', 't/v', 't/label', 'ts[0]/v',
+    'ts[0]/label', 'c[0]', 'c[1]'
+  ]);
+  assert.deepEqual(
+      out.values, ['top', 'p0', '', 'l0', 'long one', 7, 'tag', 8, '', 104, 105]);
+  assert.deepEqual(decodeMessage(s, Uint8Array.of(63), payload), {
+    a: 'top',
+    pair: ['p0', ''],
+    list: ['l0', 'long one'],
+    t: { v: 7, label: 'tag' },
+    ts: [{ v: 8, label: '' }],
+    c: [104, 105]
+  });
+  // Same size, other byte counts: a cached layout is reused only when every count matches.
+  const changed = Uint8Array.from([
+    ...str(ascii('to')), ...str(ascii('p0')), ...str(ascii('x')), ...payload.subarray(17)
+  ]);
+  assert.deepEqual(
+      decodeFlat(s, Uint8Array.of(63), changed).values.slice(0, 3), ['to', 'p0', 'x']);
+  error(
+      'trailing_bytes',
+      () => decodeFlat(s, Uint8Array.of(63), Uint8Array.from([...payload, 0])));
+});
+test(
+    'a string keeps its BOM and NUL, replaces invalid UTF-8, and may change length',
+    () => {
+      const s = schema('string s\nuint8 after');
+      for(const [input, expected] of [
+              [[0xef, 0xbb, 0xbf, 0x61, 0, 0x62], '﻿a\0b'], [[], ''],
+              [[0x61, 0xff], 'a�'], [[0xe2, 0x9c], '�'], [[0x68, 0x69], 'hi']])
+        assert.deepEqual(
+            decodeFlat(s, Uint8Array.of(3), Uint8Array.from([...str(input), 7])),
+            { names: ['s', 'after'], values: [expected, 7] });
+    });
+test('a truncated string throws like the reference', () => {
+  const s = schema('string s');
+  for(const payload of [[], [3, 0, 0], [3, 0, 0, 0, 0x61], [...u32(0xffffffff), 0x61]])
+    for(const decode of [decodeFlat, decodeMessage])
+      error('truncated', () => decode(s, Uint8Array.of(1), Uint8Array.from(payload)));
+  // string[] checks its count against 4 bytes per element first, string[N] as well.
+  error(
+      'truncated',
+      () => decodeFlat(
+          schema('string[] v'), Uint8Array.of(1),
+          Uint8Array.from([...u32(2), ...str([])])));
+  error(
+      'truncated',
+      () => decodeFlat(
+          schema('string[3] v'), Uint8Array.of(1),
+          Uint8Array.from([...str([]), ...str([])])));
+});
 test('nested YAML and text preserve fields and hash', () => {
   for(const name of ['schema_nested.txt', 'schema_nested.yaml'])
   {

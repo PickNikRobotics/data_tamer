@@ -448,10 +448,10 @@ TEST(ParserRobustness, LineThatOnlyLooksLikeAHeaderIsAFieldLine)
 TEST(ParserRobustness, TextWhoseFirstLineStartsWithThreeHashesIsTheLineFormat)
 {
   // only "#" comment lines that do not start with "###" may come before "version:"
-  const std::string yaml = "version: 6\nhash: 1\nchannel_name: c\nfields:\n  x: int8\n";
+  const std::string yaml = "version: 5\nhash: 1\nchannel_name: c\nfields:\n  x: int8\n";
   EXPECT_EQ(BuildSchemaFromText("# comment\n" + yaml).fields.size(), 1u);
   // as the line format, "fields:" is no field line
-  for(const char* head : { "### note\n", "### version: 6\n", "\n  ### note\n" })
+  for(const char* head : { "### note\n", "### version: 5\n", "\n  ### note\n" })
   {
     EXPECT_THROW(BuildSchemaFromText(head + yaml), std::runtime_error) << head;
   }
@@ -539,7 +539,7 @@ TEST(ParserRobustness, FieldNameWithWhitespaceOrAControlCharacterIsRejected)
   // No byte up to the space and no 0x7f, in both renderings and in a type section. YAML
   // writes them as escapes in a quoted key, of a field or of a group. Octal escapes:
   // \001 is 0x01, \177 is 0x7f.
-  const std::string yaml = "version: 6\nhash: 1\nchannel_name: c\nfields:\n  \"";
+  const std::string yaml = "version: 5\nhash: 1\nchannel_name: c\nfields:\n  \"";
   const std::vector<std::pair<std::string, std::string>> names = {
     { "a b", "a b" },        { "a\tb", "a\\tb" },     { "a\rb", "a\\rb" },
     { "a\001b", "a\\x01b" }, { "a\177b", "a\\x7fb" },

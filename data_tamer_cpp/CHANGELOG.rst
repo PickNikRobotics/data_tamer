@@ -136,7 +136,7 @@ reads 1.x files.
   RAM and writes an MCAP file on ``requestDump()``, which is real-time safe.
 * ``ROS2PublisherSink`` takes ``ROS2PublisherOptions``: QoS, aggregation into
   ``data_tamer_msgs/SnapshotBatch`` (new message) and the schema format.
-* A YAML rendering of the schema (wire format version 6): ``ToYaml()``,
+* A YAML rendering of the schema (wire format section 2.1, also version 5): ``ToYaml()``,
   ``RenderSchema()``, ``SchemaFormat::Yaml``.
 * ``DataSink::onStop()`` and ``onStart()``, ``SinkWorker::Delivery::Manual`` (no thread:
   the application calls ``drain()``).
@@ -168,6 +168,18 @@ reads 1.x files.
 * Parser: ``ParseSnapshot()`` decodes several times faster and allocates nothing per
   value (``benchmarks/parser_benchmark.cpp`` measures it); its depth limit no longer
   depends on the order of the fields.
+* Text: ``std::string``, any other ``std::basic_string<char>`` (``std::pmr::string``) and
+  ``std::string_view`` are recorded as the new basic schema type ``string`` (a ``uint32``
+  byte count and the bytes): registered, as members of custom types, in a
+  ``std::vector`` or ``std::array``, and as ``LoggedValue<std::string>``. Their
+  registration now also compiles with Clang 18 and older. ``ParseSnapshot()`` and
+  ``ForEachValue()`` take an optional string callback that gets a ``std::string_view``
+  into the payload (without one, text is skipped); the Python decoder returns a ``str``
+  and the TypeScript decoder and the Foxglove extension a string, decoded as UTF-8 with
+  invalid bytes replaced by U+FFFD. ``std::vector<char>`` and ``std::array<char, N>``
+  stay one value per character. ``BasicType::STRING`` is appended to the enum. A custom
+  type named after a basic type is refused. ``docs/wire_format/vectors/`` has a strings
+  vector.
 * Python decoder, standard library only: ``pip install "data-tamer-parser[mcap]"``.
   ``parse_snapshot()`` compiles each schema and active mask into ``struct`` formats,
   5 to 15 times faster than a value-by-value walk; ``parse_snapshot_values()`` returns
@@ -176,7 +188,7 @@ reads 1.x files.
   rosbag2 recordings: decoded snapshots with header timestamps, schema catalogs,
   batch inspection, and packaged ``.foxe`` release artifacts.
 * TypeScript snapshot decoder in ``data_tamer_foxglove/``, with schema versions
-  4/5/6, bounded compiled layouts, nested objects and ROS 2 message helpers.
+  4 and 5 (line format and YAML), bounded compiled layouts, nested objects and ROS 2 message helpers.
 * Tutorials ``T01`` to ``T08``, run by ctest; ``docs/USER_MANUAL.md``,
   ``docs/llm_user_manual.md``, ``docs/MIGRATION.md`` and the wire format specification
   ``docs/wire_format.md``, with golden vectors.

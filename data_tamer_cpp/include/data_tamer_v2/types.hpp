@@ -15,9 +15,8 @@
 namespace DataTamer2
 {
 
+/// Version of the schema, in the line format (ToStr()) and in YAML (ToYaml()).
 constexpr int SCHEMA_VERSION = 5;
-/// Version of the YAML rendering of a schema (see ToYaml()).
-constexpr int SCHEMA_YAML_VERSION = 6;
 
 // clang-format off
 enum class BasicType: uint8_t
@@ -38,10 +37,13 @@ enum class BasicType: uint8_t
 
   FLOAT32,
   FLOAT64,
-  OTHER
+  OTHER,
+  // Text, schema type "string": a std::string or std::string_view (docs/wire_format.md).
+  // After OTHER, so that the ids of the other types do not change.
+  STRING
 };
 
-constexpr size_t TypesCount = 13;
+constexpr size_t TypesCount = 14;
 
 
 using VarNumber = std::variant<
@@ -54,10 +56,11 @@ using VarNumber = std::variant<
 // clang-format on
 
 /// Reads one scalar of `type` from `data` (the reverse of ValuePtr::serialize); NaN
-/// for BasicType::OTHER.
+/// for BasicType::OTHER and BasicType::STRING.
 [[nodiscard]] VarNumber DeserializeAsVarType(const BasicType& type, const void* data);
 
-/// Serialized size of a scalar type in bytes; 0 for BasicType::OTHER.
+/// Serialized size of a scalar type in bytes; 0 for BasicType::OTHER and
+/// BasicType::STRING, whose size varies.
 [[nodiscard]] size_t SizeOf(const BasicType& type);
 
 /// Name of the type in the schema, e.g. "float64".
@@ -68,7 +71,8 @@ using VarNumber = std::variant<
 
 /// The wire type of T. Integers map by size and signedness, so `long long` and
 /// `wchar_t` work like `int64_t` and `int32_t`; an enum maps to its underlying type.
-/// A custom type and a numeric type without a wire type (long double) give OTHER.
+/// A custom type, a text and a numeric type without a wire type (long double) give
+/// OTHER: a text's wire type is STRING, which details::WireType<T>() returns.
 template <typename T>
 inline constexpr BasicType GetBasicType()
 {
@@ -209,7 +213,7 @@ struct Schema
 [[nodiscard]] std::string ToStr(const Schema& schema);
 
 /**
- * @brief The schema as YAML, schema version 6 (docs/wire_format.md, section 2.1):
+ * @brief The schema as YAML, schema version 5 (docs/wire_format.md, section 2.1):
  * shorter when field names are "/"-separated paths. Schema::hash is the same as for
  * ToStr(), because it is always computed over that text.
  */
@@ -220,7 +224,8 @@ enum class SchemaFormat
 {
   /// ToStr(): the line format, schema version 5. Every reader understands it.
   Text,
-  /// ToYaml(): schema version 6. Older readers (e.g. older PlotJuggler) cannot read it.
+  /// ToYaml(): schema version 5 too. Older readers (e.g. older PlotJuggler) cannot read
+  /// it.
   Yaml,
 };
 

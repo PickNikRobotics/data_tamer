@@ -104,8 +104,9 @@ int main()
 
 ## How to register custom types
 
-Containers such as `std::vector` and `std::array` work out of the box, including
-containers of your own types. Describe a struct in its own namespace:
+`std::string` and `std::string_view` values are recorded as text (the schema type
+`string`), and containers such as `std::vector` and `std::array` work out of the box,
+including containers of texts and of your own types. Describe a struct in its own namespace:
 
 ```cpp
 #include "data_tamer_v2/channel.hpp"

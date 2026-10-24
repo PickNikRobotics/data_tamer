@@ -262,3 +262,31 @@ test('activation registers only the three stable schema conversions', () => {
     ['schema', 'data_tamer_msgs/msg/SnapshotBatch', 'data_tamer.SnapshotBatch'],
   ]);
 });
+
+test('a string field converts to a string, a char[] to byte values', () => {
+  const { state, warnings } = setup();
+  const strings_hash = 693923379855050783n;
+  convertSchemas(
+      {
+        schemas: [{
+          hash: strings_hash,
+          schema_text: readFileSync(new URL('schema_strings.txt', vectors), 'utf8')
+        }]
+      },
+      event(null, '/robot/schemas'), state);
+  const message = {
+    schema_hash: strings_hash,
+    timestamp_nsec: 1n,
+    active_mask: new Uint8Array(readFileSync(new URL('snapshot_strings.mask', vectors))),
+    payload: new Uint8Array(readFileSync(new URL('snapshot_strings.payload', vectors))),
+  };
+  const values = convertSnapshot(message, event(message), state).values;
+  assert.equal(values.ascii, 'data_tamer');
+  assert.equal(values.empty, '');
+  assert.equal(values.utf8, 'Zürich ✓');
+  assert.deepEqual(values.labels, [{ id: 1, text: 'x' }, { id: 2, text: '' }]);
+  assert.deepEqual(values.fixed, [97, 98, 99]);
+  assert.deepEqual(values.chars, [104, 105]);
+  assert.deepEqual(values.tags, ['t', '']);
+  assert.equal(warnings.length, 0);
+});

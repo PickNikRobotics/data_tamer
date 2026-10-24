@@ -24,7 +24,7 @@ const snapshots = decodeSnapshotBatch(registry, batchMsg);
 // Embedded schemas register first; unknown hashes skip; input order is retained.
 ```
 
-`parseSchema` accepts v4/v5 text and v6 YAML and returns a frozen schema.
+`parseSchema` accepts v4/v5 text and v5 YAML and returns a frozen schema.
 `schemaHash` computes FNV-1a-64 (YAML uses canonical v5 text). V4 hashes are
 accepted unchecked because their `std::hash` recipe is platform dependent.
 Registry hashes accept `bigint` or safe integer numbers; unsafe numbers fail
@@ -37,6 +37,10 @@ Numbers and names:
 
 - Bool is numeric 0/1; char is its byte value. int64/uint64 become JS numbers,
   exact through 2^53. Hashes remain `bigint`.
+- A `string` field (a C++ `std::string` or `std::string_view`) is one JS string:
+  UTF-8, invalid bytes replaced by U+FFFD, a leading BOM kept, `""` when empty;
+  also in `string[N]`, `string[]` and custom types. A `char[]` or `char[N]` is
+  per character, one byte value each.
 - Float32 widens to binary64. Every non-NaN bit pattern, including -0, is exact;
   NaNs are equivalent regardless of payload, sign or signaling bit.
 - Flat results retain payload order. Duplicate names keep their first position
